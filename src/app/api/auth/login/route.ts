@@ -28,24 +28,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 });
     }
 
-    // 3. Crear el Token de Sesión (JWT)
-    const token = await new SignJWT({
-      id: usuario.id,
-      email: usuario.email,
+    const permisosUsuario = usuario.rol.permisos ? JSON.parse(usuario.rol.permisos) : [];
+
+    // 3. Crear Token (Firma JWT) INYECTANDO LOS PERMISOS
+    const token = await new SignJWT({ 
+      id: usuario.id, 
       rol: usuario.rol.nombre,
-      nombre: usuario.nombre
+      permisos: permisosUsuario // <--- ¡AQUÍ ESTÁ LA MAGIA!
     })
       .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('8h') // La sesión durará 8 horas
+      .setExpirationTime('12h')
       .sign(JWT_SECRET);
 
-    // 4. Crear la respuesta y guardar el token en una Cookie segura (httpOnly)
-    const response = NextResponse.json({
-      success: true,
+    const response = NextResponse.json({ 
+      success: true, 
       rol: usuario.rol.nombre,
-      nombre: usuario.nombre
+      permisos: permisosUsuario 
     });
-
+    
     response.cookies.set('session_token', token, {
       httpOnly: true, // Evita que hackers roben la cookie con JavaScript
       secure: process.env.NODE_ENV === 'production',

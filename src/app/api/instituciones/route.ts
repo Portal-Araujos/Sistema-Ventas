@@ -9,9 +9,39 @@ const parseOptionalInt = (val: any): number | null => {
   if (!val || val === '' || isNaN(Number(val))) return null;
   return parseInt(val);
 };
-export async function GET() {
+
+// GET: OBTENER INSTITUCIONES (CON FILTRO DE CARTERA SEGÚN ROL)
+export async function GET(request: Request) {
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('session_token')?.value;
+    let userRol = 'vendedor';
+    let userId = '';
+    if (token) {
+      try {
+        const { payload } = await jwtVerify(token, JWT_SECRET);
+        userRol = (payload.rol as string) || 'vendedor';
+        userId = (payload.id as string) || '';
+      } catch (e) {
+        console.error("Error al verificar token en GET instituciones:", e);
+      }
+    }
+    const { searchParams } = new URL(request.url);
+    const cantonId = searchParams.get('cantonId');
+    const filtroVendedor = searchParams.get('vendedorId');
+    // FILTRO BASE DE SEGURIDAD
+    const where: any = {};
+    // SI ES VENDEDOR, SOLO VE SUS ESCUELAS ASIGNADAS
+    if (userRol === 'vendedor') {
+      where.vendedorId = userId;
+    } else if (filtroVendedor) {
+      where.vendedorId = filtroVendedor; // Si un Admin filtra por un vendedor específico
+    }
+    if (cantonId) {
+      where.parroquia = { cantonId: parseInt(cantonId) };
+    }
     const instituciones = await prisma.institution.findMany({
+      where,
       include: {
         parroquia: { include: { canton: { include: { provincia: true } } } },
         sostenimiento: true,
@@ -26,7 +56,6 @@ export async function GET() {
       },
       orderBy: { createdAt: 'desc' },
     });
-
     const dataFormateada = instituciones.map((inst) => ({
       id: inst.id,
       nombre: inst.nombre,
@@ -54,13 +83,13 @@ export async function GET() {
       vendedorId: inst.vendedorId || null,
       vendedorNombre: inst.vendedor ? inst.vendedor.nombre : 'Sin Asignar'
     }));
-
     return NextResponse.json(dataFormateada);
   } catch (error) {
     console.error('Error fetching instituciones:', error);
     return NextResponse.json({ error: 'Error al obtener las instituciones' }, { status: 500 });
   }
 }
+// POST: CREAR NUEVA INSTITUCIÓN
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -138,17 +167,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Error interno al guardar la institución' }, { status: 500 });
   }
 }
+// PUT: REASIGNAR VENDEDOR
 export async function PUT(request: Request) {
   try {
     const { institucionId, vendedorId } = await request.json();
-
     if (!institucionId) return NextResponse.json({ error: 'ID de institución requerido' }, { status: 400 });
-
     const institucionActualizada = await prisma.institution.update({
       where: { id: institucionId },
       data: { vendedorId: vendedorId ? vendedorId : null }
     });
-
     return NextResponse.json(institucionActualizada);
   } catch (error) {
     return NextResponse.json({ error: 'Error al reasignar vendedor' }, { status: 500 });

@@ -15,14 +15,16 @@ export function VisitaGPSForm({ onSuccess }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   
-  // Lista de escuelas para que el vendedor seleccione dónde está
+  // Catálogos
   const [instituciones, setInstituciones] = useState<any[]>([]);
+  const [tiposCobro, setTiposCobro] = useState<any[]>([]);
+  const [estadosCliente, setEstadosCliente] = useState<any[]>([]);
+  const [estadosContrato, setEstadosContrato] = useState<any[]>([]);
   
-  // Estados del GPS
   const [gpsLoading, setGpsLoading] = useState(false);
   const [coordenadas, setCoordenadas] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
 
-  // Formulario
+  // Formulario Base (Visita)
   const [formData, setFormData] = useState({
     institucionId: '',
     tipoGestion: 'Presencial',
@@ -31,47 +33,51 @@ export function VisitaGPSForm({ onSuccess }: Props) {
     fechaProximoContacto: ''
   });
 
-  // Cargar las escuelas al abrir el modal
+  // Formulario Extra (Venta)
+  const [huboVenta, setHuboVenta] = useState(false);
+  const [numContrato, setNumContrato] = useState('');
+  const [valorContrato, setValorContrato] = useState('');
+  const [meses, setMeses] = useState('12');
+  const [mesCobro, setMesCobro] = useState('Enero');
+  const [cuotaMensual, setCuotaMensual] = useState('');
+  const [tipoCobroId, setTipoCobroId] = useState('');
+  const [estadoClienteId, setEstadoClienteId] = useState('');
+  const [estadoContratoId, setEstadoContratoId] = useState('');
+
+  // Carga de catálogos
   useEffect(() => {
     if (open) {
-      fetch('/api/instituciones')
-        .then(res => res.json())
-        .then(data => setInstituciones(data))
-        .catch(err => console.error(err));
+      fetch('/api/instituciones').then(res => res.json()).then(data => setInstituciones(data));
+      fetch('/api/catalogos').then(res => res.json()).then(data => {
+        if (data.tiposCobro) setTiposCobro(data.tiposCobro);
+        if (data.estadosCliente) setEstadosCliente(data.estadosCliente);
+        if (data.estadosContrato) setEstadosContrato(data.estadosContrato);
+      });
     }
   }, [open]);
 
-  // FUNCIÓN ESTRELLA: Capturar Hardware GPS
-  const capturarGPS = () => {
-    if (!navigator.geolocation) {
-      alert("Tu navegador o dispositivo no soporta geolocalización.");
-      return;
-    }
+  // Cálculo Matemático de Cuota
+  const handleValorOMesesChange = (valor: string, m: string) => {
+    const valNum = parseFloat(valor) || 0;
+    const mesNum = parseInt(m) || 1;
+    setValorContrato(valor);
+    setMeses(m);
+    setCuotaMensual(mesNum > 0 ? (valNum / mesNum).toFixed(2) : '0');
+  };
 
+  const capturarGPS = () => {
+    if (!navigator.geolocation) { alert("Tu navegador o dispositivo no soporta geolocalización."); return; }
     setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCoordenadas({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        });
-        setGpsLoading(false);
-      },
-      (error) => {
-        console.error("Error GPS:", error);
-        alert("Por favor permite el acceso a tu ubicación en el navegador para registrar la visita.");
-        setGpsLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } // Máxima precisión (GPS de celular)
+      (position) => { setCoordenadas({ lat: position.coords.latitude, lng: position.coords.longitude }); setGpsLoading(false); },
+      (error) => { alert("Permite el acceso a tu ubicación."); setGpsLoading(false); },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!coordenadas.lat || !coordenadas.lng) {
-      alert("¡OBLIGATORIO! Debes capturar tu ubicación GPS antes de guardar la visita.");
-      return;
-    }
+    if (!coordenadas.lat || !coordenadas.lng) { alert("¡OBLIGATORIO! Captura tu ubicación GPS."); return; }
     
     setLoading(true);
     try {
@@ -81,24 +87,23 @@ export function VisitaGPSForm({ onSuccess }: Props) {
         body: JSON.stringify({
           ...formData,
           latitud: coordenadas.lat,
-          longitud: coordenadas.lng
+          longitud: coordenadas.lng,
+          // Datos Completos de Venta
+          huboVenta, numContrato, valorContrato, meses, mesCobro, cuotaMensual, 
+          tipoCobroId, estadoClienteId, estadoContratoId
         })
       });
 
-      if (!res.ok) throw new Error('Error al registrar la visita');
+      if (!res.ok) throw new Error('Error al registrar');
 
       setOpen(false);
       setCoordenadas({ lat: null, lng: null });
-      setFormData({ ...formData, resumenAcuerdos: '', institucionId: '', fechaProximoContacto: '' });
-      if (onSuccess) onSuccess();
+      setFormData({ institucionId: '', tipoGestion: 'Presencial', estadoGestion: 'Completada - Con interés', resumenAcuerdos: '', fechaProximoContacto: '' });
+      setHuboVenta(false); setNumContrato(''); setValorContrato(''); setMeses('12'); setMesCobro('Enero'); setCuotaMensual(''); setTipoCobroId(''); setEstadoClienteId(''); setEstadoContratoId('');
       
-      alert("✅ ¡Visita registrada con éxito!");
-
-    } catch (error) {
-      alert("Hubo un error al guardar la visita.");
-    } finally {
-      setLoading(false);
-    }
+      if (onSuccess) onSuccess();
+      alert("✅ ¡Visita y Venta registradas con éxito!");
+    } catch (error) { alert("Hubo un error al guardar."); } finally { setLoading(false); }
   };
 
   return (
@@ -146,18 +151,17 @@ export function VisitaGPSForm({ onSuccess }: Props) {
               </>
             ) : (
               <div className="flex flex-col items-center text-status-success">
-                <CheckCircle size={32} className="mb-1" />
-                <p className="text-sm font-bold">¡Ubicación Confirmada!</p>
+                <CheckCircle size={32} className="mb-1 text-emerald-600" />
+                <p className="text-sm font-bold text-emerald-600">¡Ubicación Confirmada!</p>
                 <p className="text-[10px] text-gray-500 font-mono mt-1">Lat: {coordenadas.lat?.toFixed(6)} | Lng: {coordenadas.lng?.toFixed(6)}</p>
               </div>
             )}
           </div>
-
           {/* SECCIÓN 3: DATOS DE LA GESTIÓN */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Tipo de Gestión *</Label>
-              <select className="w-full h-10 border rounded-md px-3 text-sm" value={formData.tipoGestion} onChange={e => setFormData({ ...formData, tipoGestion: e.target.value })}>
+              <select className="w-full h-10 border rounded-md px-3 text-sm bg-white" value={formData.tipoGestion} onChange={e => setFormData({ ...formData, tipoGestion: e.target.value })}>
                 <option value="Presencial">Presencial (Visita física)</option>
                 <option value="Llamada">Llamada Telefónica</option>
                 <option value="Reunión Virtual">Reunión Virtual</option>
@@ -165,7 +169,7 @@ export function VisitaGPSForm({ onSuccess }: Props) {
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Resultado *</Label>
-              <select className="w-full h-10 border rounded-md px-3 text-sm" value={formData.estadoGestion} onChange={e => setFormData({ ...formData, estadoGestion: e.target.value })}>
+              <select className="w-full h-10 border rounded-md px-3 text-sm bg-white" value={formData.estadoGestion} onChange={e => setFormData({ ...formData, estadoGestion: e.target.value })}>
                 <option value="Completada - Con interés">Excelente (Con interés)</option>
                 <option value="Completada - Seguimiento">Requiere Seguimiento</option>
                 <option value="Completada - Sin interés">Cerrado (Sin interés)</option>
@@ -173,7 +177,6 @@ export function VisitaGPSForm({ onSuccess }: Props) {
               </select>
             </div>
           </div>
-
           <div className="space-y-2">
             <Label className="text-xs font-semibold">Resumen de Acuerdos / Novedades</Label>
             <textarea 
@@ -194,10 +197,49 @@ export function VisitaGPSForm({ onSuccess }: Props) {
             />
             <p className="text-[10px] text-gray-400">Si dejas una fecha, esta escuela volverá a aparecer en tu agenda automáticamente.</p>
           </div>
+          {/* NUEVO: INTERRUPTOR Y CAMPOS DE VENTA                 */}
+          <div className="border-t border-gray-200 pt-3 mt-4">
+            <label className="flex items-center gap-2 cursor-pointer mb-2 bg-gray-50 p-2 rounded-lg border border-gray-200 hover:bg-emerald-50 transition-colors">
+              <input 
+                type="checkbox" 
+                checked={huboVenta} 
+                onChange={(e) => setHuboVenta(e.target.checked)} 
+                className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+              />
+              <span className="text-xs font-bold text-gray-800">
+                 ¿Se concretó una venta en esta visita?
+              </span>
+            </label>
+
+            {huboVenta && (
+              <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-200 space-y-3 mt-2 animate-in fade-in slide-in-from-top-2">
+                
+                {/* FILA 1: Montos */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">N° Contrato *</Label><Input required={huboVenta} type="text" pattern="[0-9]+" value={numContrato} onChange={(e) => setNumContrato(e.target.value.replace(/\D/g, ''))} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
+                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Monto Contrato ($) *</Label><Input required={huboVenta} type="number" step="0.01" value={valorContrato} onChange={(e) => handleValorOMesesChange(e.target.value, meses)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
+                </div>
+
+                {/* FILA 2: Plazos y Cuotas */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Meses Plazo</Label><Input type="number" min="1" value={meses} onChange={(e) => handleValorOMesesChange(valorContrato, e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
+                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Cuota Mensual ($)</Label><Input type="number" step="0.01" value={cuotaMensual} onChange={(e) => setCuotaMensual(e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 font-bold text-emerald-700" /></div>
+                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Mes Cobro</Label><select value={mesCobro} onChange={(e) => setMesCobro(e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-2 text-[11px] bg-white mt-1 outline-none">{['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
+                </div>
+
+                {/* FILA 3: Catálogos / Estados */}
+                <div className="grid grid-cols-3 gap-2 border-t border-emerald-200/50 pt-3">
+                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select required={huboVenta} value={tipoCobroId} onChange={(e) => setTipoCobroId(e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{tiposCobro.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
+                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Cliente</Label><select value={estadoClienteId} onChange={(e) => setEstadoClienteId(e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Pendiente</option>{estadosCliente.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
+                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Contrato</Label><select value={estadoContratoId} onChange={(e) => setEstadoContratoId(e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Pendiente</option>{estadosContrato.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
+                </div>
+
+              </div>
+            )}
+          </div>
 
           <Button type="submit" disabled={loading || !coordenadas.lat} className="w-full h-11 bg-primary text-white text-base mt-2">
-            <Save size={18} className="mr-2" />
-            {loading ? 'Guardando en la nube...' : 'Subir Reporte de Visita'}
+            <Save size={18} className="mr-2" /> {loading ? 'Guardando en la nube...' : 'Subir Reporte de Visita'}
           </Button>
         </form>
       </DialogContent>

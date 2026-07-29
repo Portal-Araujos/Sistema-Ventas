@@ -11,11 +11,13 @@ export async function GET() {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     let userRol = 'vendedor';
+    let userPermisos: string[] = [];
 
     if (token) {
       try {
         const { payload } = await jwtVerify(token, JWT_SECRET);
         userRol = (payload.rol as string) || 'vendedor';
+        userPermisos = (payload.permisos as string[]) || [];
       } catch (e) {}
     }
 
@@ -32,14 +34,37 @@ export async function GET() {
     const accesos = await prisma.accesoEdificio.findMany({ orderBy: { nombre: 'asc' } });
     const sostenimientos = await prisma.sostenimiento.findMany({ orderBy: { nombre: 'asc' } });
     const jornadas = await prisma.jornada.findMany({ orderBy: { nombre: 'asc' } });
+    const reglasTamano = await prisma.reglaTamano.findMany({ orderBy: { minDocentes: 'asc' } });
     const estadosComerciales = await prisma.estadoComercial.findMany({ orderBy: { id: 'asc' } });
 
-    
-    // REGLAS DE TAMAÑO DÍNAMICAS
-    const reglasTamano = await prisma.reglaTamano.findMany({ orderBy: { minDocentes: 'asc' } });
+    // NUEVOS CATÁLOGOS PARA VENTAS (Si están vacíos, creamos los por defecto)
+    let estadosCliente = await prisma.estadoCliente.findMany({ orderBy: { id: 'asc' } });
+    if (estadosCliente.length === 0) {
+      await prisma.estadoCliente.createMany({
+        data: [{ nombre: 'Pendiente' }, { nombre: 'Entregado' }, { nombre: 'Pedido' }]
+      });
+      estadosCliente = await prisma.estadoCliente.findMany({ orderBy: { id: 'asc' } });
+    }
+
+    let estadosContrato = await prisma.estadoContrato.findMany({ orderBy: { id: 'asc' } });
+    if (estadosContrato.length === 0) {
+      await prisma.estadoContrato.createMany({
+        data: [{ nombre: 'Pendiente' }, { nombre: 'Entregado' }]
+      });
+      estadosContrato = await prisma.estadoContrato.findMany({ orderBy: { id: 'asc' } });
+    }
+
+    let tiposCobro = await prisma.tipoCobro.findMany({ orderBy: { id: 'asc' } });
+    if (tiposCobro.length === 0) {
+      await prisma.tipoCobro.createMany({
+        data: [{ nombre: 'Débito' }, { nombre: 'Particular' }]
+      });
+      tiposCobro = await prisma.tipoCobro.findMany({ orderBy: { id: 'asc' } });
+    }
 
     return NextResponse.json({
       userRol,
+      userPermisos,
       provincias,
       niveles,
       areas,
@@ -49,7 +74,11 @@ export async function GET() {
       accesos,
       sostenimientos,
       jornadas,
-      reglasTamano
+      reglasTamano,
+      estadosComerciales,
+      estadosCliente,
+      estadosContrato,
+      tiposCobro
     });
   } catch (error) {
     return NextResponse.json({ error: 'Error al cargar catálogos' }, { status: 500 });
@@ -82,7 +111,10 @@ export async function POST(request: Request) {
       case 'acceso': return NextResponse.json(await prisma.accesoEdificio.create({ data: { nombre } }), { status: 201 });
       case 'sostenimiento': return NextResponse.json(await prisma.sostenimiento.create({ data: { nombre } }), { status: 201 });
       case 'jornada': return NextResponse.json(await prisma.jornada.create({ data: { nombre } }), { status: 201 });
-      case 'estadoComercial':return NextResponse.json(await prisma.estadoComercial.create({ data: { nombre, activo: true } }), { status: 201 });
+      case 'estadoComercial': return NextResponse.json(await prisma.estadoComercial.create({ data: { nombre, activo: true } }), { status: 201 });
+      case 'estadoCliente': return NextResponse.json(await prisma.estadoCliente.create({ data: { nombre, activo: true } }), { status: 201 });
+      case 'estadoContrato': return NextResponse.json(await prisma.estadoContrato.create({ data: { nombre, activo: true } }), { status: 201 });
+      case 'tipoCobro': return NextResponse.json(await prisma.tipoCobro.create({ data: { nombre, activo: true } }), { status: 201 });
       default: return NextResponse.json({ error: 'Tipo de catálogo no válido' }, { status: 400 });
     }
   } catch (error) {
@@ -90,9 +122,6 @@ export async function POST(request: Request) {
   }
 }
 
-// ==========================================
-// PUT: EDITAR UN CATÁLOGO EXISTENTE
-// ==========================================
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -100,45 +129,38 @@ export async function PUT(request: Request) {
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') {
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-    }
+    if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
 
     const body = await request.json();
-    // AQUÍ ESTÁ LA CORRECCIÓN: Agregamos 'activo' a la lectura del body
     const { id, tipo, nombre, minDocentes, maxDocentes, activo } = body;
 
     if (!id) return NextResponse.json({ error: 'ID es requerido' }, { status: 400 });
 
     let item;
+    const numericId = parseInt(id);
 
-    // Regla de Tamaño
     if (tipo === 'reglaTamano') {
       item = await prisma.reglaTamano.update({
-        where: { id: parseInt(id) },
-        data: {
-          minDocentes: parseInt(minDocentes),
-          maxDocentes: parseInt(maxDocentes)
-        }
+        where: { id: numericId },
+        data: { minDocentes: parseInt(minDocentes), maxDocentes: parseInt(maxDocentes) }
       });
       return NextResponse.json(item);
     }
 
-    // Estado Comercial (Permite actualizar nombre y/o activar/deshabilitar)
-    if (tipo === 'estadoComercial') {
-      item = await prisma.estadoComercial.update({
-        where: { id: parseInt(id) },
-        data: {
-          ...(nombre && { nombre }),
-          ...(typeof activo === 'boolean' && { activo })
-        }
-      });
+    if (['estadoComercial', 'estadoCliente', 'estadoContrato', 'tipoCobro'].includes(tipo)) {
+      const dataUpdate: any = {};
+      if (nombre) dataUpdate.nombre = nombre;
+      if (typeof activo === 'boolean') dataUpdate.activo = activo;
+
+      if (tipo === 'estadoComercial') item = await prisma.estadoComercial.update({ where: { id: numericId }, data: dataUpdate });
+      if (tipo === 'estadoCliente') item = await prisma.estadoCliente.update({ where: { id: numericId }, data: dataUpdate });
+      if (tipo === 'estadoContrato') item = await prisma.estadoContrato.update({ where: { id: numericId }, data: dataUpdate });
+      if (tipo === 'tipoCobro') item = await prisma.tipoCobro.update({ where: { id: numericId }, data: dataUpdate });
+
       return NextResponse.json(item);
     }
 
     const data = { nombre };
-    const numericId = parseInt(id);
-
     switch (tipo) {
       case 'provincia': item = await prisma.provincia.update({ where: { id: numericId }, data }); break;
       case 'canton': item = await prisma.canton.update({ where: { id: numericId }, data }); break;
@@ -155,46 +177,6 @@ export async function PUT(request: Request) {
     }
     return NextResponse.json(item);
   } catch (error) {
-    console.error('Error en PUT catálogos:', error);
     return NextResponse.json({ error: 'Error al actualizar elemento' }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('session_token')?.value;
-    if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-
-    const { searchParams } = new URL(request.url);
-    const id = parseInt(searchParams.get('id') || '0');
-    const tipo = searchParams.get('tipo');
-
-    if (!id || !tipo) return NextResponse.json({ error: 'Faltan parámetros' }, { status: 400 });
-
-    switch (tipo) {
-      case 'provincia': await prisma.provincia.delete({ where: { id } }); break;
-      case 'canton': await prisma.canton.delete({ where: { id } }); break;
-      case 'parroquia': await prisma.parroquia.delete({ where: { id } }); break;
-      case 'nivel': await prisma.nivelEducativo.delete({ where: { id } }); break;
-      case 'area': await prisma.areaEducativa.delete({ where: { id } }); break;
-      case 'regimen': await prisma.regimenEscolar.delete({ where: { id } }); break;
-      case 'jurisdiccion': await prisma.jurisdiccion.delete({ where: { id } }); break;
-      case 'modalidad': await prisma.modalidadEducativa.delete({ where: { id } }); break;
-      case 'acceso': await prisma.accesoEdificio.delete({ where: { id } }); break;
-      case 'sostenimiento': await prisma.sostenimiento.delete({ where: { id } }); break;
-      case 'jornada': await prisma.jornada.delete({ where: { id } }); break;
-      case 'estadoComercial':return NextResponse.json({ error: 'No se permite eliminar estados comerciales para no perder el historial. Puedes deshabilitarlo desde la opción de edición.' },{ status: 400 });
-      default: return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 });
-    }
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    if (error.code === 'P2003') {
-      return NextResponse.json({ error: 'No se puede eliminar porque hay escuelas usando este dato.' }, { status: 409 });
-    }
-    return NextResponse.json({ error: 'Error al eliminar' }, { status: 500 });
   }
 }

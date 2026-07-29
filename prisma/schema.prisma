@@ -112,9 +112,11 @@ model ReglaTamano {
 
 // --- SEGURIDAD ---
 model Rol {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique
-  usuarios  Usuario[]
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique
+  descripcion String?
+  permisos    String?   @default("[]") // Guardará un JSON tipo ["ventas:ver", "instituciones:editar"]
+  usuarios    Usuario[]
 
   @@map("roles")
 }
@@ -148,18 +150,20 @@ model PermisoUsuario {
 }
 
 model Usuario {
-  id           String           @id @default(uuid())
-  rolId        Int              @map("rol_id")
-  nombre       String
-  email        String           @unique
-  passwordHash String           @map("password_hash")
-  activo       Boolean          @default(true)
-  createdAt    DateTime         @default(now()) @map("created_at")
-  rol          Rol              @relation(fields: [rolId], references: [id])
-  permisos     PermisoUsuario[]
-  institucionesCreadas  Institution[]    @relation("CreadoPor")
-  institucionesAsignadas Institution[]   @relation("VendedorResponsable")
-  visitas      VisitaAgenda[]
+  id                             String           @id @default(uuid())
+  rolId                          Int              @map("rol_id")
+  nombre                         String
+  email                          String           @unique
+  passwordHash                   String           @map("password_hash")
+  activo                         Boolean          @default(true)
+  createdAt                      DateTime         @default(now()) @map("created_at")
+  rol                            Rol              @relation(fields: [rolId], references: [id])
+  permisos                       PermisoUsuario[]
+  institucionesCreadas           Institution[]    @relation("CreadoPor")
+  institucionesAsignadas         Institution[]   @relation("VendedorResponsable")
+  visitas                        VisitaAgenda[]
+  ventasRealizadas               Venta[]
+  metas                          MetaVendedor[]
 
   @@map("usuarios")
 }
@@ -215,6 +219,7 @@ model Institution {
 
   createdAt            DateTime            @default(now()) @map("created_at")
   visitas              VisitaAgenda[]
+  ventas               Venta[]
 
   @@map("instituciones")
 }
@@ -234,6 +239,95 @@ model VisitaAgenda {
   createdAt            DateTime    @default(now()) @map("created_at")
   institucion          Institution @relation(fields: [institucionId], references: [id], onDelete: Cascade)
   usuario              Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  ventas               Venta[]
 
   @@map("visitas_agenda")
+}
+// ==========================================
+// NUEVOS CATÁLOGOS DINÁMICOS PARA VENTAS
+// ==========================================
+
+model EstadoCliente {
+  id        Int       @id @default(autoincrement())
+  nombre    String    @unique
+  activo    Boolean   @default(true)
+  ventas    Venta[]
+
+  @@map("estados_clientes")
+}
+
+model EstadoContrato {
+  id        Int       @id @default(autoincrement())
+  nombre    String    @unique
+  activo    Boolean   @default(true)
+  ventas    Venta[]
+
+  @@map("estados_contratos")
+}
+
+model TipoCobro {
+  id        Int       @id @default(autoincrement())
+  nombre    String    @unique
+  activo    Boolean   @default(true)
+  ventas    Venta[]
+
+  @@map("tipos_cobro")
+}
+
+// ==========================================
+// MÓDULO DE VENTAS (EL MOTOR FINANCIERO Y TICKETS)
+// ==========================================
+
+model Venta {
+  id                  String   @id @default(uuid())
+  fechaVenta          DateTime @default(now()) @map("fecha_venta")
+  
+  // Relaciones Base
+  institucionId       String   @map("institucion_id")
+  institucion         Institution @relation(fields: [institucionId], references: [id])
+
+  vendedorId          String   @map("vendedor_id")
+  vendedor            Usuario  @relation(fields: [vendedorId], references: [id])
+
+  visitaId            String?  @map("visita_id")
+  visita              VisitaAgenda? @relation(fields: [visitaId], references: [id])
+
+  // Datos Comerciales (Llenados por Vendedor)
+  numContrato         String   @map("num_contrato")
+  valorContrato       Float    @map("valor_contrato")
+  meses               Int
+  mesCobro            String   @map("mes_cobro") // Selector Enero - Diciembre
+  cuotaMensual        Float    @map("cuota_mensual")
+
+  // Catálogos Dinámicos Relacionales
+  estadoClienteId     Int?     @map("estado_cliente_id")
+  estadoCliente       EstadoCliente? @relation(fields: [estadoClienteId], references: [id])
+
+  estadoContratoId    Int?     @map("estado_contrato_id")
+  estadoContrato      EstadoContrato? @relation(fields: [estadoContratoId], references: [id])
+
+  tipoCobroId         Int?     @map("tipo_cobro_id")
+  tipoCobro           TipoCobro? @relation(fields: [tipoCobroId], references: [id])
+
+  // Área de Facturación y Validación (Tickets)
+  observacionesFact   String?  @map("observaciones_facturacion")
+  verificacionFact    String?  @map("verificacion_facturacion") // Num validación
+  estadoTicket        String   @default("Pendiente Facturación") @map("estado_ticket") 
+  
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("ventas")
+}
+model MetaVendedor {
+  id          String   @id @default(uuid())
+  vendedorId  String   @map("vendedor_id")
+  vendedor    Usuario  @relation(fields: [vendedorId], references: [id])
+  semanaAnio  String   @map("semana_anio") // Formato: "YYYY-WXX" o fecha del lunes "YYYY-MM-DD"
+  montoMeta   Float    @default(0) @map("monto_meta")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([vendedorId, semanaAnio])
+  @@map("metas_vendedores")
 }
