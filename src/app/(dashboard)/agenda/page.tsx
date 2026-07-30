@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { VisitaGPSForm } from '@/app/features/visitas/components/VisitaGPSForm';
-
 export default function AgendaPage() {
   const router = useRouter();
   const [agenda, setAgenda] = useState<any[]>([]);
@@ -18,14 +17,11 @@ export default function AgendaPage() {
   const [catalogos, setCatalogos] = useState<any>(null);
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [userRol, setUserRol] = useState('vendedor');
-
-  // Filtros
   const [tabActiva, setTabActiva] = useState<'todas' | 'Hoy' | 'Próxima' | 'Vencida'>('todas');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvincia, setSelectedProvincia] = useState('');
   const [selectedCanton, setSelectedCanton] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState('');
-
   const cargarAgenda = async () => {
     setLoading(true);
     try {
@@ -35,11 +31,9 @@ export default function AgendaPage() {
         fetch('/api/catalogos'),
         fetch('/api/usuarios/vendedores')
       ]);
-
       const dataAgenda = await resAgenda.json();
       const dataCat = await resCat.json();
       const dataVend = await resVend.json();
-
       setAgenda(Array.isArray(dataAgenda) ? dataAgenda : []);
       setCatalogos(dataCat);
       setVendedores(Array.isArray(dataVend) ? dataVend : []);
@@ -50,18 +44,13 @@ export default function AgendaPage() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     cargarAgenda();
   }, [selectedVendedor]);
-
-  // Contadores para las Tarjetas Superiores
   const totalAgenda = agenda.length;
   const citasHoy = agenda.filter(a => a.categoria === 'Hoy').length;
   const proximasCitas = agenda.filter(a => a.categoria === 'Próxima').length;
   const vencidas = agenda.filter(a => a.categoria === 'Vencida').length;
-
-  // Filtrado de Tarjetas
   const agendaFiltrada = agenda.filter(item => {
     if (tabActiva !== 'todas' && item.categoria !== tabActiva) return false;
     if (searchTerm && !item.nombreInstitucion.toLowerCase().includes(searchTerm.toLowerCase())) return false;
@@ -69,17 +58,12 @@ export default function AgendaPage() {
     if (selectedCanton && item.cantonId !== parseInt(selectedCanton)) return false;
     return true;
   });
-
   const cantonesDisponibles = selectedProvincia 
     ? catalogos?.provincias?.find((p: any) => p.id === parseInt(selectedProvincia))?.cantones || []
     : [];
-
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
-
   return (
-    <div className="p-4 md:p-8 flex flex-col gap-6 max-w-7xl mx-auto">
-      
-      {/* CABECERA */}
+    <div className="p-4 md:p-8 flex flex-col gap-6  min-h-screen">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
@@ -89,14 +73,9 @@ export default function AgendaPage() {
             Cronograma de compromisos, llamadas y visitas a instituciones
           </p>
         </div>
-
         <VisitaGPSForm onSuccess={cargarAgenda} />
       </div>
-
-      {/* TARJETAS DE RESUMEN SUPERIOR (Como en tu imagen) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
-        
-        {/* Card 1: Total */}
         <div 
           onClick={() => setTabActiva('todas')}
           className={`p-4 rounded-xl border cursor-pointer transition-all ${
@@ -106,8 +85,6 @@ export default function AgendaPage() {
           <p className={`text-xs font-semibold ${tabActiva === 'todas' ? 'text-white/80' : 'text-gray-500'}`}>Total Agenda</p>
           <h3 className="text-2xl font-extrabold mt-1">{totalAgenda}</h3>
         </div>
-
-        {/* Card 2: Hoy */}
         <div 
           onClick={() => setTabActiva('Hoy')}
           className={`p-4 rounded-xl border cursor-pointer transition-all ${
@@ -120,8 +97,6 @@ export default function AgendaPage() {
           </div>
           <h3 className="text-2xl font-extrabold mt-1">{citasHoy}</h3>
         </div>
-
-        {/* Card 3: Próximas */}
         <div 
           onClick={() => setTabActiva('Próxima')}
           className={`p-4 rounded-xl border cursor-pointer transition-all ${
@@ -134,8 +109,6 @@ export default function AgendaPage() {
           </div>
           <h3 className="text-2xl font-extrabold mt-1">{proximasCitas}</h3>
         </div>
-
-        {/* Card 4: Vencidos */}
         <div 
           onClick={() => setTabActiva('Vencida')}
           className={`p-4 rounded-xl border cursor-pointer transition-all ${
@@ -148,10 +121,7 @@ export default function AgendaPage() {
           </div>
           <h3 className="text-2xl font-extrabold mt-1">{vencidas}</h3>
         </div>
-
       </div>
-
-      {/* BARRA DE BÚSQUEDA Y FILTROS */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
@@ -162,7 +132,6 @@ export default function AgendaPage() {
             onChange={e => setSearchTerm(e.target.value)} 
           />
         </div>
-
         <select 
           className="h-10 border rounded-md px-3 text-xs bg-white text-gray-700" 
           value={selectedProvincia} 
@@ -171,7 +140,6 @@ export default function AgendaPage() {
           <option value="">Todas las Provincias</option>
           {catalogos?.provincias?.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </select>
-
         <select 
           disabled={!selectedProvincia} 
           className="h-10 border rounded-md px-3 text-xs bg-white text-gray-700 disabled:bg-gray-100" 
@@ -181,7 +149,6 @@ export default function AgendaPage() {
           <option value="">Todos los Cantones</option>
           {cantonesDisponibles.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
-
         {esAdmin && (
           <select 
             className="h-10 border rounded-md px-3 text-xs bg-white text-gray-700" 
@@ -193,8 +160,6 @@ export default function AgendaPage() {
           </select>
         )}
       </div>
-
-      {/* RED DE TARJETAS DE COMPROMISO */}
       {loading ? (
         <div className="p-12 text-center text-gray-500 font-medium">Cargando compromisos de la agenda...</div>
       ) : agendaFiltrada.length === 0 ? (
@@ -212,7 +177,6 @@ export default function AgendaPage() {
               }`}
             >
               <div>
-                {/* Badge de Estado del Agendamiento */}
                 <div className="flex justify-between items-center mb-2">
                   <Badge 
                     className={
@@ -224,20 +188,16 @@ export default function AgendaPage() {
                   </Badge>
                   <span className="text-xs font-bold text-gray-500">{item.fechaProgramada}</span>
                 </div>
-
                 <h3 className="font-bold text-gray-900 text-base">{item.nombreInstitucion}</h3>
                 <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
                   <MapPin size={14} className="text-primary shrink-0" />
                   {item.provincia} / {item.canton} ({item.parroquia})
                 </p>
-
                 <div className="mt-3 bg-gray-50 p-3 rounded-lg border border-gray-100">
                   <p className="text-[11px] font-bold text-gray-400 uppercase">Último Acuerdo Registrado</p>
                   <p className="text-xs text-gray-700 italic mt-0.5 line-clamp-2">{item.ultimoAcuerdo}</p>
                 </div>
               </div>
-
-              {/* Botones de Acción Rápida para el Vendedor */}
               <div className="pt-3 border-t flex items-center gap-2">
                 <Button 
                   size="sm" 
@@ -251,7 +211,6 @@ export default function AgendaPage() {
           ))}
         </div>
       )}
-
     </div>
   );
 }

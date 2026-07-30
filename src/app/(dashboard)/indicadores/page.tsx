@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  BarChart3, Target, Calendar, ArrowUpRight, Award, Edit3, RefreshCw, CheckCircle2
+  BarChart3, Target, Calendar, CheckCircle2
 } from 'lucide-react';
+import { AlertCircle } from 'react-feather';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,18 +16,13 @@ export default function IndicadoresPage() {
   const [reporte, setReporte] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRol, setUserRol] = useState('vendedor');
-
-  // Selector de Semana (se usa la fecha del lunes)
   const getLunesHoy = () => {
     const d = new Date();
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(d.setDate(diff)).toISOString().split('T')[0];
   };
-
   const [fechaLunes, setFechaLunes] = useState(getLunesHoy());
-
-  // Modal para definir metas (Solo Admins)
   const [modalMetas, setModalMetas] = useState(false);
   const [metasForm, setMetasForm] = useState<any[]>([]);
   const [savingMetas, setSavingMetas] = useState(false);
@@ -38,13 +34,9 @@ export default function IndicadoresPage() {
         fetch(`/api/indicadores/semanal?fechaLunes=${fechaLunes}`),
         fetch('/api/catalogos')
       ]);
-
-      // ESTA ES LA PROTECCIÓN: Revisamos si la respuesta fue exitosa antes de convertir a JSON
       if (!resInd.ok) throw new Error("No se pudo cargar la API de indicadores");
-
       const dataInd = await resInd.json();
       const dataCat = await resCat.json();
-
       setReporte(Array.isArray(dataInd.reporte) ? dataInd.reporte : []);
       if (dataCat.userRol) setUserRol(dataCat.userRol);
     } catch (e) {
@@ -54,11 +46,9 @@ export default function IndicadoresPage() {
       setLoading(false);
     }
   };
-  
   useEffect(() => {
     cargarIndicadores();
   }, [fechaLunes]);
-
   const handleOpenModalMetas = () => {
     setMetasForm(
       reporte.map(r => ({
@@ -69,7 +59,6 @@ export default function IndicadoresPage() {
     );
     setModalMetas(true);
   };
-
   const handleGuardarMetas = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingMetas(true);
@@ -82,28 +71,27 @@ export default function IndicadoresPage() {
           metas: metasForm
         })
       });
-
       if (!res.ok) throw new Error();
       setModalMetas(false);
       cargarIndicadores();
-      alert("✅ ¡Metas semanales guardadas con éxito!");
+      showToast('exito', '¡Metas semanales guardadas con éxito!');
     } catch (e) {
-      alert("Error al guardar metas.");
+      showToast('error', 'Hubo un problema al guardar las metas.');
     } finally {
       setSavingMetas(false);
     }
   };
-
+  const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
+  const showToast = (tipo: 'exito' | 'error', texto: string) => {
+    setToastMsg({ tipo, texto });
+    setTimeout(() => setToastMsg(null), 4000); // Se oculta automáticamente a los 4 segundos
+  };
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
-
-  // Totales de la Sábana
   const totalCierreSemanal = reporte.reduce((sum, r) => sum + r.cierreSemanal, 0);
   const totalMetaSemanal = reporte.reduce((sum, r) => sum + r.metaMonto, 0);
   const porcentajeGlobal = totalMetaSemanal > 0 ? ((totalCierreSemanal / totalMetaSemanal) * 100).toFixed(1) : '0';
-
   return (
-    <div className="p-4 md:p-8 flex flex-col gap-6 max-w-7xl mx-auto">
-      
+    <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen">
       {/* CABECERA */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -111,20 +99,17 @@ export default function IndicadoresPage() {
             <BarChart3 className="text-primary" /> Indicadores y Cierre Semanal
           </h1>
           <p className="text-xs md:text-sm text-gray-500 mt-0.5">
-            Sábana de rendimiento de ventas por día y cumplimiento de metas
+            Informe de rendimiento de ventas por día y cumplimiento de metas
           </p>
         </div>
-
         {esAdmin && (
           <Button onClick={handleOpenModalMetas} className="bg-primary text-white font-bold flex gap-2">
             <Target size={18} /> Definir Metas Semanales
           </Button>
         )}
       </div>
-
       {/* SELECTOR DE SEMANA Y MÉTRICAS GLOBALES */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        
         <div className="flex items-center gap-3">
           <Calendar className="text-primary" size={20} />
           <div>
@@ -137,18 +122,15 @@ export default function IndicadoresPage() {
             />
           </div>
         </div>
-
         <div className="flex gap-4 w-full md:w-auto justify-between md:justify-end">
           <div className="bg-gray-50 p-3 rounded-lg border text-center min-w-120px">
             <span className="text-[10px] font-bold text-gray-400 block uppercase">Cierre Semanal</span>
             <span className="text-lg font-extrabold text-emerald-700">${totalCierreSemanal.toFixed(2)}</span>
           </div>
-
           <div className="bg-gray-50 p-3 rounded-lg border text-center min-w-120px">
             <span className="text-[10px] font-bold text-gray-400 block uppercase">Meta Semanal</span>
             <span className="text-lg font-extrabold text-gray-800">${totalMetaSemanal.toFixed(2)}</span>
           </div>
-
           <div className="bg-gray-50 p-3 rounded-lg border text-center min-w-120px">
             <span className="text-[10px] font-bold text-gray-400 block uppercase">% Cumplido</span>
             <span className={`text-lg font-extrabold ${Number(porcentajeGlobal) >= 100 ? 'text-emerald-600' : Number(porcentajeGlobal) >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
@@ -156,9 +138,7 @@ export default function IndicadoresPage() {
             </span>
           </div>
         </div>
-
       </div>
-
       {/* TABLA SÁBANA IDÉNTICA A LA FOTO */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
         <Table>
@@ -176,36 +156,30 @@ export default function IndicadoresPage() {
               <TableHead className="font-bold text-gray-800 text-center">% Meta</TableHead>
             </TableRow>
           </TableHeader>
-
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-gray-500">Calculando sábana semanal...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-gray-500">Calculando informe semanal...</TableCell></TableRow>
             ) : reporte.length === 0 ? (
               <TableRow><TableCell colSpan={10} className="text-center py-8 text-gray-500">No hay vendedores o datos registrados.</TableCell></TableRow>
             ) : reporte.map(r => (
               <TableRow key={r.vendedorId} className="hover:bg-gray-50/50">
-                
                 <TableCell className="font-bold text-gray-900 text-sm">
                   👤 {r.vendedorNombre}
                 </TableCell>
-
                 <TableCell className="text-center font-medium text-xs">${r.lunes.toFixed(2)}</TableCell>
                 <TableCell className="text-center font-medium text-xs">${r.martes.toFixed(2)}</TableCell>
                 <TableCell className="text-center font-medium text-xs">${r.miercoles.toFixed(2)}</TableCell>
                 <TableCell className="text-center font-medium text-xs">${r.jueves.toFixed(2)}</TableCell>
                 <TableCell className="text-center font-medium text-xs">${r.viernes.toFixed(2)}</TableCell>
                 <TableCell className="text-center font-medium text-xs">${r.sabado.toFixed(2)}</TableCell>
-
                 {/* CIERRE SEMANALE */}
                 <TableCell className="text-center font-extrabold text-sm text-emerald-700 bg-emerald-50/30">
                   ${r.cierreSemanal.toFixed(2)}
                 </TableCell>
-
                 {/* META */}
                 <TableCell className="text-center font-bold text-sm text-gray-800 bg-gray-50/50">
                   ${r.metaMonto.toFixed(2)}
                 </TableCell>
-
                 {/* % META CON BADGE DE COLOR AUTOMÁTICO */}
                 <TableCell className="text-center">
                   <Badge className={`text-xs font-bold ${
@@ -218,13 +192,11 @@ export default function IndicadoresPage() {
                     {r.porcentajeCumplido}%
                   </Badge>
                 </TableCell>
-
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-
       {/* MODAL DEFINIR METAS SEMANALES */}
       <Dialog open={modalMetas} onOpenChange={setModalMetas}>
         <DialogContent className="sm:max-w-lg bg-white p-6 rounded-2xl max-h-[85vh] overflow-y-auto">
@@ -233,12 +205,10 @@ export default function IndicadoresPage() {
               <Target className="text-primary" /> Asignar Metas Semanales
             </DialogTitle>
           </DialogHeader>
-
           <form onSubmit={handleGuardarMetas} className="space-y-4 mt-2">
             <p className="text-xs text-gray-500">
               Ingresa el objetivo en dólares ($) para cada vendedor en la semana elegida ({fechaLunes}):
             </p>
-
             <div className="space-y-3">
               {metasForm.map((m, idx) => (
                 <div key={m.vendedorId} className="flex items-center justify-between gap-3 bg-gray-50 p-3 rounded-lg border">
@@ -264,18 +234,30 @@ export default function IndicadoresPage() {
                 </div>
               ))}
             </div>
-
             <DialogFooter className="pt-2 flex gap-2 justify-end">
               <Button type="button" variant="outline" onClick={() => setModalMetas(false)}>Cancelar</Button>
               <Button type="submit" disabled={savingMetas} className="bg-primary text-white font-bold">
                 {savingMetas ? 'Guardando...' : 'Guardar Metas'}
               </Button>
             </DialogFooter>
-
           </form>
         </DialogContent>
       </Dialog>
-
+      {/* NOTIFICACIÓN FLOTANTE (TOAST) */}
+      {toastMsg && (
+        <div 
+          className={`fixed bottom-6 right-6 z-100 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${
+            toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+          }`}
+        >
+          {toastMsg.tipo === 'exito' ? (
+            <CheckCircle2 size={20} className="text-emerald-100" />
+          ) : (
+            <AlertCircle size={20} className="text-red-100" />
+          )}
+          <span className="font-bold text-sm tracking-wide">{toastMsg.texto}</span>
+        </div>
+      )}
     </div>
   );
 }

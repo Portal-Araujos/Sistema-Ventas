@@ -54,7 +54,7 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
   if (!inst) return <div className="p-12 text-center text-red-500 font-medium">La institución no existe.</div>;
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto flex flex-col gap-6">
+    <div className="p-4 md:p-8  min-h-screen flex flex-col gap-6">
       
       {/* Botón Volver y Acciones */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

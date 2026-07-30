@@ -1,115 +1,88 @@
 generator client {
   provider = "prisma-client-js"
 }
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-// --- GEOGRAFÍA ---
 model Provincia {
   id        Int       @id @default(autoincrement())
   nombre    String    @unique
   cantones  Canton[]
-
   @@map("provincias")
 }
-
 model Canton {
   id           Int         @id @default(autoincrement())
   provinciaId  Int         @map("provincia_id")
   nombre       String
   provincia    Provincia   @relation(fields: [provinciaId], references: [id], onDelete: Cascade)
   parroquias   Parroquia[]
-
   @@map("cantones")
 }
-
 model Parroquia {
   id           Int           @id @default(autoincrement())
   cantonId     Int           @map("canton_id")
   nombre       String
   canton       Canton        @relation(fields: [cantonId], references: [id], onDelete: Cascade)
   instituciones Institution[]
-
   @@map("parroquias")
 }
-
 // --- CATÁLOGOS DINÁMICOS ---
 model Sostenimiento {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   instituciones Institution[]
-
   @@map("sostenimientos")
 }
-
 model Jornada {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   instituciones Institution[]
-
   @@map("jornadas")
 }
-
 model NivelEducativo {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   instituciones Institution[]
-
   @@map("niveles_educativos")
 }
-
 model AreaEducativa {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   instituciones Institution[]
-
   @@map("areas_educativas")
 }
-
 model RegimenEscolar {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   instituciones Institution[]
-
   @@map("regimenes_escolares")
 }
-
 model Jurisdiccion {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   instituciones Institution[]
-
   @@map("jurisdicciones")
 }
-
 model ModalidadEducativa {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   instituciones Institution[]
-
   @@map("modalidades_educativas")
 }
-
 model AccesoEdificio {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   instituciones Institution[]
-
   @@map("accesos_edificio")
 }
-
 model ReglaTamano {
   id           Int      @id @default(autoincrement())
   nombre       String   @unique
   minDocentes  Int      @default(0) @map("min_docentes")
   maxDocentes  Int      @default(9999) @map("max_docentes")
-
   @@map("reglas_tamano")
 }
-
 // --- SEGURIDAD ---
 model Rol {
   id          Int       @id @default(autoincrement())
@@ -117,26 +90,20 @@ model Rol {
   descripcion String?
   permisos    String?   @default("[]") // Guardará un JSON tipo ["ventas:ver", "instituciones:editar"]
   usuarios    Usuario[]
-
   @@map("roles")
 }
-
 model Permiso {
   id        Int              @id @default(autoincrement())
   nombre    String           @unique
   modulo    String
   usuarios  PermisoUsuario[]
-
   @@map("permisos")
 }
 model EstadoComercial {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   activo        Boolean       @default(true)
-  
-  // Le ponemos el nombre explícito a la relación aquí:
   instituciones Institution[] @relation("EstadoToInst")
-
   @@map("estados_comerciales")
 }
 model PermisoUsuario {
@@ -144,11 +111,9 @@ model PermisoUsuario {
   permisoId Int      @map("permiso_id")
   usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   permiso   Permiso  @relation(fields: [permisoId], references: [id], onDelete: Cascade)
-
   @@id([usuarioId, permisoId])
   @@map("permisos_usuarios")
 }
-
 model Usuario {
   id                             String           @id @default(uuid())
   rolId                          Int              @map("rol_id")
@@ -164,66 +129,45 @@ model Usuario {
   visitas                        VisitaAgenda[]
   ventasRealizadas               Venta[]
   metas                          MetaVendedor[]
-
   @@map("usuarios")
 }
-
-// --- TABLA PRINCIPAL DE INSTITUCIONES ---
 model Institution {
   id                   String              @id @default(uuid())
   nombre               String
-  
-  // Catálogos
   sostenimientoId      Int                 @map("sostenimiento_id")
   sostenimiento        Sostenimiento       @relation(fields: [sostenimientoId], references: [id])
-  
   jornadaId            Int                 @map("jornada_id")
   jornada              Jornada             @relation(fields: [jornadaId], references: [id])
-
   parroquiaId          Int                 @map("parroquia_id")
   parroquia            Parroquia           @relation(fields: [parroquiaId], references: [id])
-
   docentesHombres      Int                 @default(0) @map("docentes_hombres")
   docentesMujeres      Int                 @default(0) @map("docentes_mujeres")
   totalDocentes        Int                 @default(0) @map("total_docentes")
-
   tamano               String              @default("Pequeña")
   estadoComercialId    Int?                @map("estado_comercial_id")
   estadoComercialRel   EstadoComercial?    @relation("EstadoToInst", fields: [estadoComercialId], references: [id])
   estadoComercial      String              @default("No visitada") @map("estado_comercial")
-
   nivelEducativoId     Int?                @map("nivel_educativo_id")
   nivelEducativo       NivelEducativo?     @relation(fields: [nivelEducativoId], references: [id])
-
   areaId               Int?                @map("area_id")
   area                 AreaEducativa?      @relation(fields: [areaId], references: [id])
-
   regimenId            Int?                @map("regimen_id")
   regimen              RegimenEscolar?     @relation(fields: [regimenId], references: [id])
-
   jurisdiccionId       Int?                @map("jurisdiccion_id")
   jurisdiccion         Jurisdiccion?       @relation(fields: [jurisdiccionId], references: [id])
-
   modalidadId          Int?                @map("modalidad_id")
   modalidad            ModalidadEducativa? @relation(fields: [modalidadId], references: [id])
-
   accesoEdificioId     Int?                @map("acceso_edificio_id")
   accesoEdificio       AccesoEdificio?     @relation(fields: [accesoEdificioId], references: [id])
-
-  // AUDITORÍA Y VENDEDOR RESPONSABLE
   creadoPor            String              @map("creado_por")
   usuarioCreador       Usuario             @relation("CreadoPor", fields: [creadoPor], references: [id])
-
   vendedorId           String?             @map("vendedor_id")
   vendedor             Usuario?            @relation("VendedorResponsable", fields: [vendedorId], references: [id], onDelete: SetNull)
-
   createdAt            DateTime            @default(now()) @map("created_at")
   visitas              VisitaAgenda[]
   ventas               Venta[]
-
   @@map("instituciones")
 }
-
 model VisitaAgenda {
   id                   String      @id @default(uuid())
   institucionId        String      @map("institucion_id")
@@ -240,22 +184,15 @@ model VisitaAgenda {
   institucion          Institution @relation(fields: [institucionId], references: [id], onDelete: Cascade)
   usuario              Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   ventas               Venta[]
-
   @@map("visitas_agenda")
 }
-// ==========================================
-// NUEVOS CATÁLOGOS DINÁMICOS PARA VENTAS
-// ==========================================
-
 model EstadoCliente {
   id        Int       @id @default(autoincrement())
   nombre    String    @unique
   activo    Boolean   @default(true)
   ventas    Venta[]
-
   @@map("estados_clientes")
 }
-
 model EstadoContrato {
   id        Int       @id @default(autoincrement())
   nombre    String    @unique
@@ -264,59 +201,39 @@ model EstadoContrato {
 
   @@map("estados_contratos")
 }
-
 model TipoCobro {
   id        Int       @id @default(autoincrement())
   nombre    String    @unique
   activo    Boolean   @default(true)
   ventas    Venta[]
-
   @@map("tipos_cobro")
 }
-
-// ==========================================
 // MÓDULO DE VENTAS (EL MOTOR FINANCIERO Y TICKETS)
-// ==========================================
-
 model Venta {
   id                  String   @id @default(uuid())
   fechaVenta          DateTime @default(now()) @map("fecha_venta")
-  
-  // Relaciones Base
   institucionId       String   @map("institucion_id")
   institucion         Institution @relation(fields: [institucionId], references: [id])
-
   vendedorId          String   @map("vendedor_id")
   vendedor            Usuario  @relation(fields: [vendedorId], references: [id])
-
   visitaId            String?  @map("visita_id")
   visita              VisitaAgenda? @relation(fields: [visitaId], references: [id])
-
-  // Datos Comerciales (Llenados por Vendedor)
   numContrato         String   @map("num_contrato")
   valorContrato       Float    @map("valor_contrato")
   meses               Int
   mesCobro            String   @map("mes_cobro") // Selector Enero - Diciembre
   cuotaMensual        Float    @map("cuota_mensual")
-
-  // Catálogos Dinámicos Relacionales
   estadoClienteId     Int?     @map("estado_cliente_id")
   estadoCliente       EstadoCliente? @relation(fields: [estadoClienteId], references: [id])
-
   estadoContratoId    Int?     @map("estado_contrato_id")
   estadoContrato      EstadoContrato? @relation(fields: [estadoContratoId], references: [id])
-
   tipoCobroId         Int?     @map("tipo_cobro_id")
   tipoCobro           TipoCobro? @relation(fields: [tipoCobroId], references: [id])
-
-  // Área de Facturación y Validación (Tickets)
   observacionesFact   String?  @map("observaciones_facturacion")
   verificacionFact    String?  @map("verificacion_facturacion") // Num validación
   estadoTicket        String   @default("Pendiente Facturación") @map("estado_ticket") 
-  
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
-
   @@map("ventas")
 }
 model MetaVendedor {
@@ -327,7 +244,6 @@ model MetaVendedor {
   montoMeta   Float    @default(0) @map("monto_meta")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-
   @@unique([vendedorId, semanaAnio])
   @@map("metas_vendedores")
 }

@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-
 // MATRIZ DEFINITIVA DE PERMISOS DEL SISTEMA
 const MODULOS_PERMISOS = [
   { modulo: 'Panel de Inicio', permisos: [{ id: 'inicio:ver', label: 'Ver Panel de Métricas Generales' }] },
@@ -23,21 +22,22 @@ const MODULOS_PERMISOS = [
     { id: 'ventas:validar', label: 'Auditar / Llenar Campos de Facturación' }
   ]},
   { modulo: 'Agenda de Campo', permisos: [{ id: 'agenda:ver', label: 'Ver Agenda y Registrar Visitas' }] },
+  { modulo: 'Auditoría', permisos: [{ id: 'visitas:ver', label: 'Auditoría de Visitas y GPS' }]},
+  { modulo: 'Reportes e Indicadores', permisos: [
+    { id: 'indicadores:ver', label: 'Ver Indicadores y Cierre Semanal' },
+    { id: 'indicadores:metas', label: 'Definir Metas Semanales' }
+  ]},
   { modulo: 'Administración', permisos: [
     { id: 'usuarios:gestionar', label: 'Crear y Administrar Usuarios' },
     { id: 'configuracion:ver', label: 'Gestionar Catálogos del Sistema' }
   ]}
 ];
-
 export default function RolesPage() {
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  
   const [formRol, setFormRol] = useState({ id: '', nombre: '', descripcion: '', permisos: [] as string[] });
-
   const cargarRoles = async () => {
     setLoading(true);
     try {
@@ -45,9 +45,7 @@ export default function RolesPage() {
       setRoles(await res.json());
     } catch (e) {} finally { setLoading(false); }
   };
-
   useEffect(() => { cargarRoles(); }, []);
-
   const handleCheckboxChange = (permisoId: string) => {
     setFormRol(prev => {
       const tienePermiso = prev.permisos.includes(permisoId);
@@ -58,7 +56,6 @@ export default function RolesPage() {
       }
     });
   };
-
   const handleGuardarRol = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -69,11 +66,9 @@ export default function RolesPage() {
       cargarDatos();
     } catch (e) {} finally { setSaving(false); }
   };
-
   const cargarDatos = () => { cargarRoles(); };
-
   return (
-    <div className="p-4 md:p-8 flex flex-col gap-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 flex flex-col gap-6  min-h-screen">
       <div className="flex justify-between items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -85,7 +80,6 @@ export default function RolesPage() {
           <Plus size={18} className="mr-1" /> Nuevo Rol
         </Button>
       </div>
-
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <Table>
           <TableHeader className="bg-gray-50/80">
@@ -107,7 +101,7 @@ export default function RolesPage() {
                   <TableCell className="text-center"><Badge variant="secondary" className="font-bold">{r.usuariosCount} Usuarios</Badge></TableCell>
                   <TableCell className="max-w-md">
                     {r.nombre === 'super_admin' ? (
-                      <Badge className="bg-purple-100 text-purple-800">👑 Acceso Total e Irrestricto</Badge>
+                      <Badge className="bg-purple-100 text-purple-800">Acceso Total e Irrestricto</Badge>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {r.permisos.slice(0, 4).map((p: string) => <span key={p} className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100">{p}</span>)}
@@ -129,7 +123,6 @@ export default function RolesPage() {
           </TableBody>
         </Table>
       </div>
-
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-3xl bg-white p-6 rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -137,7 +130,6 @@ export default function RolesPage() {
               <ShieldCheck className="text-primary" /> {formRol.id ? `Editar Permisos: ${formRol.nombre}` : 'Crear Nuevo Rol'}
             </DialogTitle>
           </DialogHeader>
-
           <form onSubmit={handleGuardarRol} className="space-y-4 mt-2">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -149,7 +141,6 @@ export default function RolesPage() {
                 <Input required value={formRol.descripcion} onChange={e => setFormRol({ ...formRol, descripcion: e.target.value })} />
               </div>
             </div>
-
             <div className="border-t pt-4">
               <h3 className="font-bold text-sm text-gray-800 mb-3">Matriz de Acceso a Módulos</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -174,7 +165,6 @@ export default function RolesPage() {
                 ))}
               </div>
             </div>
-
             <DialogFooter className="pt-4"><Button variant="outline" type="button" onClick={() => setModalOpen(false)}>Cancelar</Button><Button type="submit" disabled={saving} className="bg-primary text-white">Guardar Rol</Button></DialogFooter>
           </form>
         </DialogContent>

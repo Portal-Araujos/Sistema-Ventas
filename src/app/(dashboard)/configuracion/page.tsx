@@ -21,19 +21,13 @@ const MENU_OPCIONES = [
   { id: 'modalidad', icon: <BookOpen size={18} />, label: 'Modalidad' },
   { id: 'acceso', icon: <Map size={18} />, label: 'Acceso Edificio' },
 ];
-
 export default function ConfiguracionPage() {
   const [activeTab, setActiveTab] = useState('reglaTamano');
   const [catalogos, setCatalogos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  // Modal para Edición Estándar
   const [editModal, setEditModal] = useState({ open: false, id: 0, nombre: '', tipo: '' });
-  
-  // Modal Especial para Regla de Tamaño
   const [tamanoModal, setTamanoModal] = useState({ open: false, id: 0, nombre: '', minDocentes: 0, maxDocentes: 9999 });
   const [saving, setSaving] = useState(false);
-
   const cargarDatos = async () => {
     setLoading(true);
     try {
@@ -46,11 +40,9 @@ export default function ConfiguracionPage() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     cargarDatos();
   }, []);
-
   const getListaActual = () => {
     if (!catalogos) return [];
     switch (activeTab) {
@@ -69,7 +61,6 @@ export default function ConfiguracionPage() {
       default: return [];
     }
   };
-
   const handleEditSave = async () => {
     setSaving(true);
     try {
@@ -87,7 +78,6 @@ export default function ConfiguracionPage() {
       setSaving(false);
     }
   };
-
   const handleTamanoSave = async () => {
     setSaving(true);
     try {
@@ -110,7 +100,6 @@ export default function ConfiguracionPage() {
       setSaving(false);
     }
   };
-
   const handleDelete = async (id: number, nombre: string) => {
     if (!confirm(`¿Estás seguro de eliminar "${nombre}"?`)) return;
     try {
@@ -125,11 +114,9 @@ export default function ConfiguracionPage() {
       alert("Error de conexión al eliminar.");
     }
   };
-
   const listaActual = getListaActual();
-
   return (
-    <div className="p-4 md:p-8 flex flex-col gap-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <Settings className="text-primary" /> Configuración del Sistema
@@ -138,9 +125,7 @@ export default function ConfiguracionPage() {
           Administra las tablas maestras, catálogos y parámetros de clasificación del sistema.
         </p>
       </div>
-
       <div className="flex flex-col md:flex-row gap-6">
-        {/* Menú Lateral */}
         <div className="w-full md:w-64 shrink-0">
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
             <div className="p-4 bg-gray-50/80 border-b border-gray-200">
@@ -162,8 +147,6 @@ export default function ConfiguracionPage() {
             </div>
           </div>
         </div>
-
-        {/* Tabla Principal */}
         <div className="flex-1">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div className="p-4 md:p-6 border-b border-gray-200 bg-white">
@@ -171,12 +154,10 @@ export default function ConfiguracionPage() {
                 {activeTab === 'reglaTamano' ? 'Clasificación de Tamaño por N° Docentes' : `Gestión de ${MENU_OPCIONES.find(o => o.id === activeTab)?.label}`}
               </h2>
             </div>
-            
             <div className="p-0">
               {loading ? (
                 <div className="p-12 text-center text-gray-500">Cargando datos...</div>
               ) : activeTab === 'reglaTamano' ? (
-                /* TABLA ESPECIAL REGLA TAMAÑO */
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
@@ -248,7 +229,6 @@ export default function ConfiguracionPage() {
           </div>
         </div>
       </div>
-
       {/* MODAL EDITAR CATÁLOGO REGULAR */}
       <Dialog open={editModal.open} onOpenChange={(val) => setEditModal({ ...editModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl">
@@ -269,7 +249,6 @@ export default function ConfiguracionPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* MODAL CONFIGURAR RANGO DE TAMAÑO */}
       <Dialog open={tamanoModal.open} onOpenChange={(val) => setTamanoModal({ ...tamanoModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl">
@@ -296,7 +275,6 @@ export default function ConfiguracionPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }

@@ -82,7 +82,7 @@ export default function UsuariosPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 flex flex-col gap-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 flex flex-col gap-6  min-h-screen">
       
       {/* CABECERA */}
       <div className="flex justify-between items-center gap-4">
