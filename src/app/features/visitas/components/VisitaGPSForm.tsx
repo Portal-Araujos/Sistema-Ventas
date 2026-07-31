@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, Navigation, Save, AlertCircle } from 'lucide-react';
+import { MapPin, CheckCircle, Navigation, Save, AlertCircle, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -15,12 +15,12 @@ export function VisitaGPSForm({ onSuccess }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   
-  // --- NUEVO: ESTADO PARA LA NOTIFICACIÓN FLOTANTE ---
+  // Notificación Flotante
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
 
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => {
     setToastMsg({ tipo, texto });
-    setTimeout(() => setToastMsg(null), 4000); // Se oculta a los 4 segundos
+    setTimeout(() => setToastMsg(null), 4000); 
   };
   
   // Catálogos
@@ -41,16 +41,18 @@ export function VisitaGPSForm({ onSuccess }: Props) {
     fechaProximoContacto: ''
   });
 
-  // Formulario Extra (Venta)
+  // --- NUEVO: ESTADOS PARA MÚLTIPLES VENTAS Y ACORDEÓN ---
   const [huboVenta, setHuboVenta] = useState(false);
-  const [numContrato, setNumContrato] = useState('');
-  const [valorContrato, setValorContrato] = useState('');
-  const [meses, setMeses] = useState('12');
-  const [mesCobro, setMesCobro] = useState('Enero');
-  const [cuotaMensual, setCuotaMensual] = useState('');
-  const [tipoCobroId, setTipoCobroId] = useState('');
-  const [estadoClienteId, setEstadoClienteId] = useState('');
-  const [estadoContratoId, setEstadoContratoId] = useState('');
+  const [expandedIndex, setExpandedIndex] = useState<number>(0);
+  const [ventasItem, setVentasItem] = useState<any[]>([]);
+
+  // Inicializar un contrato vacío cuando se marca el checkbox por primera vez
+  useEffect(() => {
+    if (huboVenta && ventasItem.length === 0) {
+      setVentasItem([{ numContrato: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '' }]);
+      setExpandedIndex(0);
+    }
+  }, [huboVenta]);
 
   // Carga de catálogos
   useEffect(() => {
@@ -64,30 +66,41 @@ export function VisitaGPSForm({ onSuccess }: Props) {
     }
   }, [open]);
 
-  // Cálculo Matemático de Cuota
-  const handleValorOMesesChange = (valor: string, m: string) => {
-    const valNum = parseFloat(valor) || 0;
-    const mesNum = parseInt(m) || 1;
-    setValorContrato(valor);
-    setMeses(m);
-    setCuotaMensual(mesNum > 0 ? (valNum / mesNum).toFixed(2) : '0');
+  // Mánager de Cambios en Contratos y Cálculo Automático de Cuota
+  const handleVentaChange = (index: number, field: string, value: string) => {
+    const newVentas = [...ventasItem];
+    newVentas[index][field] = value;
+
+    // Si se modifica monto, abono o meses -> Recalcular cuota
+    if (['valorContrato', 'abono', 'meses'].includes(field)) {
+      const valNum = parseFloat(newVentas[index].valorContrato) || 0;
+      const abonoNum = parseFloat(newVentas[index].abono) || 0;
+      const mesNum = parseInt(newVentas[index].meses) || 1;
+      
+      const restante = Math.max(0, valNum - abonoNum); // Aseguramos no tener cuotas negativas
+      newVentas[index].cuotaMensual = mesNum > 0 ? (restante / mesNum).toFixed(2) : '0';
+    }
+
+    setVentasItem(newVentas);
+  };
+
+  const addContrato = () => {
+    setVentasItem([...ventasItem, { numContrato: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '' }]);
+    setExpandedIndex(ventasItem.length); // Desplegar el nuevo contrato
+  };
+
+  const removeContrato = (index: number) => {
+    const newVentas = ventasItem.filter((_, i) => i !== index);
+    setVentasItem(newVentas);
+    if (expandedIndex === index) setExpandedIndex(Math.max(0, index - 1));
   };
 
   const capturarGPS = () => {
-    if (!navigator.geolocation) { 
-      showToast('error', "Tu navegador o dispositivo no soporta geolocalización."); 
-      return; 
-    }
+    if (!navigator.geolocation) { showToast('error', "Tu navegador no soporta GPS."); return; }
     setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => { 
-        setCoordenadas({ lat: position.coords.latitude, lng: position.coords.longitude }); 
-        setGpsLoading(false); 
-      },
-      (error) => { 
-        showToast('alerta', "Permite el acceso a tu ubicación en el navegador."); 
-        setGpsLoading(false); 
-      },
+      (pos) => { setCoordenadas({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGpsLoading(false); },
+      (err) => { showToast('alerta', "Permite acceso a tu ubicación."); setGpsLoading(false); },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
@@ -95,8 +108,17 @@ export function VisitaGPSForm({ onSuccess }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!coordenadas.lat || !coordenadas.lng) { 
-      showToast('alerta', "¡OBLIGATORIO! Captura tu ubicación GPS."); 
-      return; 
+      showToast('alerta', "¡OBLIGATORIO! Captura tu ubicación GPS."); return; 
+    }
+
+    // Validación manual de campos obligatorios en los contratos
+    if (huboVenta) {
+      for (const v of ventasItem) {
+        if (!v.numContrato || !v.valorContrato || !v.tipoCobroId) {
+          showToast('alerta', "Revisa los contratos. N° Contrato, Monto y Tipo Cobro son obligatorios.");
+          return;
+        }
+      }
     }
     
     setLoading(true);
@@ -108,9 +130,8 @@ export function VisitaGPSForm({ onSuccess }: Props) {
           ...formData,
           latitud: coordenadas.lat,
           longitud: coordenadas.lng,
-          // Datos Completos de Venta
-          huboVenta, numContrato, valorContrato, meses, mesCobro, cuotaMensual, 
-          tipoCobroId, estadoClienteId, estadoContratoId
+          huboVenta,
+          ventas: huboVenta ? ventasItem : [] // Enviamos el Array Completo
         })
       });
 
@@ -119,15 +140,13 @@ export function VisitaGPSForm({ onSuccess }: Props) {
       setOpen(false);
       setCoordenadas({ lat: null, lng: null });
       setFormData({ institucionId: '', tipoGestion: 'Presencial', estadoGestion: 'Completada - Con interés', resumenAcuerdos: '', fechaProximoContacto: '' });
-      setHuboVenta(false); setNumContrato(''); setValorContrato(''); setMeses('12'); setMesCobro('Enero'); setCuotaMensual(''); setTipoCobroId(''); setEstadoClienteId(''); setEstadoContratoId('');
+      setHuboVenta(false); 
+      setVentasItem([]);
       
       if (onSuccess) onSuccess();
-      
-      // ✅ NOTIFICACIÓN DE ÉXITO
-      showToast('exito', huboVenta ? "¡Visita y Venta registradas con éxito!" : "¡Visita registrada con éxito!");
+      showToast('exito', huboVenta ? "¡Visita y Contratos registrados!" : "¡Visita registrada con éxito!");
 
     } catch (error) { 
-      // ❌ NOTIFICACIÓN DE ERROR
       showToast('error', "Hubo un error al guardar la gestión."); 
     } finally { 
       setLoading(false); 
@@ -149,9 +168,8 @@ export function VisitaGPSForm({ onSuccess }: Props) {
           <p className="text-xs text-gray-500 mt-1">Registra tu visita actual. Tu ubicación será guardada por seguridad.</p>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5 mt-4">
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           
-          {/* SECCIÓN 1: SELECCIÓN DE ESCUELA */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold text-gray-700">¿En qué institución te encuentras? *</Label>
             <select 
@@ -223,61 +241,94 @@ export function VisitaGPSForm({ onSuccess }: Props) {
             />
             <p className="text-[10px] text-gray-400">Si dejas una fecha, esta escuela volverá a aparecer en tu agenda automáticamente.</p>
           </div>
-          {/* NUEVO: INTERRUPTOR Y CAMPOS DE VENTA                 */}
-          <div className="border-t border-gray-200 pt-3 mt-4">
-            <label className="flex items-center gap-2 cursor-pointer mb-2 bg-gray-50 p-2 rounded-lg border border-gray-200 hover:bg-emerald-50 transition-colors">
-              <input 
-                type="checkbox" 
-                checked={huboVenta} 
-                onChange={(e) => setHuboVenta(e.target.checked)} 
-                className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
-              />
-              <span className="text-xs font-bold text-gray-800">
-                 ¿Se concretó una venta en esta visita?
-              </span>
-            </label>
-            {huboVenta && (
-              <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-200 space-y-3 mt-2 animate-in fade-in slide-in-from-top-2">
-                {/* FILA 1: Montos */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">N° Contrato *</Label><Input required={huboVenta} type="text" pattern="[0-9]+" value={numContrato} onChange={(e) => setNumContrato(e.target.value.replace(/\D/g, ''))} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
-                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Monto Contrato ($) *</Label><Input required={huboVenta} type="number" step="0.01" value={valorContrato} onChange={(e) => handleValorOMesesChange(e.target.value, meses)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
-                </div>
-                {/* FILA 2: Plazos y Cuotas */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Meses Plazo</Label><Input type="number" min="1" value={meses} onChange={(e) => handleValorOMesesChange(valorContrato, e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
-                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Cuota Mensual ($)</Label><Input type="number" step="0.01" value={cuotaMensual} onChange={(e) => setCuotaMensual(e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 font-bold text-emerald-700" /></div>
-                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Mes Cobro</Label><select value={mesCobro} onChange={(e) => setMesCobro(e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-2 text-[11px] bg-white mt-1 outline-none">{['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
-                </div>
-                {/* FILA 3: Catálogos / Estados */}
-                <div className="grid grid-cols-3 gap-2 border-t border-emerald-200/50 pt-3">
-                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select required={huboVenta} value={tipoCobroId} onChange={(e) => setTipoCobroId(e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{tiposCobro.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Cliente</Label><select value={estadoClienteId} onChange={(e) => setEstadoClienteId(e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosCliente.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-                  <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Contrato</Label><select value={estadoContratoId} onChange={(e) => setEstadoContratoId(e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosContrato.map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-                </div>
 
+          {/* ========================================================== */}
+          {/* MÚLTIPLES CONTRATOS (ACORDEÓN)                             */}
+          {/* ========================================================== */}
+          <div className="border-t border-gray-200 pt-3 mt-4">
+            <label className="flex items-center gap-2 cursor-pointer mb-2 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors">
+              <input type="checkbox" checked={huboVenta} onChange={(e) => { setHuboVenta(e.target.checked); if (!e.target.checked) setVentasItem([]); }} className="w-4 h-4 text-emerald-600 rounded cursor-pointer" />
+              <span className="text-xs font-bold text-emerald-800">💵 ¿Se concretó una venta en esta visita?</span>
+            </label>
+
+            {huboVenta && (
+              <div className="space-y-3 mt-3">
+                {ventasItem.map((venta, index) => {
+                  const isExpanded = expandedIndex === index;
+                  return (
+                    <div key={index} className={`rounded-xl border transition-all ${isExpanded ? 'bg-emerald-50/40 border-emerald-300 shadow-sm' : 'bg-white border-gray-200 hover:border-emerald-200'}`}>
+                      
+                      {/* CABECERA DE LA TARJETA (Minimizada) */}
+                      <div className="p-3 flex justify-between items-center cursor-pointer" onClick={() => setExpandedIndex(isExpanded ? -1 : index)}>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold text-xs ${isExpanded ? 'text-emerald-800' : 'text-gray-700'}`}>
+                            📄 Contrato {venta.numContrato ? `#${venta.numContrato}` : (index + 1)}
+                          </span>
+                          {venta.valorContrato && (
+                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
+                              ${parseFloat(venta.valorContrato).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {ventasItem.length > 1 && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); removeContrato(index); }} className="text-gray-400 hover:text-red-600 transition-colors">
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                          {isExpanded ? <ChevronUp size={16} className="text-emerald-600"/> : <ChevronDown size={16} className="text-gray-400"/>}
+                        </div>
+                      </div>
+
+                      {/* CUERPO DEL FORMULARIO (Expandido) */}
+                      {isExpanded && (
+                        <div className="p-4 pt-1 space-y-3 border-t border-emerald-100 animate-in fade-in">
+                          
+                          {/* Fila 1: Montos y Abono */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">N° Contrato *</Label><Input type="text" value={venta.numContrato} onChange={(e) => handleVentaChange(index, 'numContrato', e.target.value.replace(/\D/g, ''))} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
+                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Monto Total *</Label><Input type="number" step="0.01" value={venta.valorContrato} onChange={(e) => handleVentaChange(index, 'valorContrato', e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
+                            <div><Label className="text-[10px] font-bold 'text-emerald-700' uppercase text-blue-600">Abono Inicial</Label><Input type="number" step="0.01" value={venta.abono} onChange={(e) => handleVentaChange(index, 'abono', e.target.value)} className="h-8 text-xs mt-1 bg-white border-blue-200 focus-visible:ring-blue-500" placeholder="0.00" /></div>
+                          </div>
+
+                          {/* Fila 2: Plazos y Cuotas */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Meses Plazo</Label><Input type="number" min="1" value={venta.meses} onChange={(e) => handleVentaChange(index, 'meses', e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
+                            <div><Label className="text-[10px] font-bold 'text-emerald-700' uppercase text-emerald-700">Cuota Mensual</Label><Input disabled type="text" value={`$ ${venta.cuotaMensual}`} className="h-8 text-xs mt-1 bg-emerald-50 border-emerald-200 font-bold text-emerald-800" /></div>
+                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Mes Cobro</Label><select value={venta.mesCobro} onChange={(e) => handleVentaChange(index, 'mesCobro', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[11px] bg-white mt-1 outline-none">{['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
+                          </div>
+
+                          {/* Fila 3: Catálogos / Estados */}
+                          <div className="grid grid-cols-3 gap-2 border-t border-emerald-100 pt-2">
+                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select value={venta.tipoCobroId} onChange={(e) => handleVentaChange(index, 'tipoCobroId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{tiposCobro.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
+                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Cliente</Label><select value={venta.estadoClienteId} onChange={(e) => handleVentaChange(index, 'estadoClienteId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosCliente.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
+                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Contrato</Label><select value={venta.estadoContratoId} onChange={(e) => handleVentaChange(index, 'estadoContratoId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosContrato.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
+                          </div>
+
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <Button type="button" variant="outline" onClick={addContrato} className="w-full border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50 bg-white text-xs h-9">
+                  <Plus size={14} className="mr-1" /> Agregar otro contrato
+                </Button>
               </div>
             )}
           </div>
-            <Button type="submit" disabled={loading || !coordenadas.lat} className="w-full h-11 bg-primary text-white text-base mt-2">
-              <Save size={18} className="mr-2" /> {loading ? 'Guardando en la nube...' : 'Subir Reporte de Visita'}
-            </Button>
-          </form>
+          {/* ========================================================== */}
+
+          <Button type="submit" disabled={loading || !coordenadas.lat} className="w-full h-11 bg-primary text-white text-base mt-2 shadow-md">
+            <Save size={18} className="mr-2" /> {loading ? 'Guardando...' : 'Subir Reporte de Visita'}
+          </Button>
+        </form>
         </DialogContent>
       </Dialog>
+
       {toastMsg && (
-        <div 
-          className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${
-            toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : 
-            toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 
-            'bg-red-600 text-white'
-          }`}
-        >
-          {toastMsg.tipo === 'exito' ? (
-            <CheckCircle size={20} className="text-emerald-100" />
-          ) : (
-            <AlertCircle size={20} className="text-white/90" />
-          )}
+        <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
+          {toastMsg.tipo === 'exito' ? <CheckCircle size={20} className="text-emerald-100" /> : <AlertCircle size={20} className="text-white/90" />}
           <span className="font-bold text-sm tracking-wide">{toastMsg.texto}</span>
         </div>
       )}

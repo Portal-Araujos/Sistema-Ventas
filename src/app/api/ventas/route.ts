@@ -6,9 +6,18 @@ import { cookies } from 'next/headers';
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
-// GET: OBTENER LISTADO DE VENTAS CON FILTROS
+// GET: OBTENER LISTADO DE VENTAS CON FILTROS Y SEGURIDAD
 export async function GET(request: Request) {
   try {
+    // 🔒 1. EXTRAER TOKEN Y SABER QUIÉN ES
+    const cookieStore = await cookies();
+    const token = cookieStore.get('session_token')?.value;
+    if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const userRol = payload.rol as string;
+    const userId = payload.id as string;
+
     const { searchParams } = new URL(request.url);
     const cantonId = searchParams.get('cantonId');
     const institucionId = searchParams.get('institucionId');
@@ -18,6 +27,11 @@ export async function GET(request: Request) {
     const mesCobro = searchParams.get('mesCobro');
 
     const where: any = {};
+
+    // 🔒 2. REGLA DE SEGURIDAD: Si es vendedor, SOLO ve sus ventas
+    if (userRol !== 'super_admin' && userRol !== 'administrador') {
+      where.vendedorId = userId;
+    }
 
     if (institucionId) {
       where.institucionId = institucionId;
@@ -92,15 +106,8 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const {
-      institucionId,
-      numContrato,
-      valorContrato,
-      meses,
-      mesCobro,
-      cuotaMensual,
-      estadoClienteId,
-      estadoContratoId,
-      tipoCobroId
+      institucionId, numContrato, valorContrato, meses, mesCobro, cuotaMensual,
+      estadoClienteId, estadoContratoId, tipoCobroId, abono // <-- Agregado por si acaso lo usas aquí
     } = body;
 
     if (!institucionId || !numContrato || !valorContrato || !meses || !mesCobro) {
@@ -108,8 +115,9 @@ export async function POST(request: Request) {
     }
 
     const valor = parseFloat(valorContrato) || 0;
+    const abonoVal = parseFloat(abono) || 0;
     const numMeses = parseInt(meses) || 1;
-    const cuota = parseFloat(cuotaMensual) || (valor / numMeses);
+    const cuota = parseFloat(cuotaMensual) || ((valor - abonoVal) / numMeses);
 
     const nuevaVenta = await prisma.venta.create({
       data: {
@@ -117,6 +125,7 @@ export async function POST(request: Request) {
         vendedorId: userId,
         numContrato: String(numContrato).trim(),
         valorContrato: valor,
+        abono: abonoVal,
         meses: numMeses,
         mesCobro,
         cuotaMensual: parseFloat(cuota.toFixed(2)),
@@ -134,7 +143,7 @@ export async function POST(request: Request) {
   }
 }
 
-// PUT: ACTUALIZAR VENTA (EDICIÓN O FACTURACIÓN)
+// PUT: ACTUALIZAR VENTA Y GUARDAR OBSERVACIONES CORRECTAMENTE
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -144,7 +153,6 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { 
       id, observacionesFact, verificacionFact,
-      // Campos de Edición
       institucionId, numContrato, valorContrato, meses, mesCobro, cuotaMensual,
       estadoClienteId, estadoContratoId, tipoCobroId
     } = body;
@@ -157,7 +165,7 @@ export async function PUT(request: Request) {
     const updateData: any = {};
     let nuevoEstadoTicket = ventaDb.estadoTicket;
 
-    // 1. SI SE ESTÁ EDITANDO EL CONTRATO (Solo Admins)
+    // 1. EDICIÓN DEL CONTRATO (Solo Admins)
     if (numContrato) {
       updateData.institucionId = institucionId;
       updateData.numContrato = String(numContrato).trim();
@@ -170,7 +178,12 @@ export async function PUT(request: Request) {
       updateData.tipoCobroId = tipoCobroId ? parseInt(tipoCobroId) : null;
     }
 
-    // 2. SI SE ESTÁ AUDITANDO (Facturación)
+    // 2. GUARDAR OBSERVACIONES (Sin que choque con Verificación)
+    if (observacionesFact !== undefined) {
+      updateData.observacionesFact = observacionesFact;
+    }
+
+    // 3. GUARDAR VERIFICACIÓN Y ASIGNAR ESTADO (Tu lógica genial)
     if (verificacionFact !== undefined) {
       const verifLimpia = String(verificacionFact).trim();
       const contratoAComparar = updateData.numContrato || ventaDb.numContrato;
@@ -178,17 +191,15 @@ export async function PUT(request: Request) {
       updateData.verificacionFact = verifLimpia;
 
       if (verifLimpia === '') {
-        nuevoEstadoTicket = 'Pendiente Facturación';
+        nuevoEstadoTicket = updateData.observacionesFact ? 'Observado ⚠️ - Pendiente Vendedor' : 'Pendiente Facturación';
       } else if (verifLimpia === String(contratoAComparar).trim()) {
         nuevoEstadoTicket = 'Validado ✅';
       } else {
         nuevoEstadoTicket = 'Rechazado ❌ - Número no coincide';
       }
-    } else if (observacionesFact !== undefined) {
-      updateData.observacionesFact = observacionesFact;
-      if (!updateData.verificacionFact && !ventaDb.verificacionFact) {
-        nuevoEstadoTicket = 'Observado ⚠️ - Pendiente Vendedor';
-      }
+    } else if (observacionesFact !== undefined && (!ventaDb.verificacionFact || ventaDb.verificacionFact === 'Sin validar')) {
+      // Si el admin solo envió observación pero aún no valida
+      nuevoEstadoTicket = observacionesFact ? 'Observado ⚠️ - Pendiente Vendedor' : 'Pendiente Facturación';
     }
 
     updateData.estadoTicket = nuevoEstadoTicket;

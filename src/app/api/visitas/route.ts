@@ -112,7 +112,7 @@ export async function GET(request: Request) {
   
 }
 // POST: GUARDAR VISITA Y VENTA EN UN SOLO PASO
-// POST: GUARDAR VISITA Y VENTA EN UN SOLO PASO
+// POST: GUARDAR VISITA Y MÚLTIPLES VENTAS (CON ABONO)
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -124,32 +124,23 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     
-    // 1. Datos de la Visita Normal
+    // 1. Recibimos los datos de la Visita + El Arreglo de Ventas
     const { 
       institucionId, tipoGestion, estadoGestion, resumenAcuerdos, latitud, longitud,
-      fechaProgramada, horaProgramada 
-    } = body;
-    
-    // 2. Datos Completos de la Venta
-    const { 
-      huboVenta, numContrato, valorContrato, meses, mesCobro, tipoCobroId,
-      cuotaMensual, estadoClienteId, estadoContratoId 
+      fechaProgramada, horaProgramada, 
+      huboVenta, ventas // <--- AQUÍ RECIBE EL ARREGLO DE TARJETAS
     } = body;
 
     if (!institucionId) return NextResponse.json({ error: 'Falta la institución' }, { status: 400 });
 
-    // ========================================================
-    // SOLUCIÓN AL ERROR DE PRISMA (ISO-8601 DateTime)
-    // Convertimos el texto "2026-07-28" a un Objeto de Fecha Real
-    // ========================================================
     const fechaValida = fechaProgramada 
-      ? new Date(`${fechaProgramada}T12:00:00Z`) // Le ponemos mediodía para evitar saltos de zona horaria
-      : new Date(); // Si no mandan nada, toma la fecha de hoy
+      ? new Date(`${fechaProgramada}T12:00:00Z`) 
+      : new Date();
       
     const hoy = new Date();
     const horaDefecto = horaProgramada || hoy.toTimeString().slice(0, 5);
 
-    // PASO A: Guardamos la Visita
+    // PASO A: Guardamos la Visita (Esto ya te estaba funcionando bien)
     const nuevaVisita = await prisma.visitaAgenda.create({
       data: {
         institucionId,
@@ -159,36 +150,47 @@ export async function POST(request: Request) {
         resumenAcuerdos,
         latitud,
         longitud,
-        fechaProgramada: fechaValida, // <--- Ahora sí, la BD lo acepta sin problema
+        fechaProgramada: fechaValida,
         horaProgramada: String(horaDefecto)
       }
     });
 
-    // PASO B: Si hubo venta, guardamos TODOS LOS CAMPOS
-    if (huboVenta && numContrato && valorContrato) {
-      const valor = parseFloat(valorContrato);
-      const m = parseInt(meses) || 1;
-      const cuota = parseFloat(cuotaMensual) || parseFloat((valor / m).toFixed(2));
+    // PASO B: Si hubo venta y el arreglo tiene datos, Hacemos un Ciclo (Loop)
+    if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
+      
+      const transaccionesVentas = ventas.map((v: any) => {
+        const valor = parseFloat(v.valorContrato) || 0;
+        const abonoVal = parseFloat(v.abono) || 0; // <-- ATRAPAMOS EL ABONO
+        const m = parseInt(v.meses) || 1;
+        
+        // Aseguramos la matemática exacta por seguridad del servidor
+        const cuota = parseFloat(v.cuotaMensual) || parseFloat(((valor - abonoVal) / m).toFixed(2));
 
-      await prisma.venta.create({
-        data: {
-          institucionId,
-          vendedorId: userId,
-          visitaId: nuevaVisita.id,
-          numContrato: String(numContrato).trim(),
-          valorContrato: valor,
-          meses: m,
-          mesCobro: mesCobro || 'Enero',
-          cuotaMensual: cuota,
-          tipoCobroId: tipoCobroId ? parseInt(tipoCobroId) : null,
-          estadoClienteId: estadoClienteId ? parseInt(estadoClienteId) : null,
-          estadoContratoId: estadoContratoId ? parseInt(estadoContratoId) : null,
-          estadoTicket: 'Pendiente Facturación' 
-        }
+        // Creamos cada contrato amarrado a la misma visita
+        return prisma.venta.create({
+          data: {
+            institucionId,
+            vendedorId: userId,
+            visitaId: nuevaVisita.id,
+            numContrato: String(v.numContrato).trim(),
+            valorContrato: valor,
+            abono: abonoVal, // <-- GUARDAMOS EL ABONO EN BASE DE DATOS
+            meses: m,
+            mesCobro: v.mesCobro || 'Enero',
+            cuotaMensual: cuota,
+            tipoCobroId: v.tipoCobroId ? parseInt(v.tipoCobroId) : null,
+            estadoClienteId: v.estadoClienteId ? parseInt(v.estadoClienteId) : null,
+            estadoContratoId: v.estadoContratoId ? parseInt(v.estadoContratoId) : null,
+            estadoTicket: 'Pendiente Facturación' // Estado inicial para que el Admin audite
+          }
+        });
       });
+
+      // Ejecutamos la creación de todas las ventas al mismo tiempo
+      await Promise.all(transaccionesVentas);
     }
 
-    // PASO C: Actualizamos estado de la escuela
+    // PASO C: Actualizamos estado comercial de la escuela
     await prisma.institution.update({
       where: { id: institucionId },
       data: { estadoComercial: huboVenta ? 'Cliente (Con Contrato)' : estadoGestion }
@@ -196,7 +198,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(nuevaVisita, { status: 201 });
   } catch (error) {
-    console.error("Error guardando visita:", error);
+    console.error("Error guardando visita y ventas:", error);
     return NextResponse.json({ error: 'Error interno al registrar la gestión' }, { status: 500 });
   }
 }

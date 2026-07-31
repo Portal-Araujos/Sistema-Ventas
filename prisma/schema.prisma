@@ -198,7 +198,6 @@ model EstadoContrato {
   nombre    String    @unique
   activo    Boolean   @default(true)
   ventas    Venta[]
-
   @@map("estados_contratos")
 }
 model TipoCobro {
@@ -220,6 +219,7 @@ model Venta {
   visita              VisitaAgenda? @relation(fields: [visitaId], references: [id])
   numContrato         String   @map("num_contrato")
   valorContrato       Float    @map("valor_contrato")
+  abono               Float    @default(0)
   meses               Int
   mesCobro            String   @map("mes_cobro") // Selector Enero - Diciembre
   cuotaMensual        Float    @map("cuota_mensual")
@@ -244,6 +244,6 @@ model MetaVendedor {
   montoMeta   Float    @default(0) @map("monto_meta")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-  @@unique([vendedorId, semanaAnio])
-  @@map("metas_vendedores")
+  @@unique    ([vendedorId, semanaAnio])
+  @@map       ("metas_vendedores")
 }

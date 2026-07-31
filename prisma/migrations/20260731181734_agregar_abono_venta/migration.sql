@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "ventas" ADD COLUMN     "abono" DOUBLE PRECISION NOT NULL DEFAULT 0;

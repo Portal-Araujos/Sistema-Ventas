@@ -20,6 +20,9 @@ const MENU_OPCIONES = [
   { id: 'jurisdiccion', icon: <Layers size={18} />, label: 'Jurisdicción' },
   { id: 'modalidad', icon: <BookOpen size={18} />, label: 'Modalidad' },
   { id: 'acceso', icon: <Map size={18} />, label: 'Acceso Edificio' },
+  { id: 'estadoCliente', icon: <Layers size={18} />, label: 'Estados de Cliente' },
+  { id: 'estadoContrato', icon: <Layers size={18} />, label: 'Estados de Contrato' },
+  { id: 'tipoCobro', icon: <BookOpen size={18} />, label: 'Tipos de Cobro' },
 ];
 export default function ConfiguracionPage() {
   const [activeTab, setActiveTab] = useState('reglaTamano');
@@ -58,6 +61,9 @@ export default function ConfiguracionPage() {
       case 'jurisdiccion': return catalogos.jurisdicciones || [];
       case 'modalidad': return catalogos.modalidades || [];
       case 'acceso': return catalogos.accesos || [];
+      case 'estadoCliente': return catalogos.estadosCliente || [];
+      case 'estadoContrato': return catalogos.estadosContrato || [];
+      case 'tipoCobro': return catalogos.tiposCobro || [];
       default: return [];
     }
   };
@@ -189,6 +195,7 @@ export default function ConfiguracionPage() {
                 </table>
               ) : (
                 /* TABLA ESTÁNDAR DE CATÁLOGOS */
+                /* TABLA ESTÁNDAR DE CATÁLOGOS */
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
@@ -201,7 +208,15 @@ export default function ConfiguracionPage() {
                     {listaActual.map((item: any) => (
                       <tr key={item.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-sm text-gray-500 font-medium">#{item.id}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900 font-semibold">{item.nombre}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900 font-semibold">
+                          {item.nombre}
+                          {/* Etiqueta de Inactivo solo para los nuevos catálogos */}
+                          {item.activo === false && (
+                            <span className="ml-2 text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold uppercase">
+                              Inactivo
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 text-right flex justify-end gap-2">
                           <Button 
                             variant="outline" 
@@ -211,14 +226,37 @@ export default function ConfiguracionPage() {
                           >
                             <Edit2 size={14} className="mr-1" /> Editar
                           </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 border-gray-200 text-red-600 hover:bg-red-50"
-                            onClick={() => handleDelete(item.id, item.nombre)}
-                          >
-                            <Trash2 size={14} className="mr-1" /> Borrar
-                          </Button>
+                          
+                          {/* Lógica de botones: Borrado duro vs Soft Delete */}
+                          {['estadoCliente', 'estadoContrato', 'tipoCobro'].includes(activeTab) ? (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className={`h-8 border-gray-200 hover:bg-gray-100 ${item.activo === false ? 'text-emerald-600' : 'text-amber-600'}`}
+                              onClick={async () => {
+                                setSaving(true);
+                                try {
+                                  await fetch('/api/catalogos', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: item.id, tipo: activeTab, activo: !item.activo })
+                                  });
+                                  await cargarDatos();
+                                } catch (e) {} finally { setSaving(false); }
+                              }}
+                            >
+                              <Settings size={14} className="mr-1" /> {item.activo === false ? 'Activar' : 'Apagar'}
+                            </Button>
+                          ) : (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 border-gray-200 text-red-600 hover:bg-red-50"
+                              onClick={() => handleDelete(item.id, item.nombre)}
+                            >
+                              <Trash2 size={14} className="mr-1" /> Borrar
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}

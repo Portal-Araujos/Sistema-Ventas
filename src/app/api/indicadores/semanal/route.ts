@@ -19,24 +19,23 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const fechaLunesStr = searchParams.get('fechaLunes') || getLunesActual();
 
-    // 1. Calcular rango de la semana (Lunes 00:00:00 a Domingo 23:59:59)
+    // 1. Calcular rango de la semana (Lunes a Domingo)
     const fechaLunes = new Date(`${fechaLunesStr}T00:00:00-05:00`);
     const fechaDomingo = new Date(fechaLunes);
     fechaDomingo.setDate(fechaLunes.getDate() + 6);
     fechaDomingo.setHours(23, 59, 59, 999);
 
-    const semanaAnioKey = fechaLunesStr; // Usamos la fecha del lunes como identificador de semana
+    const semanaAnioKey = fechaLunesStr;
 
     // 2. Filtro de Vendedores
     const whereUsuarios: any = { activo: true };
     if (userRol === 'vendedor') {
       whereUsuarios.id = userId;
     } else {
-      // Para Admin/Super Admin, filtramos solo los usuarios que sean vendedores
       whereUsuarios.rol = { nombre: { in: ['vendedor', 'VENDEDOR', 'Vendedor'] } };
     }
 
-    // 3. Consultar Vendedores, Ventas del rango y Metas
+    // 3. Consultar Vendedores, Ventas y Metas
     const [vendedores, ventasSemana, metas] = await Promise.all([
       prisma.usuario.findMany({
         where: whereUsuarios,
@@ -54,41 +53,46 @@ export async function GET(request: Request) {
       })
     ]);
 
-    // 4. Armar la matriz por Vendedor x Día de la Semana
+    // 4. LÓGICA DE DOBLE MATEMÁTICA (APROBADAS VS EN TRÁNSITO)
     const reporte = vendedores.map(vend => {
       const ventasVend = ventasSemana.filter(v => v.vendedorId === vend.id);
       
-      const dias = {
-        lunes: 0,
-        martes: 0,
-        miercoles: 0,
-        jueves: 0,
-        viernes: 0,
-        sabado: 0
-      };
+      // Objetos para guardar la suma por día
+      const diasReales = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0 };
+      const diasTransito = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0 };
 
       ventasVend.forEach(v => {
         const fechaEc = new Date(new Date(v.fechaVenta).toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
-        const diaSemana = fechaEc.getDay(); // 0: Dom, 1: Lun, 2: Mar, 3: Mie, 4: Jue, 5: Vie, 6: Sab
+        const diaSemana = fechaEc.getDay(); // 0: Dom, 1: Lun...
 
-        if (diaSemana === 1) dias.lunes += v.valorContrato;
-        else if (diaSemana === 2) dias.martes += v.valorContrato;
-        else if (diaSemana === 3) dias.miercoles += v.valorContrato;
-        else if (diaSemana === 4) dias.jueves += v.valorContrato;
-        else if (diaSemana === 5) dias.viernes += v.valorContrato;
-        else if (diaSemana === 6) dias.sabado += v.valorContrato;
+        // REGLA: ¿Es una venta Real (Aprobada) o En Tránsito (Bloqueada)?
+        const esValida = v.verificacionFact && v.verificacionFact !== 'Sin validar';
+        const targetObj = esValida ? diasReales : diasTransito;
+
+        if (diaSemana === 1) targetObj.lunes += v.valorContrato;
+        else if (diaSemana === 2) targetObj.martes += v.valorContrato;
+        else if (diaSemana === 3) targetObj.miercoles += v.valorContrato;
+        else if (diaSemana === 4) targetObj.jueves += v.valorContrato;
+        else if (diaSemana === 5) targetObj.viernes += v.valorContrato;
+        else if (diaSemana === 6) targetObj.sabado += v.valorContrato;
       });
 
-      const cierreSemanal = Object.values(dias).reduce((a, b) => a + b, 0);
+      // Cálculos Matemáticos de la Sábana Real (La que importa para la Meta)
+      const cierreSemanal = Object.values(diasReales).reduce((a, b) => a + b, 0);
       const metaObj = metas.find(m => m.vendedorId === vend.id);
       const metaMonto = metaObj ? metaObj.montoMeta : 0;
       const porcentajeCumplido = metaMonto > 0 ? parseFloat(((cierreSemanal / metaMonto) * 100).toFixed(1)) : 0;
 
+      // Cálculo del Tránsito (El Limbo)
+      const transitoTotal = Object.values(diasTransito).reduce((a, b) => a + b, 0);
+
       return {
         vendedorId: vend.id,
         vendedorNombre: vend.nombre,
-        ...dias,
+        diasReales,
+        diasTransito,
         cierreSemanal,
+        transitoTotal,
         metaMonto,
         porcentajeCumplido
       };
@@ -100,11 +104,11 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error("Error en indicador semanal:", error);
-    return NextResponse.json({ error: 'Error al generar indicadores semanales' }, { status: 500 });
+    return NextResponse.json({ error: 'Error al generar indicadores' }, { status: 500 });
   }
 }
 
-// POST: DEFINIR O ACTUALIZAR METAS SEMANALES (Solo Admins)
+// POST: DEFINIR METAS SEMANALES (Intacto)
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -117,8 +121,6 @@ export async function POST(request: Request) {
     }
 
     const { fechaLunes, metas } = await request.json(); 
-    // metas es un array de { vendedorId: string, montoMeta: number }
-
     if (!fechaLunes || !Array.isArray(metas)) {
       return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
     }
@@ -141,7 +143,6 @@ export async function POST(request: Request) {
     );
 
     await prisma.$transaction(transacciones);
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error al guardar metas:", error);
@@ -152,7 +153,7 @@ export async function POST(request: Request) {
 function getLunesActual(): string {
   const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Ajustar si es Domingo
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   const lunes = new Date(d.setDate(diff));
   return lunes.toISOString().split('T')[0];
 }
