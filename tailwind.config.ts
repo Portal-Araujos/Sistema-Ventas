@@ -12,27 +12,28 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // TUS COLORES CORPORATIVOS
+        // TUS COLORES CORPORATIVOS ESTRICTOS
         primary: {
-          DEFAULT: '#1E3A8A', // Azul Marino Corporativo
-          light: '#3B82F6',
-          foreground: '#FFFFFF', // ¡Clave para que el texto de los botones sea blanco!
+          DEFAULT: '#E31E24', // Acento Rojo
+          foreground: '#FFFFFF', // Texto de botones
         },
-        status: {
-          success: '#10B981', // Verde - Visitada / Éxito
-          warning: '#F59E0B', // Amarillo - Seguimiento / Pendiente
-          danger: '#EF4444',  // Rojo - Sin visitar / Error
-        },
-        background: '#FFFFFF', // Fondo Blanco puro
-        foreground: '#111827', // Texto gris muy oscuro (casi negro)
+        background: '#F8F9FB', // Fondo General
+        foreground: '#111111', // Texto Oscuro
+        card: '#FFFFFF',       // Tarjetas Blancas
         
-        // REQUISITOS DE SHADCN (Para que las tarjetas y bordes no desaparezcan)
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
+        status: {
+          success: '#10B981', 
+          warning: '#F59E0B', 
+          danger: '#E31E24', // Usamos tu rojo corporativo aquí también
+        },
+        
+        // REQUISITOS DE SHADCN
+        border: "var(--border)",
+        input: "var(--input)",
+        ring: "var(--ring)",
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "var(--muted)",
+          foreground: "var(--muted-foreground)",
         },
       },
       borderRadius: {

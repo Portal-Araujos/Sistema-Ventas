@@ -17,19 +17,16 @@ export default function IndicadoresPage() {
   const [reporte, setReporte] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRol, setUserRol] = useState('vendedor');
-  
   const getLunesHoy = () => {
     const d = new Date();
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(d.setDate(diff)).toISOString().split('T')[0];
   };
-  
   const [fechaLunes, setFechaLunes] = useState(getLunesHoy());
   const [modalMetas, setModalMetas] = useState(false);
   const [metasForm, setMetasForm] = useState<any[]>([]);
   const [savingMetas, setSavingMetas] = useState(false);
-
   const cargarIndicadores = async () => {
     setLoading(true);
     try {
@@ -50,7 +47,6 @@ export default function IndicadoresPage() {
   };
 
   useEffect(() => { cargarIndicadores(); }, [fechaLunes]);
-
   const handleOpenModalMetas = () => {
     setMetasForm(
       reporte.map(r => ({
@@ -61,7 +57,6 @@ export default function IndicadoresPage() {
     );
     setModalMetas(true);
   };
-
   const handleGuardarMetas = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingMetas(true);
@@ -81,13 +76,11 @@ export default function IndicadoresPage() {
       setSavingMetas(false);
     }
   };
-
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error', texto: string) => {
     setToastMsg({ tipo, texto });
     setTimeout(() => setToastMsg(null), 4000);
   };
-
   // EXPORTAR A EXCEL (AMBAS TABLAS EN UNA HOJA)
   const exportarExcel = () => {
     const dataAprobada = reporte.map(r => ({
@@ -104,7 +97,6 @@ export default function IndicadoresPage() {
       'Meta Asignada ($)': r.metaMonto,
       '% Cumplido': r.porcentajeCumplido
     }));
-
     const dataTransito = reporte.map(r => ({
       'Estado': 'En Tránsito (Pendiente Facturación)',
       'Semana Lunes': fechaLunes,
@@ -121,13 +113,11 @@ export default function IndicadoresPage() {
     }));
 
     const dataFinal = [...dataAprobada, ...dataTransito];
-
     const ws = XLSX.utils.json_to_sheet(dataFinal);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Indicadores_${fechaLunes}`);
     XLSX.writeFile(wb, `Reporte_Indicadores_${fechaLunes}.xlsx`);
   };
-
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
   const totalCierreSemanal = reporte.reduce((sum, r) => sum + r.cierreSemanal, 0);
   const totalMetaSemanal = reporte.reduce((sum, r) => sum + r.metaMonto, 0);
@@ -157,7 +147,6 @@ export default function IndicadoresPage() {
           )}
         </div>
       </div>
-
       {/* SELECTOR DE SEMANA Y MÉTRICAS GLOBALES */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-3">
@@ -193,7 +182,6 @@ export default function IndicadoresPage() {
           </div>
         </div>
       </div>
-
       {/* TABLA 1: SÁBANA DE VENTAS REALES (APROBADAS) */}
       <div>
         <h2 className="text-sm font-bold text-emerald-800 mb-3 flex items-center gap-2"><CheckCircle2 size={16} /> VENTAS VALIDADAS (Suman a Meta)</h2>
@@ -240,7 +228,6 @@ export default function IndicadoresPage() {
           </Table>
         </div>
       </div>
-
       {/* TABLA 2: SÁBANA DE VENTAS EN TRÁNSITO (LIMBO) */}
       <div className="mt-4 opacity-90">
         <h2 className="text-sm font-bold text-amber-800 mb-3 flex items-center gap-2"><AlertTriangle size={16} /> DINERO EN TRÁNSITO (Falta Facturación / Documentos)</h2>
@@ -266,12 +253,12 @@ export default function IndicadoresPage() {
               ) : reporte.map(r => (
                 <TableRow key={r.vendedorId} className="hover:bg-amber-50/30">
                   <TableCell className="font-bold text-gray-600 text-sm">👤 {r.vendedorNombre}</TableCell>
-                  <TableCell className="text-center font-medium text-xs text-gray-400">${r.diasTransito.lunes.toFixed(2)}</TableCell>
-                  <TableCell className="text-center font-medium text-xs text-gray-400">${r.diasTransito.martes.toFixed(2)}</TableCell>
-                  <TableCell className="text-center font-medium text-xs text-gray-400">${r.diasTransito.miercoles.toFixed(2)}</TableCell>
-                  <TableCell className="text-center font-medium text-xs text-gray-400">${r.diasTransito.jueves.toFixed(2)}</TableCell>
-                  <TableCell className="text-center font-medium text-xs text-gray-400">${r.diasTransito.viernes.toFixed(2)}</TableCell>
-                  <TableCell className="text-center font-medium text-xs text-gray-400">${r.diasTransito.sabado.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.lunes.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.martes.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.miercoles.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.jueves.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.viernes.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.sabado.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-bold text-sm text-amber-700 bg-amber-50/50">${r.transitoTotal.toFixed(2)}</TableCell>
                 </TableRow>
               ))}
@@ -279,7 +266,6 @@ export default function IndicadoresPage() {
           </Table>
         </div>
       </div>
-
       {/* MODAL DEFINIR METAS SEMANALES */}
       <Dialog open={modalMetas} onOpenChange={setModalMetas}>
         <DialogContent className="sm:max-w-lg bg-white p-6 rounded-2xl max-h-[85vh] overflow-y-auto">
@@ -319,7 +305,6 @@ export default function IndicadoresPage() {
           </form>
         </DialogContent>
       </Dialog>
-
       {/* NOTIFICACIÓN FLOTANTE */}
       {toastMsg && (
         <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>

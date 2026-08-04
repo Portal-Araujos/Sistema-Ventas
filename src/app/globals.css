@@ -8,7 +8,6 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -18,125 +17,92 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-
-  /* NUESTROS COLORES CORPORATIVOS INYECTADOS EN V4 */
-  --color-primary-light: #3B82F6;
-  --color-status-success: #10B981;
-  --color-status-warning: #F59E0B;
-  --color-status-danger: #EF4444;
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  /* TUS COLORES DE MARCA */
+  --background: #F8F9FB;
+  --foreground: #111111;
   
-  /* AQUÍ ESTÁ EL CAMBIO A TU AZUL MARINO */
-  --primary: #1E3A8A; 
+  --card: #FFFFFF;
+  --card-foreground: #111111;
+  
+  --popover: #FFFFFF;
+  --popover-foreground: #111111;
+  
+  /* TU ACENTO ROJO */
+  --primary: #E31E24; 
   --primary-foreground: #FFFFFF;
   
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: #1E3A8A;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  /* COLORES SECUNDARIOS */
+  --secondary: #F8F9FB;
+  --secondary-foreground: #111111;
   
-  /* SIDEBAR CON AZUL MARINO */
-  --sidebar: #1E3A8A;
-  --sidebar-foreground: #FFFFFF;
-  --sidebar-primary: #3B82F6;
+  --muted: #F3F4F6;
+  --muted-foreground: #8A8A8A; /* Gris Medio - Textos secundarios */
+  
+  --border: #D9D9D9; /* Gris Claro */
+  --input: #D9D9D9;
+  --ring: #E31E24;
+  
+  --radius: 0.5rem; /* Bordes redondeados elegantes */
+  
+  /* SIDEBAR CORPORATIVO (Rojo y Blanco) */
+  --sidebar: #FFFFFF; /* Fondo general del menú */
+  --sidebar-foreground: #555555; /* Texto e iconos inactivos en gris */
+  --sidebar-primary: #E31E24;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #2563EB;
-  --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: #1E3A8A;
+  
+  /* ESTAS 2 LÍNEAS CONTROLAN EL RECUADRO SELECCIONADO / HOVER */
+  --sidebar-accent: #E31E24; /* Fondo del recuadro en Rojo */
+  --sidebar-accent-foreground: #FFFFFF; /* Texto e icono resaltado en Blanco */
+  
+  --sidebar-border: #D9D9D9; /* Línea divisoria gris clara */
+  --sidebar-ring: #E31E24;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  
-  /* AZUL MARINO EN MODO OSCURO */
-  --primary: #1E3A8A; 
+  /* Soporte Oscuro por si acaso */
+  --background: #111111;
+  --foreground: #F8F9FB;
+  --card: #1A1A1A;
+  --card-foreground: #F8F9FB;
+  --primary: #E31E24;
   --primary-foreground: #FFFFFF;
-  
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #1E3A8A;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  
-  --sidebar: #1E3A8A;
-  --sidebar-foreground: #FFFFFF;
-  --sidebar-primary: #3B82F6;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #2563EB;
-  --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: #1E3A8A;
+  --border: #333333;
+  --input: #333333;
+  --muted-foreground: #8A8A8A;
+  --ring: #E31E24;
 }
 
 @layer base {
   body {
-    @apply bg-background text-gray-900;
+    @apply bg-background text-foreground;
   }
-  html {
-    @apply font-sans;
+  
+  /* ======================================================== */
+  /* TU SISTEMA DE TIPOGRAFÍA (DESIGN SYSTEM)                 */
+  /* ======================================================== */
+  .text-h1 { font-size: 32px; font-weight: 700; color: #111111; }
+  .text-subtitle { font-size: 22px; font-weight: 600; color: #111111; }
+  .text-card-title { font-size: 18px; font-weight: 600; color: #111111; }
+  .text-normal { font-size: 15px; font-weight: 400; color: #111111; }
+  .text-secondary { font-size: 13px; font-weight: 500; color: #8A8A8A; }
+  
+  .text-kpi { font-size: 36px; font-weight: 700; color: #E31E24; }
+  @media (min-width: 768px) {
+    .text-kpi { font-size: 42px; } /* Adaptación a desktop */
   }
 }

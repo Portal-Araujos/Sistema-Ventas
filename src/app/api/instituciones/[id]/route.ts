@@ -5,7 +5,6 @@ import { cookies } from 'next/headers';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
-
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -17,11 +16,7 @@ export async function GET(
       where: { id },
       include: {
         parroquia: {
-          include: {
-            canton: {
-              include: { provincia: true }
-            }
-          }
+          include: { canton: { include: { provincia: true } } }
         },
         sostenimiento: true,
         jornada: true,
@@ -43,13 +38,11 @@ export async function GET(
     if (!institucion) {
       return NextResponse.json({ error: 'Institución no encontrada' }, { status: 404 });
     }
-
     return NextResponse.json(institucion);
   } catch (error) {
     return NextResponse.json({ error: 'Error al obtener institución' }, { status: 500 });
   }
 }
-
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -58,25 +51,13 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const {
-      nombre,
-      sostenimientoId,
-      jornadaId,
-      parroquiaId,
-      docentesHombres,
-      docentesMujeres,
-      nivelEducativoId,
-      areaId,
-      regimenId,
-      jurisdiccionId,
-      modalidadId,
-      accesoEdificioId,
-      vendedorId
+      nombre, sostenimientoId, jornadaId, parroquiaId,
+      docentesHombres, docentesMujeres, nivelEducativoId, areaId, regimenId,
+      jurisdiccionId, modalidadId, accesoEdificioId, vendedorId
     } = body;
-
     const hombres = parseInt(docentesHombres) || 0;
     const mujeres = parseInt(docentesMujeres) || 0;
     const totalDocentes = hombres + mujeres;
-
     const reglas = await prisma.reglaTamano.findMany();
     let tamanoCalculado = 'Pequeña';
     for (const regla of reglas) {
