@@ -102,8 +102,6 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
   if (loading) return <div className="p-12 text-center text-secondary font-medium">Cargando Ficha Técnica...</div>;
   if (!inst) return <div className="p-12 text-center text-primary font-bold text-subtitle">La institución no existe.</div>;
-
-  // MEZCLAR Y PAGINAR HISTORIAL
   const historial: any[] = [];
   if (inst.visitas) inst.visitas.forEach((v: any) => historial.push({ ...v, tipoHistorial: 'visita', fechaReal: new Date(v.createdAt) }));
   if (inst.ventas) inst.ventas.forEach((v: any) => historial.push({ ...v, tipoHistorial: 'venta', fechaReal: new Date(v.fechaVenta) }));

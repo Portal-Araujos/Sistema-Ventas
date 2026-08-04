@@ -10,7 +10,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Dashboard | Sistema Comercial",
+  title: {
+    default: "Dashboard | Sistema Comercial", // Título por defecto si una página no define uno
+    template: "%s | Sistema Comercial",       // El %s será reemplazado dinámicamente
+  },
   description: "Sistema de gestión y ventas corporativas",
 };
 

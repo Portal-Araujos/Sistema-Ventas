@@ -81,7 +81,7 @@ export default function AgendaPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-h1 flex items-center gap-2">
-            <Calendar className="text-primary" /> Agenda y Pipeline
+            <Calendar className="text-primary" /> Agenda 
           </h1>
           <p className="text-secondary mt-1">Gestiona tu ruta diaria y registra tus visitas en campo.</p>
         </div>
