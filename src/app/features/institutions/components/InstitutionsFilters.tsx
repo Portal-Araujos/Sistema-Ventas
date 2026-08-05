@@ -103,11 +103,17 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
           </div>
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Tamaño de Institución</Label>
-            <select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={filtros.tamano} onChange={e => setFiltros({ ...filtros, tamano: e.target.value })}>
+            <select 
+              className="w-full h-10 border rounded-md px-3 text-sm bg-white"
+              value={filtros.tamano || ''} 
+              onChange={(e) => setFiltros({...filtros, tamano: e.target.value})}
+            >
               <option value="">Todos los tamaños</option>
-              <option value="Pequeña">Pequeña</option>
-              <option value="Mediana">Mediana</option>
-              <option value="Grande">Grande</option>
+              {catalogos?.reglasTamano?.map((regla: any) => (
+                <option key={regla.id} value={regla.nombre}>
+                  {regla.nombre}
+                </option>
+              ))}
             </select>
           </div>
           <div>

@@ -33,7 +33,7 @@ export default function ConfiguracionPage() {
   const [tamanoModal, setTamanoModal] = useState({ open: false, id: 0, nombre: '', minDocentes: 0, maxDocentes: 9999 });
   const [saving, setSaving] = useState(false);
 
-  // 🔥 NUEVOS ESTADOS PARA ALERTAS Y CONFIRMACIONES DEL SISTEMA 🔥
+  // ESTADOS PARA ALERTAS Y CONFIRMACIONES
   const [confirmModal, setConfirmModal] = useState({ open: false, id: 0, nombre: '' });
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => { 
@@ -98,33 +98,52 @@ export default function ConfiguracionPage() {
   };
 
   const handleTamanoSave = async () => {
+    // 1. 🔥 VALIDACIÓN MATEMÁTICA DE SOLAPAMIENTO 🔥
     const minNuevo = tamanoModal.minDocentes;
     const maxNuevo = tamanoModal.maxDocentes;
+
     if (minNuevo > maxNuevo) {
       showToast('alerta', 'El valor mínimo no puede ser mayor al máximo.');
       return;
     }
-    const reglasActuales = catalogos.reglasTamano.filter((r: any) => r.id !== tamanoModal.id);
-    const hayChoque = reglasActuales.some((regla: any) => {
-      return (minNuevo <= regla.maxDocentes && maxNuevo >= regla.minDocentes);
-    });
-    if (hayChoque) {
-      showToast('error', '¡Error! Este rango choca con otra regla existente (Ej: Si termina en 20, el siguiente debe iniciar en 21).');
+    if (!tamanoModal.nombre.trim()) {
+      showToast('alerta', 'El nombre de la clasificación no puede estar vacío.');
       return;
     }
+
+    const reglasActuales = catalogos.reglasTamano.filter((r: any) => r.id !== tamanoModal.id);
+    const hayChoque = reglasActuales.some((regla: any) => {
+      // Si el nuevo mínimo es <= al máximo de otra regla Y el nuevo máximo es >= al mínimo de esa regla = HAY CHOQUE
+      return (minNuevo <= regla.maxDocentes && maxNuevo >= regla.minDocentes);
+    });
+
+    if (hayChoque) {
+      showToast('error', '¡Choque de Rangos! Revisa que los números no se crucen con otras reglas (Ej: Si una termina en 20, la siguiente inicia en 21).');
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch('/api/catalogos', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: tamanoModal.id, tipo: 'reglaTamano', minDocentes: tamanoModal.minDocentes, maxDocentes: tamanoModal.maxDocentes })
+        body: JSON.stringify({ 
+          id: tamanoModal.id, 
+          tipo: 'reglaTamano', 
+          nombre: tamanoModal.nombre, // Ahora enviamos el nombre para que se actualice
+          minDocentes: tamanoModal.minDocentes, 
+          maxDocentes: tamanoModal.maxDocentes 
+        })
       });
-      if (!res.ok) throw new Error('Error al actualizar regla');
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar regla');
+
       setTamanoModal({ open: false, id: 0, nombre: '', minDocentes: 0, maxDocentes: 9999 });
       await cargarDatos();
-      showToast('exito', `Rango guardado. Las escuelas han sido reclasificadas a "${tamanoModal.nombre}" automáticamente.`);
-    } catch (error) {
-      showToast('error', 'Error al actualizar y recalcular la regla de tamaño.');
+      showToast('exito', `Rango guardado. Todas las escuelas han sido corregidas y reclasificadas a "${tamanoModal.nombre}" automáticamente.`);
+    } catch (error: any) {
+      showToast('error', error.message || 'Error al actualizar y recalcular la regla de tamaño.');
     } finally {
       setSaving(false);
     }
@@ -147,7 +166,6 @@ export default function ConfiguracionPage() {
       setConfirmModal({ open: false, id: 0, nombre: '' });
     }
   };
-  
 
   const listaActual = getListaActual();
 
@@ -262,8 +280,7 @@ export default function ConfiguracionPage() {
                                     body: JSON.stringify({ id: item.id, tipo: activeTab, activo: !item.activo })
                                   });
                                   await cargarDatos();
-                                  showToast('exito', 'Estado modificado correctamente.');
-                                } catch (e) { showToast('error', 'Error al modificar estado.'); } finally { setSaving(false); }
+                                } catch (e) {} finally { setSaving(false); }
                               }}
                             >
                               <Settings size={14} className="mr-1" /> {item.activo === false ? 'Activar' : 'Apagar'}
@@ -287,7 +304,7 @@ export default function ConfiguracionPage() {
         </div>
       </div>
 
-      {/* 🔥 MODAL DE CONFIRMACIÓN DEL SISTEMA (EN LUGAR DEL CONFIRM DEL NAVEGADOR) 🔥 */}
+      {/* MODAL DE CONFIRMACIÓN DE BORRADO */}
       <Dialog open={confirmModal.open} onOpenChange={(val) => setConfirmModal({ ...confirmModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl border-t-4 border-red-500">
           <DialogHeader>
@@ -331,11 +348,17 @@ export default function ConfiguracionPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL CONFIGURAR RANGO DE TAMAÑO */}
+      {/* 🔥 MODAL CONFIGURAR RANGO DE TAMAÑO (AHORA PERMITE EDITAR EL NOMBRE) 🔥 */}
       <Dialog open={tamanoModal.open} onOpenChange={(val) => setTamanoModal({ ...tamanoModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl">
-          <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Configurar Rango: {tamanoModal.nombre}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Configurar Rango</DialogTitle></DialogHeader>
           <div className="mt-4 space-y-4">
+            
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-gray-700">Nombre de la Clasificación *</Label>
+              <Input value={tamanoModal.nombre} onChange={e => setTamanoModal({...tamanoModal, nombre: e.target.value})} className="h-11 font-bold" />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-xs font-semibold text-gray-700">Mínimo Docentes</Label>
@@ -346,6 +369,7 @@ export default function ConfiguracionPage() {
                 <Input type="number" min="0" value={tamanoModal.maxDocentes} onChange={e => setTamanoModal({...tamanoModal, maxDocentes: parseInt(e.target.value) || 0})} className="h-11" />
               </div>
             </div>
+
           </div>
           <DialogFooter className="mt-6 flex gap-3 justify-end">
             <Button variant="outline" onClick={() => setTamanoModal({ ...tamanoModal, open: false })}>Cancelar</Button>
