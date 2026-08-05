@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
-import { Eye, Pencil, UserCheck, Save, Upload, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Eye, Pencil, UserCheck, Save, Upload, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -24,24 +24,33 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [catalogos, setCatalogos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
   // PAGINACIÓN TABLA (15)
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => {
     setToastMsg({ tipo, texto });
     setTimeout(() => setToastMsg(null), 5000); 
   };
+
   const [assignModal, setAssignModal] = useState<{ open: boolean; instId: string; instNombre: string; vendedorIdActual: string }>({ open: false, instId: '', instNombre: '', vendedorIdActual: '' });
   const [selectedVendedor, setSelectedVendedor] = useState('');
   const [savingAssign, setSavingAssign] = useState(false);
+
+  // EDICIÓN FULL CAMPOS
   const [editModal, setEditModal] = useState<{ open: boolean; inst: any }>({ open: false, inst: null });
   const [editFormData, setEditFormData] = useState<any>({});
   const [savingEdit, setSavingEdit] = useState(false);
+  
+  // Estados para Cascada de Edición
   const [editProvincia, setEditProvincia] = useState('');
   const [editCanton, setEditCanton] = useState('');
   const [editCantones, setEditCantones] = useState<any[]>([]);
   const [editParroquias, setEditParroquias] = useState<any[]>([]);
+
+  // IMPORTACIÓN EXCEL
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importModal, setImportModal] = useState(false);
   const [excelData, setExcelData] = useState<any[]>([]);
@@ -53,6 +62,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [importProgress, setImportProgress] = useState({ actual: 0, total: 0 });
   const [duplicateModal, setDuplicateModal] = useState({ open: false, duplicadosCount: 0, nuevosCount: 0 });
+
   const fetchInstituciones = async () => {
     try {
       const [resInst, resVend, resCat] = await Promise.all([ fetch('/api/instituciones'), fetch('/api/usuarios/vendedores'), fetch('/api/catalogos') ]);
@@ -61,8 +71,10 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       setCatalogos(await resCat.json());
     } catch (error) {} finally { setLoading(false); }
   };
+
   useEffect(() => { fetchInstituciones(); }, []);
-  useEffect(() => { setCurrentPage(1); }, [filtros]); // Resetea la página si usa un filtro
+  useEffect(() => { setCurrentPage(1); }, [filtros]);
+
   const filteredInstitutions = institutions.filter((inst) => {
     if (filtros.search && !inst.nombre.toLowerCase().includes(filtros.search.toLowerCase())) return false;
     if (filtros.provinciaId && inst.provinciaId !== parseInt(filtros.provinciaId)) return false;
@@ -77,8 +89,10 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     }
     return true;
   });
+
   const totalPages = Math.max(1, Math.ceil(filteredInstitutions.length / itemsPerPage));
   const currentInstitutions = filteredInstitutions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   const handleGuardarAsignacion = async () => {
     setSavingAssign(true);
     try {
@@ -89,6 +103,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       fetchInstituciones();
     } catch (e) { showToast('error', 'Error al asignar.'); } finally { setSavingAssign(false); }
   };
+
   const handleOpenEdit = (inst: any) => {
     setEditProvincia(inst.provinciaId?.toString() || '');
     setEditCanton(inst.cantonId?.toString() || '');
@@ -96,6 +111,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     setEditCantones(prov ? prov.cantones : []);
     const cant = prov?.cantones?.find((c: any) => c.id === inst.cantonId);
     setEditParroquias(cant ? cant.parroquias : []);
+
     setEditFormData({
       id: inst.id, nombre: inst.nombre,
       parroquiaId: inst.parroquiaId || '', sostenimientoId: inst.sostenimientoId || '', jornadaId: inst.jornadaId || '',
@@ -105,16 +121,19 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     });
     setEditModal({ open: true, inst });
   };
+
   const handleProvinciaChangeEdit = (provId: string) => {
     setEditProvincia(provId); setEditCanton(''); setEditFormData({ ...editFormData, parroquiaId: '' });
     const prov = catalogos?.provincias?.find((p: any) => p.id === parseInt(provId));
     setEditCantones(prov ? prov.cantones : []); setEditParroquias([]);
   };
+
   const handleCantonChangeEdit = (cantonId: string) => {
     setEditCanton(cantonId); setEditFormData({ ...editFormData, parroquiaId: '' });
     const cant = editCantones.find((c: any) => c.id === parseInt(cantonId));
     setEditParroquias(cant ? cant.parroquias : []);
   };
+
   const handleGuardarEdicion = async () => {
     if (!editFormData.parroquiaId || !editFormData.sostenimientoId || !editFormData.jornadaId) {
       showToast('error', 'Provincia, Cantón, Parroquia, Sostenimiento y Jornada son obligatorios.');
@@ -129,6 +148,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       fetchInstituciones();
     } catch (e) { showToast('error', 'Error al guardar los cambios.'); } finally { setSavingEdit(false); }
   };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -162,11 +182,46 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     };
     reader.readAsBinaryString(file);
   };
+  const handleExportarExcel = () => {
+    if (institutions.length === 0) {
+      showToast('alerta', 'No hay datos para exportar.');
+      return;
+    }
+    
+    // Mapeamos los datos al formato que verá el gerente
+    const dataToExport = institutions.map(inst => ({
+      'ID Interno': inst.id,
+      'Nombre Institución': inst.nombre,
+      'Provincia': inst.provincia,
+      'Cantón': inst.canton,
+      'Parroquia': inst.parroquia,
+      'Sostenimiento': inst.sostenimiento,
+      'Jornada': inst.jornada,
+      'Nivel Educativo': inst.nivelEducativo,
+      'Área': inst.area,
+      'Régimen': inst.regimen,
+      'Docentes Hombres': inst.docentesHombres,
+      'Docentes Mujeres': inst.docentesMujeres,
+      'Total Docentes': inst.docentes,
+      'Tamaño Calculado': inst.tamano,
+      'Estado Comercial': inst.estado,
+      'Vendedor Responsable': inst.vendedorNombre
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Instituciones");
+    XLSX.writeFile(wb, "Reporte_Base_Instituciones.xlsx");
+    
+    showToast('exito', 'Excel descargado exitosamente.');
+  };
+
   const getTransformedData = () => {
     return excelData.map(row => ({
       nombre: row[mapping.nombre], provincia: row[mapping.provincia], canton: row[mapping.canton], parroquia: row[mapping.parroquia], sostenimiento: mapping.sostenimiento ? row[mapping.sostenimiento] : null, jornada: mapping.jornada ? row[mapping.jornada] : null, docentesHombres: mapping.docentesHombres ? row[mapping.docentesHombres] : 0, docentesMujeres: mapping.docentesMujeres ? row[mapping.docentesMujeres] : 0, totalDocentes: mapping.totalDocentes ? row[mapping.totalDocentes] : 0, nivelEducativo: mapping.nivelEducativo ? row[mapping.nivelEducativo] : null, area: mapping.area ? row[mapping.area] : null, regimen: mapping.regimen ? row[mapping.regimen] : null, jurisdiccion: mapping.jurisdiccion ? row[mapping.jurisdiccion] : null, modalidad: mapping.modalidad ? row[mapping.modalidad] : null, accesoEdificio: mapping.accesoEdificio ? row[mapping.accesoEdificio] : null,
     }));
   };
+
   const ejecutarImportacion = async () => {
     if (!mapping.nombre || !mapping.provincia || !mapping.canton || !mapping.parroquia) {
       showToast('error', "Debes mapear al menos el Nombre, Provincia, Cantón y Parroquia."); return;
@@ -174,6 +229,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     setIsImporting(true); setImportProgress({ actual: 0, total: excelData.length });
     const dataTransformada = getTransformedData();
     const chunkSize = 500; let procesados = 0, totalNuevos = 0, totalDuplicados = 0;
+
     for (let i = 0; i < dataTransformada.length; i += chunkSize) {
       const chunk = dataTransformada.slice(i, i + chunkSize);
       try {
@@ -191,6 +247,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       fetchInstituciones(); if (onRefreshNeeded) onRefreshNeeded();
     }
   };
+
   const ejecutarActualizacionDuplicados = async () => {
     setDuplicateModal({ ...duplicateModal, open: false }); setImportModal(true); setIsUpdating(true); setImportProgress({ actual: 0, total: excelData.length });
     const dataTransformada = getTransformedData(); const chunkSize = 500; let procesados = 0;
@@ -205,16 +262,21 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     setIsUpdating(false); setImportModal(false); showToast('exito', `¡Base de datos actualizada con los nuevos datos!`);
     fetchInstituciones(); if (onRefreshNeeded) onRefreshNeeded();
   };
+
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
   if (loading) return <div className="p-8 text-center text-secondary">Cargando base de datos...</div>;
+
   return (
     <>
       <div className="flex flex-col gap-4">
         {esAdmin && (
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={handleExportarExcel} className="text-emerald-700 border-emerald-200 hover:bg-emerald-50 shadow-sm font-bold">
+              <Download size={16} className="mr-2" /> 📤 Exportar Excel
+            </Button>
             <input type="file" accept=".xlsx, .xls, .csv" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="text-primary border-primary/30 hover:bg-primary/5 shadow-sm font-bold">
-              <Upload size={16} className="mr-2" /> 📥 Importar Base MinEduc (Excel)
+              <Upload size={16} className="mr-2" /> 📥 Importar Base MinEduc
             </Button>
           </div>
         )}
@@ -280,6 +342,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
               )}
             </TableBody>
           </Table>
+
           {/* PAGINACIÓN DE 15 EN 15 */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-border flex justify-between items-center bg-muted/30">
@@ -297,21 +360,25 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
             </div>
           )}
         </div>
+
         {/* MODAL REASIGNAR VENDEDOR */}
         <Dialog open={assignModal.open} onOpenChange={val => setAssignModal({ ...assignModal, open: val })}>
           <DialogContent className="sm:max-w-md bg-card p-5 rounded-xl"><DialogHeader><DialogTitle className="text-base font-bold text-foreground">Asignar Vendedor</DialogTitle></DialogHeader><div className="mt-3 space-y-3"><p className="text-xs text-muted-foreground">Escuela: <strong className="text-foreground">{assignModal.instNombre}</strong></p><select className="w-full h-10 border rounded-md px-3 text-sm bg-white" value={selectedVendedor} onChange={e => setSelectedVendedor(e.target.value)}><option value="">-- Liberar (Sin Vendedor) --</option>{vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}</select></div><DialogFooter className="mt-4 flex gap-2 justify-end"><Button variant="outline" size="sm" onClick={() => setAssignModal({ ...assignModal, open: false })}>Cancelar</Button><Button size="sm" className="bg-primary text-primary-foreground" disabled={savingAssign} onClick={handleGuardarAsignacion}>{savingAssign ? 'Guardando...' : 'Guardar'}</Button></DialogFooter></DialogContent>
         </Dialog>
+
         {/* SÚPER MODAL DE EDICIÓN CON TODOS LOS CAMPOS */}
         <Dialog open={editModal.open} onOpenChange={val => setEditModal({ ...editModal, open: val })}>
           <DialogContent className="sm:max-w-2xl bg-card p-6 rounded-xl overflow-y-auto max-h-[85vh]">
             <DialogHeader><DialogTitle className="text-lg font-bold text-foreground">Editar Institución Completa</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-3">
               <div><Label className="text-xs font-semibold">Nombre de la Institución *</Label><Input value={editFormData.nombre || ''} onChange={e => setEditFormData({ ...editFormData, nombre: e.target.value })} /></div>
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-muted/50 p-3 rounded-lg border border-border">
                 <div><Label className="text-xs font-semibold">Provincia *</Label><select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={editProvincia} onChange={e => handleProvinciaChangeEdit(e.target.value)}><option value="">Seleccione...</option>{catalogos?.provincias?.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></div>
                 <div><Label className="text-xs font-semibold">Cantón *</Label><select disabled={!editProvincia} className="w-full h-9 border rounded-md px-2 text-xs bg-white disabled:bg-gray-100" value={editCanton} onChange={e => handleCantonChangeEdit(e.target.value)}><option value="">Seleccione...</option>{editCantones.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>
                 <div><Label className="text-xs font-semibold">Parroquia *</Label><select disabled={!editCanton} className="w-full h-9 border rounded-md px-2 text-xs bg-white disabled:bg-gray-100" value={editFormData.parroquiaId} onChange={e => setEditFormData({ ...editFormData, parroquiaId: e.target.value })}><option value="">Seleccione...</option>{editParroquias.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select></div>
               </div>
+
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="col-span-2"><Label className="text-xs font-semibold">Sostenimiento *</Label><select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={editFormData.sostenimientoId || ''} onChange={e => setEditFormData({ ...editFormData, sostenimientoId: e.target.value })}><option value="">Seleccione...</option>{catalogos?.sostenimientos?.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}</select></div>
                 <div className="col-span-2"><Label className="text-xs font-semibold">Jornada *</Label><select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={editFormData.jornadaId || ''} onChange={e => setEditFormData({ ...editFormData, jornadaId: e.target.value })}><option value="">Seleccione...</option>{catalogos?.jornadas?.map((j: any) => <option key={j.id} value={j.id}>{j.nombre}</option>)}</select></div>
@@ -319,6 +386,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
                 <div><Label className="text-xs font-semibold">Docentes (M)</Label><Input type="number" className="h-9 text-xs" min="0" value={editFormData.docentesMujeres || 0} onChange={e => setEditFormData({ ...editFormData, docentesMujeres: parseInt(e.target.value) || 0 })} /></div>
                 <div className="col-span-2"><Label className="text-xs font-semibold">Nivel Educativo</Label><select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={editFormData.nivelEducativoId || ''} onChange={e => setEditFormData({ ...editFormData, nivelEducativoId: e.target.value })}><option value="">Seleccione...</option>{catalogos?.niveles?.map((n: any) => <option key={n.id} value={n.id}>{n.nombre}</option>)}</select></div>
               </div>
+
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="col-span-2"><Label className="text-xs font-semibold">Régimen</Label><select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={editFormData.regimenId || ''} onChange={e => setEditFormData({ ...editFormData, regimenId: e.target.value })}><option value="">Seleccione...</option>{catalogos?.regimenes?.map((r: any) => <option key={r.id} value={r.id}>{r.nombre}</option>)}</select></div>
                 <div className="col-span-2"><Label className="text-xs font-semibold">Área Educativa</Label><select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={editFormData.areaId || ''} onChange={e => setEditFormData({ ...editFormData, areaId: e.target.value })}><option value="">Seleccione...</option>{catalogos?.areas?.map((a: any) => <option key={a.id} value={a.id}>{a.nombre}</option>)}</select></div>
@@ -333,6 +401,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
         {/* MODAL DE IMPORTACIÓN */}
         <Dialog open={importModal} onOpenChange={(val) => !(isImporting || isUpdating) && setImportModal(val)}>
           <DialogContent className="sm:max-w-2xl bg-card p-6 rounded-xl max-h-[90vh] flex flex-col">
@@ -349,6 +418,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
             <DialogFooter className="mt-4 flex justify-end gap-2 border-t pt-4"><Button variant="outline" onClick={() => setImportModal(false)} disabled={isImporting || isUpdating}>Cancelar</Button><Button className="bg-primary text-primary-foreground font-bold" onClick={ejecutarImportacion} disabled={isImporting || isUpdating}>{(isImporting || isUpdating) ? 'Procesando...' : 'Iniciar Importación'}</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+
         {/* POPUP INTELIGENTE DE DUPLICADOS */}
         <Dialog open={duplicateModal.open} onOpenChange={() => {}}>
           <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl border-t-4 border-amber-500">
@@ -358,6 +428,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           </DialogContent>
         </Dialog>
       </div>
+
       {toastMsg && (
         <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
           {toastMsg.tipo === 'exito' ? <CheckCircle2 size={20} className="text-emerald-100" /> : <AlertCircle size={20} className="text-white/90" />}

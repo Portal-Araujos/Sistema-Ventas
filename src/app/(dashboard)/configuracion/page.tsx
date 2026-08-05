@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Map, BookOpen, Layers, Edit2, Trash2, Sliders } from 'lucide-react';
+import { Settings, Map, BookOpen, Layers, Edit2, Trash2, Sliders, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -24,6 +24,7 @@ const MENU_OPCIONES = [
   { id: 'estadoContrato', icon: <Layers size={18} />, label: 'Estados de Contrato' },
   { id: 'tipoCobro', icon: <BookOpen size={18} />, label: 'Tipos de Cobro' },
 ];
+
 export default function ConfiguracionPage() {
   const [activeTab, setActiveTab] = useState('reglaTamano');
   const [catalogos, setCatalogos] = useState<any>(null);
@@ -31,6 +32,15 @@ export default function ConfiguracionPage() {
   const [editModal, setEditModal] = useState({ open: false, id: 0, nombre: '', tipo: '' });
   const [tamanoModal, setTamanoModal] = useState({ open: false, id: 0, nombre: '', minDocentes: 0, maxDocentes: 9999 });
   const [saving, setSaving] = useState(false);
+
+  // 🔥 NUEVOS ESTADOS PARA ALERTAS Y CONFIRMACIONES DEL SISTEMA 🔥
+  const [confirmModal, setConfirmModal] = useState({ open: false, id: 0, nombre: '' });
+  const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
+  const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => { 
+    setToastMsg({ tipo, texto }); 
+    setTimeout(() => setToastMsg(null), 5000); 
+  };
+
   const cargarDatos = async () => {
     setLoading(true);
     try {
@@ -38,14 +48,14 @@ export default function ConfiguracionPage() {
       const data = await res.json();
       setCatalogos(data);
     } catch (error) {
-      console.error(error);
+      showToast('error', 'Error de conexión al cargar los catálogos.');
     } finally {
       setLoading(false);
     }
   };
-  useEffect(() => {
-    cargarDatos();
-  }, []);
+
+  useEffect(() => { cargarDatos(); }, []);
+
   const getListaActual = () => {
     if (!catalogos) return [];
     switch (activeTab) {
@@ -67,6 +77,7 @@ export default function ConfiguracionPage() {
       default: return [];
     }
   };
+
   const handleEditSave = async () => {
     setSaving(true);
     try {
@@ -77,50 +88,69 @@ export default function ConfiguracionPage() {
       });
       if (!res.ok) throw new Error('Error al actualizar');
       setEditModal({ open: false, id: 0, nombre: '', tipo: '' });
+      showToast('exito', 'Registro actualizado correctamente.');
       await cargarDatos();
     } catch (error) {
-      alert("Hubo un error al actualizar.");
+      showToast('error', 'Hubo un error al guardar los cambios.');
     } finally {
       setSaving(false);
     }
   };
+
   const handleTamanoSave = async () => {
+    const minNuevo = tamanoModal.minDocentes;
+    const maxNuevo = tamanoModal.maxDocentes;
+    if (minNuevo > maxNuevo) {
+      showToast('alerta', 'El valor mínimo no puede ser mayor al máximo.');
+      return;
+    }
+    const reglasActuales = catalogos.reglasTamano.filter((r: any) => r.id !== tamanoModal.id);
+    const hayChoque = reglasActuales.some((regla: any) => {
+      return (minNuevo <= regla.maxDocentes && maxNuevo >= regla.minDocentes);
+    });
+    if (hayChoque) {
+      showToast('error', '¡Error! Este rango choca con otra regla existente (Ej: Si termina en 20, el siguiente debe iniciar en 21).');
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/catalogos', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: tamanoModal.id,
-          tipo: 'reglaTamano',
-          minDocentes: tamanoModal.minDocentes,
-          maxDocentes: tamanoModal.maxDocentes
-        })
+        body: JSON.stringify({ id: tamanoModal.id, tipo: 'reglaTamano', minDocentes: tamanoModal.minDocentes, maxDocentes: tamanoModal.maxDocentes })
       });
       if (!res.ok) throw new Error('Error al actualizar regla');
       setTamanoModal({ open: false, id: 0, nombre: '', minDocentes: 0, maxDocentes: 9999 });
       await cargarDatos();
+      showToast('exito', `Rango guardado. Las escuelas han sido reclasificadas a "${tamanoModal.nombre}" automáticamente.`);
     } catch (error) {
-      alert("Error al actualizar la regla de tamaño.");
+      showToast('error', 'Error al actualizar y recalcular la regla de tamaño.');
     } finally {
       setSaving(false);
     }
   };
-  const handleDelete = async (id: number, nombre: string) => {
-    if (!confirm(`¿Estás seguro de eliminar "${nombre}"?`)) return;
+
+  const executeDelete = async () => {
     try {
-      const res = await fetch(`/api/catalogos?id=${id}&tipo=${activeTab}`, { method: 'DELETE' });
+      const res = await fetch(`/api/catalogos?id=${confirmModal.id}&tipo=${activeTab}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Error al eliminar");
+        showToast('error', data.error || "No se puede eliminar el registro");
+        setConfirmModal({ open: false, id: 0, nombre: '' });
         return;
       }
+      showToast('exito', `"${confirmModal.nombre}" eliminado exitosamente.`);
+      setConfirmModal({ open: false, id: 0, nombre: '' });
       await cargarDatos();
     } catch (error) {
-      alert("Error de conexión al eliminar.");
+      showToast('error', "Error de conexión al eliminar.");
+      setConfirmModal({ open: false, id: 0, nombre: '' });
     }
   };
+  
+
   const listaActual = getListaActual();
+
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen">
       <div>
@@ -181,9 +211,7 @@ export default function ConfiguracionPage() {
                         <td className="px-6 py-4 text-sm text-center font-medium text-emerald-600">{item.maxDocentes >= 9999 ? 'En adelante' : item.maxDocentes}</td>
                         <td className="px-6 py-4 text-right">
                           <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 border-gray-200 text-blue-600 hover:bg-blue-50"
+                            variant="outline" size="sm" className="h-8 border-gray-200 text-blue-600 hover:bg-blue-50"
                             onClick={() => setTamanoModal({ open: true, id: item.id, nombre: item.nombre, minDocentes: item.minDocentes, maxDocentes: item.maxDocentes })}
                           >
                             <Edit2 size={14} className="mr-1" /> Configurar Rango
@@ -194,8 +222,6 @@ export default function ConfiguracionPage() {
                   </tbody>
                 </table>
               ) : (
-                /* TABLA ESTÁNDAR DE CATÁLOGOS */
-                /* TABLA ESTÁNDAR DE CATÁLOGOS */
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
@@ -210,7 +236,6 @@ export default function ConfiguracionPage() {
                         <td className="px-6 py-4 text-sm text-gray-500 font-medium">#{item.id}</td>
                         <td className="px-6 py-4 text-sm text-gray-900 font-semibold">
                           {item.nombre}
-                          {/* Etiqueta de Inactivo solo para los nuevos catálogos */}
                           {item.activo === false && (
                             <span className="ml-2 text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold uppercase">
                               Inactivo
@@ -219,20 +244,15 @@ export default function ConfiguracionPage() {
                         </td>
                         <td className="px-6 py-4 text-right flex justify-end gap-2">
                           <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 border-gray-200 text-blue-600 hover:bg-blue-50"
+                            variant="outline" size="sm" className="h-8 border-gray-200 text-blue-600 hover:bg-blue-50"
                             onClick={() => setEditModal({ open: true, id: item.id, nombre: item.nombre, tipo: activeTab })}
                           >
                             <Edit2 size={14} className="mr-1" /> Editar
                           </Button>
                           
-                          {/* Lógica de botones: Borrado duro vs Soft Delete */}
                           {['estadoCliente', 'estadoContrato', 'tipoCobro'].includes(activeTab) ? (
                             <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className={`h-8 border-gray-200 hover:bg-gray-100 ${item.activo === false ? 'text-emerald-600' : 'text-amber-600'}`}
+                              variant="outline" size="sm" className={`h-8 border-gray-200 hover:bg-gray-100 ${item.activo === false ? 'text-emerald-600' : 'text-amber-600'}`}
                               onClick={async () => {
                                 setSaving(true);
                                 try {
@@ -242,17 +262,16 @@ export default function ConfiguracionPage() {
                                     body: JSON.stringify({ id: item.id, tipo: activeTab, activo: !item.activo })
                                   });
                                   await cargarDatos();
-                                } catch (e) {} finally { setSaving(false); }
+                                  showToast('exito', 'Estado modificado correctamente.');
+                                } catch (e) { showToast('error', 'Error al modificar estado.'); } finally { setSaving(false); }
                               }}
                             >
                               <Settings size={14} className="mr-1" /> {item.activo === false ? 'Activar' : 'Apagar'}
                             </Button>
                           ) : (
                             <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="h-8 border-gray-200 text-red-600 hover:bg-red-50"
-                              onClick={() => handleDelete(item.id, item.nombre)}
+                              variant="outline" size="sm" className="h-8 border-gray-200 text-red-600 hover:bg-red-50"
+                              onClick={() => setConfirmModal({ open: true, id: item.id, nombre: item.nombre })}
                             >
                               <Trash2 size={14} className="mr-1" /> Borrar
                             </Button>
@@ -267,12 +286,36 @@ export default function ConfiguracionPage() {
           </div>
         </div>
       </div>
+
+      {/* 🔥 MODAL DE CONFIRMACIÓN DEL SISTEMA (EN LUGAR DEL CONFIRM DEL NAVEGADOR) 🔥 */}
+      <Dialog open={confirmModal.open} onOpenChange={(val) => setConfirmModal({ ...confirmModal, open: val })}>
+        <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl border-t-4 border-red-500">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-red-600 flex items-center gap-2">
+              <AlertTriangle size={20} /> Confirmar Eliminación
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-2 space-y-3">
+            <p className="text-sm text-gray-700">
+              ¿Estás seguro de eliminar el registro <strong>"{confirmModal.nombre}"</strong>?
+            </p>
+            <p className="text-xs text-gray-500">
+              Esta acción es irreversible y podría afectar escuelas asociadas.
+            </p>
+          </div>
+          <DialogFooter className="mt-5 flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setConfirmModal({ open: false, id: 0, nombre: '' })} className="text-gray-500">Cancelar</Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white font-bold" onClick={executeDelete}>
+              Sí, Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* MODAL EDITAR CATÁLOGO REGULAR */}
       <Dialog open={editModal.open} onOpenChange={(val) => setEditModal({ ...editModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-gray-900">Editar Registro</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Editar Registro</DialogTitle></DialogHeader>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-gray-700">Nombre</Label>
@@ -287,12 +330,11 @@ export default function ConfiguracionPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       {/* MODAL CONFIGURAR RANGO DE TAMAÑO */}
       <Dialog open={tamanoModal.open} onOpenChange={(val) => setTamanoModal({ ...tamanoModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-gray-900">Configurar Rango: {tamanoModal.nombre}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Configurar Rango: {tamanoModal.nombre}</DialogTitle></DialogHeader>
           <div className="mt-4 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -308,11 +350,19 @@ export default function ConfiguracionPage() {
           <DialogFooter className="mt-6 flex gap-3 justify-end">
             <Button variant="outline" onClick={() => setTamanoModal({ ...tamanoModal, open: false })}>Cancelar</Button>
             <Button className="bg-primary text-white" disabled={saving} onClick={handleTamanoSave}>
-              {saving ? 'Guardando...' : 'Guardar Rango'}
+              {saving ? 'Procesando...' : 'Guardar y Recalcular'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* TOAST GLOBAL DE NOTIFICACIONES */}
+      {toastMsg && (
+        <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-[#34c759] text-white' : toastMsg.tipo === 'alerta' ? 'bg-[#ff9500] text-white' : 'bg-[#ff3b30] text-white'}`}>
+          {toastMsg.tipo === 'exito' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+          <span className="font-bold text-sm tracking-wide">{toastMsg.texto}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { cookies } from 'next/headers';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
-
 export async function GET() {
   try {
     const cookieStore = await cookies();
@@ -36,8 +35,6 @@ export async function GET() {
     const jornadas = await prisma.jornada.findMany({ orderBy: { nombre: 'asc' } });
     const reglasTamano = await prisma.reglaTamano.findMany({ orderBy: { minDocentes: 'asc' } });
     const estadosComerciales = await prisma.estadoComercial.findMany({ orderBy: { id: 'asc' } });
-
-    // NUEVOS CATÁLOGOS PARA VENTAS (Si están vacíos, creamos los por defecto)
     let estadosCliente = await prisma.estadoCliente.findMany({ orderBy: { id: 'asc' } });
     if (estadosCliente.length === 0) {
       await prisma.estadoCliente.createMany({
@@ -45,7 +42,6 @@ export async function GET() {
       });
       estadosCliente = await prisma.estadoCliente.findMany({ orderBy: { id: 'asc' } });
     }
-
     let estadosContrato = await prisma.estadoContrato.findMany({ orderBy: { id: 'asc' } });
     if (estadosContrato.length === 0) {
       await prisma.estadoContrato.createMany({
@@ -53,7 +49,6 @@ export async function GET() {
       });
       estadosContrato = await prisma.estadoContrato.findMany({ orderBy: { id: 'asc' } });
     }
-
     let tiposCobro = await prisma.tipoCobro.findMany({ orderBy: { id: 'asc' } });
     if (tiposCobro.length === 0) {
       await prisma.tipoCobro.createMany({
@@ -61,7 +56,6 @@ export async function GET() {
       });
       tiposCobro = await prisma.tipoCobro.findMany({ orderBy: { id: 'asc' } });
     }
-
     return NextResponse.json({
       userRol,
       userPermisos,
@@ -84,21 +78,17 @@ export async function GET() {
     return NextResponse.json({ error: 'Error al cargar catálogos' }, { status: 500 });
   }
 }
-
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
-
     const { tipo, nombre, provinciaId, cantonId } = await request.json();
     if (!nombre) return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 });
-
     switch (tipo) {
       case 'provincia': return NextResponse.json(await prisma.provincia.create({ data: { nombre } }), { status: 201 });
       case 'canton': return NextResponse.json(await prisma.canton.create({ data: { nombre, provinciaId: parseInt(provinciaId) } }), { status: 201 });
@@ -121,45 +111,61 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Error al guardar elemento' }, { status: 500 });
   }
 }
-
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-
     const body = await request.json();
     const { id, tipo, nombre, minDocentes, maxDocentes, activo } = body;
-
     if (!id) return NextResponse.json({ error: 'ID es requerido' }, { status: 400 });
-
     let item;
     const numericId = parseInt(id);
-
     if (tipo === 'reglaTamano') {
+      const minNuevo = parseInt(minDocentes);
+      const maxNuevo = parseInt(maxDocentes);
+      const reglasActuales = await prisma.reglaTamano.findMany({
+        where: { id: { not: numericId } }
+      });
+      const hayChoque = reglasActuales.some(regla => {
+        return (minNuevo <= regla.maxDocentes && maxNuevo >= regla.minDocentes);
+      });
+      if (hayChoque) {
+        return NextResponse.json({ error: 'Rango inválido. Se solapa con otra regla existente.' }, { status: 400 });
+      }
       item = await prisma.reglaTamano.update({
         where: { id: numericId },
-        data: { minDocentes: parseInt(minDocentes), maxDocentes: parseInt(maxDocentes) }
+        data: { minDocentes: minNuevo, maxDocentes: maxNuevo }
       });
+      const todasLasReglas = await prisma.reglaTamano.findMany();
+      const promesasActualizacion = todasLasReglas.map(regla => {
+        return prisma.institution.updateMany({
+          where: {
+            totalDocentes: {
+              gte: regla.minDocentes,
+              lte: regla.maxDocentes,
+            },
+          },
+          data: {
+            tamano: regla.nombre,
+          },
+        });
+      });
+      await Promise.all(promesasActualizacion);
       return NextResponse.json(item);
     }
-
     if (['estadoComercial', 'estadoCliente', 'estadoContrato', 'tipoCobro'].includes(tipo)) {
       const dataUpdate: any = {};
       if (nombre) dataUpdate.nombre = nombre;
       if (typeof activo === 'boolean') dataUpdate.activo = activo;
-
       if (tipo === 'estadoComercial') item = await prisma.estadoComercial.update({ where: { id: numericId }, data: dataUpdate });
       if (tipo === 'estadoCliente') item = await prisma.estadoCliente.update({ where: { id: numericId }, data: dataUpdate });
       if (tipo === 'estadoContrato') item = await prisma.estadoContrato.update({ where: { id: numericId }, data: dataUpdate });
       if (tipo === 'tipoCobro') item = await prisma.tipoCobro.update({ where: { id: numericId }, data: dataUpdate });
-
       return NextResponse.json(item);
     }
-
     const data = { nombre };
     switch (tipo) {
       case 'provincia': item = await prisma.provincia.update({ where: { id: numericId }, data }); break;

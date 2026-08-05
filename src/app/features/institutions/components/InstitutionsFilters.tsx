@@ -52,7 +52,6 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      {/* BARRA PRINCIPAL */}
       <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
         <div className="relative w-full sm:flex-1">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
@@ -79,12 +78,8 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
           </Button>
         )}
       </div>
-
-      {/* PANEL EXPANDIBLE DE FILTROS MULTICRITERIO */}
       {showAdvanced && (
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-3 animate-in fade-in slide-in-from-top-2">
-          
-          {/* Provincia */}
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Provincia</Label>
             <select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={filtros.provinciaId} onChange={e => handleProvinciaChange(e.target.value)}>
@@ -92,8 +87,6 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
               {catalogos?.provincias?.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
           </div>
-
-          {/* Cantón */}
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Cantón</Label>
             <select disabled={!filtros.provinciaId} className="w-full h-9 border rounded-md px-2 text-xs bg-white disabled:bg-gray-100" value={filtros.cantonId} onChange={e => handleCantonChange(e.target.value)}>
@@ -101,8 +94,6 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
               {cantonesDisponibles.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </div>
-
-          {/* Parroquia */}
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Parroquia</Label>
             <select disabled={!filtros.cantonId} className="w-full h-9 border rounded-md px-2 text-xs bg-white disabled:bg-gray-100" value={filtros.parroquiaId} onChange={e => setFiltros({ ...filtros, parroquiaId: e.target.value })}>
@@ -110,8 +101,6 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
               {parroquiasDisponibles.map((parr: any) => <option key={parr.id} value={parr.id}>{parr.nombre}</option>)}
             </select>
           </div>
-
-          {/* Tamaño */}
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Tamaño de Institución</Label>
             <select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={filtros.tamano} onChange={e => setFiltros({ ...filtros, tamano: e.target.value })}>
@@ -121,8 +110,6 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
               <option value="Grande">Grande</option>
             </select>
           </div>
-
-          {/* Estado Comercial */}
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Estado Comercial</Label>
             <select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={filtros.estado} onChange={e => setFiltros({ ...filtros, estado: e.target.value })}>
@@ -132,8 +119,6 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
               <option value="Visitada">Visitada</option>
             </select>
           </div>
-
-          {/* Sostenimiento */}
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Sostenimiento</Label>
             <select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={filtros.sostenimientoId} onChange={e => setFiltros({ ...filtros, sostenimientoId: e.target.value })}>
@@ -141,8 +126,6 @@ export function InstitutionsFilters({ filtros, setFiltros, onReset }: Props) {
               {catalogos?.sostenimientos?.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
           </div>
-
-          {/* Vendedor Responsable */}
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Vendedor Asignado</Label>
             <select className="w-full h-9 border rounded-md px-2 text-xs bg-white" value={filtros.vendedorId} onChange={e => setFiltros({ ...filtros, vendedorId: e.target.value })}>
