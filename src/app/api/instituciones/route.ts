@@ -15,42 +15,77 @@ export async function GET(request: Request) {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (token) {
-      try {
-        await jwtVerify(token, JWT_SECRET);
-      } catch (e) {
-        console.error("Token inválido:", e);
+      try { await jwtVerify(token, JWT_SECRET); } catch (e) { console.error("Token inválido:", e); }
+    }
+
+    const { searchParams } = new URL(request.url);
+
+    // 1. RECOGER PARÁMETROS DE PAGINACIÓN
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '15'); // 99999 si es exportación Excel
+    const skip = (page - 1) * limit;
+
+    // 2. RECOGER TODOS LOS FILTROS
+    const search = searchParams.get('search') || '';
+    const provinciaId = searchParams.get('provinciaId');
+    const cantonId = searchParams.get('cantonId');
+    const parroquiaId = searchParams.get('parroquiaId');
+    const tamano = searchParams.get('tamano');
+    const estado = searchParams.get('estado');
+    const sostenimientoId = searchParams.get('sostenimientoId');
+    const filtroVendedor = searchParams.get('vendedorId');
+
+    // 3. ARMAR LA BÚSQUEDA DINÁMICA DE PRISMA (WHERE)
+    const where: any = {};
+
+    if (search) {
+      where.nombre = { contains: search, mode: 'insensitive' };
+    }
+
+    if (provinciaId || cantonId || parroquiaId) {
+      where.parroquia = {};
+      if (parroquiaId) {
+        where.parroquia.id = parseInt(parroquiaId);
+      } else if (cantonId) {
+        where.parroquia.cantonId = parseInt(cantonId);
+      } else if (provinciaId) {
+        where.parroquia.canton = { provinciaId: parseInt(provinciaId) };
       }
     }
-    const { searchParams } = new URL(request.url);
-    const cantonId = searchParams.get('cantonId');
-    const filtroVendedor = searchParams.get('vendedorId');
-    const where: any = {};
+
+    if (tamano) where.tamano = tamano;
+    if (estado) where.estadoComercial = estado;
+    if (sostenimientoId) where.sostenimientoId = parseInt(sostenimientoId);
+
     if (filtroVendedor === 'sin_asignar') {
       where.vendedorId = null;
     } else if (filtroVendedor) {
       where.vendedorId = filtroVendedor; 
     }
 
-    if (cantonId) {
-      where.parroquia = { cantonId: parseInt(cantonId) };
-    }
-    
-    const instituciones = await prisma.institution.findMany({
-      where,
-      include: {
-        parroquia: { include: { canton: { include: { provincia: true } } } },
-        sostenimiento: true,
-        jornada: true,
-        nivelEducativo: true,
-        area: true,
-        regimen: true,
-        jurisdiccion: true,
-        modalidad: true,
-        accesoEdificio: true,
-        vendedor: { select: { id: true, nombre: true, email: true } }
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // 4. 🔥 MAGIA DE ALTO RENDIMIENTO: Contar y Buscar al mismo tiempo 🔥
+    // Prisma ejecuta esto directo en PostgreSQL. Solo viajan por la red los 15 registros.
+    const [total, instituciones] = await Promise.all([
+      prisma.institution.count({ where }),
+      prisma.institution.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          parroquia: { include: { canton: { include: { provincia: true } } } },
+          sostenimiento: true,
+          jornada: true,
+          nivelEducativo: true,
+          area: true,
+          regimen: true,
+          jurisdiccion: true,
+          modalidad: true,
+          accesoEdificio: true,
+          vendedor: { select: { id: true, nombre: true, email: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+    ]);
     
     const dataFormateada = instituciones.map((inst) => ({
       id: inst.id,
@@ -80,7 +115,16 @@ export async function GET(request: Request) {
       vendedorNombre: inst.vendedor ? inst.vendedor.nombre : 'Sin Asignar'
     }));
     
-    return NextResponse.json(dataFormateada);
+    // Devolvemos el array de datos y el conteo total para dibujar los botones
+    return NextResponse.json({
+      data: dataFormateada,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
   } catch (error) {
     return NextResponse.json({ error: 'Error al obtener las instituciones' }, { status: 500 });
   }

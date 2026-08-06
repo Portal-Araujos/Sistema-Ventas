@@ -26,6 +26,8 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
   const [tiposCobro, setTiposCobro] = useState<any[]>([]);
   const [estadosCliente, setEstadosCliente] = useState<any[]>([]);
   const [estadosContrato, setEstadosContrato] = useState<any[]>([]);
+  const [tiposGestion, setTiposGestion] = useState<any[]>([]);
+  const [estadosComerciales, setEstadosComerciales] = useState<any[]>([]);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [coordenadas, setCoordenadas] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
   const [busqueda, setBusqueda] = useState('');
@@ -62,6 +64,8 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
         if (data.tiposCobro) setTiposCobro(data.tiposCobro);
         if (data.estadosCliente) setEstadosCliente(data.estadosCliente);
         if (data.estadosContrato) setEstadosContrato(data.estadosContrato);
+        if (data.tiposGestion) setTiposGestion(data.tiposGestion); 
+        if (data.estadosComerciales) setEstadosComerciales(data.estadosComerciales);
       });
     } else {
       setCoordenadas({ lat: null, lng: null });
@@ -223,27 +227,36 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
               </div>
             )}
           </div>
-          {/* SECCIÓN 3: DATOS DE LA GESTIÓN (ESTADOS ALINEADOS AL EMBUDO) */}
+          {/* SECCIÓN 3: DATOS DE LA GESTIÓN DINÁMICOS */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-xs font-bold">Tipo de Gestión *</Label>
-              <select className="w-full h-10 border rounded-md px-3 text-sm bg-white" value={formData.tipoGestion} onChange={e => setFormData({ ...formData, tipoGestion: e.target.value })}>
-                <option value="Presencial">Presencial (Física)</option>
-                <option value="Llamada">Llamada Telefónica</option>
-                <option value="Reunión Virtual">Reunión Virtual</option>
+              <Label className="text-xs font-bold text-primary">Tipo de Gestión (Acción) *</Label>
+              <select 
+                className="w-full h-10 border rounded-md px-3 text-sm bg-white" 
+                value={formData.tipoGestion} 
+                onChange={e => setFormData({ ...formData, tipoGestion: e.target.value })}
+              >
+                <option value="">Seleccione...</option>
+                {tiposGestion.filter(t => t.activo).map(t => (
+                  <option key={t.id} value={t.nombre}>{t.nombre}</option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">
-              <Label className="text-xs font-bold">Estado del Cliente *</Label>
+              {/* 🔥 TITULO ACLARADO PARA EL EMBUDO DE AGENDA 🔥 */}
+              <Label className="text-xs font-bold text-primary">Resultado de la Visita *</Label>
               <select 
                 className="w-full h-10 border rounded-md px-3 text-sm font-semibold bg-white" 
                 value={formData.estadoGestion} 
                 onChange={e => setFormData({ ...formData, estadoGestion: e.target.value })}
-                disabled={huboVenta} // Si hay venta, el estado se bloquea en Visitada
+                disabled={huboVenta} 
               >
-                <option value="Visitada" className="text-[#34c759]">✅ Visitada (Gestión Completada)</option>
-                <option value="Seguimiento" className="text-[#ff9500]">⏳ Requiere Seguimiento</option>
-                <option value="No interesado" className="text-[#ff3b30]">❌ No interesado (Cerrado)</option>
+                <option value="">Seleccione resultado...</option>
+                {estadosComerciales.filter(e => e.activo).map(e => (
+                  <option key={e.id} value={e.nombre}>
+                    {e.nombre}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -306,7 +319,7 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
                           </div>
                           <div className="grid grid-cols-3 gap-2 border-t border-emerald-100 pt-2">
                             <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select value={venta.tipoCobroId} onChange={(e) => handleVentaChange(index, 'tipoCobroId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{tiposCobro.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Cliente</Label><select value={venta.estadoClienteId} onChange={(e) => handleVentaChange(index, 'estadoClienteId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosCliente.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
+                            <div><Label className="text-[10px] font-bold text-emerald-800 uppercase">Est. Entrega Venta</Label><select value={venta.estadoClienteId} onChange={(e) => handleVentaChange(index, 'estadoClienteId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosCliente.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
                             <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Contrato</Label><select value={venta.estadoContratoId} onChange={(e) => handleVentaChange(index, 'estadoContratoId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosContrato.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
                           </div>
                         </div>

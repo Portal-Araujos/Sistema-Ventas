@@ -23,28 +23,25 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const [institutions, setInstitutions] = useState<any[]>([]);
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [catalogos, setCatalogos] = useState<any>(null);
+  
+  // ESTADOS DE PAGINACIÓN SERVER-SIDE
   const [loading, setLoading] = useState(true);
-
-  // PAGINACIÓN TABLA (15)
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 15;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
-  const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => {
-    setToastMsg({ tipo, texto });
-    setTimeout(() => setToastMsg(null), 5000); 
-  };
+  const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => { setToastMsg({ tipo, texto }); setTimeout(() => setToastMsg(null), 5000); };
 
   const [assignModal, setAssignModal] = useState<{ open: boolean; instId: string; instNombre: string; vendedorIdActual: string }>({ open: false, instId: '', instNombre: '', vendedorIdActual: '' });
   const [selectedVendedor, setSelectedVendedor] = useState('');
   const [savingAssign, setSavingAssign] = useState(false);
 
-  // EDICIÓN FULL CAMPOS
   const [editModal, setEditModal] = useState<{ open: boolean; inst: any }>({ open: false, inst: null });
   const [editFormData, setEditFormData] = useState<any>({});
   const [savingEdit, setSavingEdit] = useState(false);
-  
-  // Estados para Cascada de Edición
   const [editProvincia, setEditProvincia] = useState('');
   const [editCanton, setEditCanton] = useState('');
   const [editCantones, setEditCantones] = useState<any[]>([]);
@@ -63,35 +60,60 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const [importProgress, setImportProgress] = useState({ actual: 0, total: 0 });
   const [duplicateModal, setDuplicateModal] = useState({ open: false, duplicadosCount: 0, nuevosCount: 0 });
 
-  const fetchInstituciones = async () => {
+  // 🔥 LA NUEVA FUNCIÓN OPTIMIZADA 🔥
+  const fetchInstituciones = async (isSilent = false) => {
+    // Si estamos en la carga inicial, forzamos a que no sea silenciosa para poder destrabar la pantalla
+    const modoSilencioso = loading ? false : isSilent;
+
+    if (!modoSilencioso) setLoading(true);
+    else setIsRefreshing(true);
+
     try {
-      const [resInst, resVend, resCat] = await Promise.all([ fetch('/api/instituciones'), fetch('/api/usuarios/vendedores'), fetch('/api/catalogos') ]);
-      setInstitutions(await resInst.json());
-      setVendedores(await resVend.json());
-      setCatalogos(await resCat.json());
-    } catch (error) {} finally { setLoading(false); }
+      const params = new URLSearchParams();
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
+
+      if (filtros.search) params.append('search', filtros.search);
+      if (filtros.provinciaId) params.append('provinciaId', filtros.provinciaId);
+      if (filtros.cantonId) params.append('cantonId', filtros.cantonId);
+      if (filtros.parroquiaId) params.append('parroquiaId', filtros.parroquiaId);
+      if (filtros.tamano) params.append('tamano', filtros.tamano);
+      if (filtros.estado) params.append('estado', filtros.estado);
+      if (filtros.sostenimientoId) params.append('sostenimientoId', filtros.sostenimientoId);
+      if (filtros.vendedorId) params.append('vendedorId', filtros.vendedorId);
+
+      const resInst = await fetch(`/api/instituciones?${params.toString()}`);
+      if (!resInst.ok) throw new Error('Error al traer instituciones');
+      const instData = await resInst.json();
+      
+      setInstitutions(instData.data || []);
+      setTotalItems(instData.meta?.total || 0);
+
+      // Carga eficiente: Solo pedimos catálogos si no los tenemos en memoria
+      if (vendedores.length === 0) {
+        const resVend = await fetch('/api/usuarios/vendedores');
+        setVendedores(await resVend.json());
+      }
+      if (!catalogos) {
+        const resCat = await fetch('/api/catalogos');
+        setCatalogos(await resCat.json());
+      }
+
+    } catch (error) { 
+      showToast('error', 'Error de conexión.');
+    } finally { 
+      // 🔥 EL TRUCO: Siempre apagamos el loading principal para liberar la pantalla
+      setLoading(false);
+      setIsRefreshing(false);
+    }
   };
 
-  useEffect(() => { fetchInstituciones(); }, []);
+  // Resetear a la página 1 cuando cambian los filtros
   useEffect(() => { setCurrentPage(1); }, [filtros]);
 
-  const filteredInstitutions = institutions.filter((inst) => {
-    if (filtros.search && !inst.nombre.toLowerCase().includes(filtros.search.toLowerCase())) return false;
-    if (filtros.provinciaId && inst.provinciaId !== parseInt(filtros.provinciaId)) return false;
-    if (filtros.cantonId && inst.cantonId !== parseInt(filtros.cantonId)) return false;
-    if (filtros.parroquiaId && inst.parroquiaId !== parseInt(filtros.parroquiaId)) return false;
-    if (filtros.tamano && inst.tamano !== filtros.tamano) return false;
-    if (filtros.estado && inst.estado !== filtros.estado) return false;
-    if (filtros.sostenimientoId && inst.sostenimientoId !== parseInt(filtros.sostenimientoId)) return false;
-    if (filtros.vendedorId) {
-      if (filtros.vendedorId === 'sin_asignar' && inst.vendedorId !== null) return false;
-      if (filtros.vendedorId !== 'sin_asignar' && inst.vendedorId !== filtros.vendedorId) return false;
-    }
-    return true;
-  });
+  // Vigilar los cambios para pedir los datos a la BD
+  useEffect(() => { fetchInstituciones(true); }, [currentPage, filtros]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredInstitutions.length / itemsPerPage));
-  const currentInstitutions = filteredInstitutions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleGuardarAsignacion = async () => {
     setSavingAssign(true);
@@ -100,7 +122,8 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       if (!res.ok) throw new Error();
       setAssignModal({ open: false, instId: '', instNombre: '', vendedorIdActual: '' });
       showToast('exito', 'Vendedor asignado correctamente.');
-      fetchInstituciones();
+      
+      fetchInstituciones(true); // SILENT FETCH - Cero parpadeos
     } catch (e) { showToast('error', 'Error al asignar.'); } finally { setSavingAssign(false); }
   };
 
@@ -136,8 +159,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
 
   const handleGuardarEdicion = async () => {
     if (!editFormData.parroquiaId || !editFormData.sostenimientoId || !editFormData.jornadaId) {
-      showToast('error', 'Provincia, Cantón, Parroquia, Sostenimiento y Jornada son obligatorios.');
-      return;
+      showToast('error', 'Provincia, Cantón, Parroquia, Sostenimiento y Jornada son obligatorios.'); return;
     }
     setSavingEdit(true);
     try {
@@ -145,13 +167,13 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       if (!res.ok) throw new Error();
       setEditModal({ open: false, inst: null });
       showToast('exito', 'Institución actualizada con éxito.');
-      fetchInstituciones();
-    } catch (e) { showToast('error', 'Error al guardar los cambios.'); } finally { setSavingEdit(false); }
+      
+      fetchInstituciones(true); // SILENT FETCH
+    } catch (e) { showToast('error', 'Error al guardar.'); } finally { setSavingEdit(false); }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result; const wb = XLSX.read(bstr, { type: 'binary' }); const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
@@ -182,53 +204,67 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     };
     reader.readAsBinaryString(file);
   };
-  const handleExportarExcel = () => {
-    if (institutions.length === 0) {
+
+  const handleExportarExcel = async () => {
+    if (totalItems === 0) {
       showToast('alerta', 'No hay datos para exportar.');
       return;
     }
+    showToast('exito', 'Generando Excel, por favor espera...');
     
-    // Mapeamos los datos al formato que verá el gerente
-    const dataToExport = institutions.map(inst => ({
-      'ID Interno': inst.id,
-      'Nombre Institución': inst.nombre,
-      'Provincia': inst.provincia,
-      'Cantón': inst.canton,
-      'Parroquia': inst.parroquia,
-      'Sostenimiento': inst.sostenimiento,
-      'Jornada': inst.jornada,
-      'Nivel Educativo': inst.nivelEducativo,
-      'Área': inst.area,
-      'Régimen': inst.regimen,
-      'Docentes Hombres': inst.docentesHombres,
-      'Docentes Mujeres': inst.docentesMujeres,
-      'Total Docentes': inst.docentes,
-      'Tamaño Calculado': inst.tamano,
-      'Estado Comercial': inst.estado,
-      'Vendedor Responsable': inst.vendedorNombre
-    }));
+    try {
+      const params = new URLSearchParams();
+      params.append('limit', '99999'); // Hack para pedirle al server todas las escuelas de golpe
+      if (filtros.search) params.append('search', filtros.search);
+      if (filtros.provinciaId) params.append('provinciaId', filtros.provinciaId);
+      if (filtros.cantonId) params.append('cantonId', filtros.cantonId);
+      if (filtros.parroquiaId) params.append('parroquiaId', filtros.parroquiaId);
+      if (filtros.tamano) params.append('tamano', filtros.tamano);
+      if (filtros.estado) params.append('estado', filtros.estado);
+      if (filtros.sostenimientoId) params.append('sostenimientoId', filtros.sostenimientoId);
+      if (filtros.vendedorId) params.append('vendedorId', filtros.vendedorId);
 
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Instituciones");
-    XLSX.writeFile(wb, "Reporte_Base_Instituciones.xlsx");
-    
-    showToast('exito', 'Excel descargado exitosamente.');
+      const res = await fetch(`/api/instituciones?${params.toString()}`);
+      const instData = await res.json();
+      const exportList = instData.data || [];
+
+      const dataToExport = exportList.map((inst: any) => ({
+        'ID Interno': inst.id,
+        'Nombre Institución': inst.nombre,
+        'Provincia': inst.provincia,
+        'Cantón': inst.canton,
+        'Parroquia': inst.parroquia,
+        'Sostenimiento': inst.sostenimiento,
+        'Jornada': inst.jornada,
+        'Nivel Educativo': inst.nivelEducativo,
+        'Área': inst.area,
+        'Régimen': inst.regimen,
+        'Docentes Hombres': inst.docentesHombres,
+        'Docentes Mujeres': inst.docentesMujeres,
+        'Total Docentes': inst.docentes,
+        'Tamaño Calculado': inst.tamano,
+        'Estado Comercial': inst.estado,
+        'Vendedor Responsable': inst.vendedorNombre
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Instituciones");
+      XLSX.writeFile(wb, "Reporte_Instituciones_Filtrado.xlsx");
+      
+    } catch (e) {
+      showToast('error', 'Hubo un error al generar el archivo Excel.');
+    }
   };
 
   const getTransformedData = () => {
-    return excelData.map(row => ({
-      nombre: row[mapping.nombre], provincia: row[mapping.provincia], canton: row[mapping.canton], parroquia: row[mapping.parroquia], sostenimiento: mapping.sostenimiento ? row[mapping.sostenimiento] : null, jornada: mapping.jornada ? row[mapping.jornada] : null, docentesHombres: mapping.docentesHombres ? row[mapping.docentesHombres] : 0, docentesMujeres: mapping.docentesMujeres ? row[mapping.docentesMujeres] : 0, totalDocentes: mapping.totalDocentes ? row[mapping.totalDocentes] : 0, nivelEducativo: mapping.nivelEducativo ? row[mapping.nivelEducativo] : null, area: mapping.area ? row[mapping.area] : null, regimen: mapping.regimen ? row[mapping.regimen] : null, jurisdiccion: mapping.jurisdiccion ? row[mapping.jurisdiccion] : null, modalidad: mapping.modalidad ? row[mapping.modalidad] : null, accesoEdificio: mapping.accesoEdificio ? row[mapping.accesoEdificio] : null,
-    }));
+    return excelData.map(row => ({ nombre: row[mapping.nombre], provincia: row[mapping.provincia], canton: row[mapping.canton], parroquia: row[mapping.parroquia], sostenimiento: mapping.sostenimiento ? row[mapping.sostenimiento] : null, jornada: mapping.jornada ? row[mapping.jornada] : null, docentesHombres: mapping.docentesHombres ? row[mapping.docentesHombres] : 0, docentesMujeres: mapping.docentesMujeres ? row[mapping.docentesMujeres] : 0, totalDocentes: mapping.totalDocentes ? row[mapping.totalDocentes] : 0, nivelEducativo: mapping.nivelEducativo ? row[mapping.nivelEducativo] : null, area: mapping.area ? row[mapping.area] : null, regimen: mapping.regimen ? row[mapping.regimen] : null, jurisdiccion: mapping.jurisdiccion ? row[mapping.jurisdiccion] : null, modalidad: mapping.modalidad ? row[mapping.modalidad] : null, accesoEdificio: mapping.accesoEdificio ? row[mapping.accesoEdificio] : null, }));
   };
 
   const ejecutarImportacion = async () => {
-    if (!mapping.nombre || !mapping.provincia || !mapping.canton || !mapping.parroquia) {
-      showToast('error', "Debes mapear al menos el Nombre, Provincia, Cantón y Parroquia."); return;
-    }
+    if (!mapping.nombre || !mapping.provincia || !mapping.canton || !mapping.parroquia) { showToast('error', "Faltan mapear columnas obligatorias."); return; }
     setIsImporting(true); setImportProgress({ actual: 0, total: excelData.length });
-    const dataTransformada = getTransformedData();
-    const chunkSize = 500; let procesados = 0, totalNuevos = 0, totalDuplicados = 0;
+    const dataTransformada = getTransformedData(); const chunkSize = 500; let procesados = 0, totalNuevos = 0, totalDuplicados = 0;
 
     for (let i = 0; i < dataTransformada.length; i += chunkSize) {
       const chunk = dataTransformada.slice(i, i + chunkSize);
@@ -242,10 +278,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     }
     setIsImporting(false); setImportModal(false);
     if (totalDuplicados > 0) { setDuplicateModal({ open: true, duplicadosCount: totalDuplicados, nuevosCount: totalNuevos });
-    } else {
-      showToast('exito', `¡Terminado! ${totalNuevos} escuelas creadas correctamente.`);
-      fetchInstituciones(); if (onRefreshNeeded) onRefreshNeeded();
-    }
+    } else { showToast('exito', `¡Terminado! ${totalNuevos} escuelas creadas correctamente.`); fetchInstituciones(false); if (onRefreshNeeded) onRefreshNeeded(); }
   };
 
   const ejecutarActualizacionDuplicados = async () => {
@@ -259,12 +292,13 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
         procesados += chunk.length; setImportProgress({ actual: procesados, total: excelData.length });
       } catch (error) { showToast('error', `Error de red actualizando.`); setIsUpdating(false); return; }
     }
-    setIsUpdating(false); setImportModal(false); showToast('exito', `¡Base de datos actualizada con los nuevos datos!`);
-    fetchInstituciones(); if (onRefreshNeeded) onRefreshNeeded();
+    setIsUpdating(false); setImportModal(false); showToast('exito', `¡Base actualizada con nuevos datos!`);
+    fetchInstituciones(false); if (onRefreshNeeded) onRefreshNeeded();
   };
 
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
-  if (loading) return <div className="p-8 text-center text-secondary">Cargando base de datos...</div>;
+  
+  if (loading) return <div className="p-12 text-center text-secondary font-semibold animate-pulse">Descargando registros desde la base de datos...</div>;
 
   return (
     <>
@@ -280,8 +314,17 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
             </Button>
           </div>
         )}
-        <div className="w-full bg-card rounded-xl shadow-sm border border-border overflow-x-auto">
-          <Table>
+
+        <div className="w-full bg-card rounded-xl shadow-sm border border-border overflow-x-auto relative">
+          
+          {/* Pequeño indicador visual de Silent Fetch */}
+          {isRefreshing && (
+            <div className="absolute top-0 left-0 w-full h-1 bg-primary/20 overflow-hidden z-10">
+              <div className="h-full bg-primary animate-pulse w-1/3 rounded-full"></div>
+            </div>
+          )}
+
+          <Table className={isRefreshing ? 'opacity-70 transition-opacity duration-300' : 'transition-opacity duration-300'}>
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="font-semibold text-foreground">Institución</TableHead>
@@ -293,7 +336,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentInstitutions.map((inst) => (
+              {institutions.map((inst) => (
                 <TableRow key={inst.id} className="hover:bg-muted/30">
                   <TableCell>
                     <div className="font-semibold text-foreground text-sm">{inst.nombre}</div>
@@ -337,23 +380,23 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
                   </TableCell>
                 </TableRow>
               ))}
-              {filteredInstitutions.length === 0 && (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-secondary">No se encontraron escuelas.</TableCell></TableRow>
+              {institutions.length === 0 && !isRefreshing && (
+                <TableRow><TableCell colSpan={6} className="text-center py-8 text-secondary">No se encontraron escuelas con estos filtros.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
 
-          {/* PAGINACIÓN DE 15 EN 15 */}
+          {/* PAGINACIÓN DE SERVER-SIDE */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-border flex justify-between items-center bg-muted/30">
               <span className="text-xs text-muted-foreground font-medium">
-                Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredInstitutions.length)} de {filteredInstitutions.length}
+                Mostrando página {currentPage} de {totalPages} ({totalItems} totales)
               </span>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || isRefreshing}>
                   <ChevronLeft size={14} className="mr-1" /> Anterior
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || isRefreshing}>
                   Siguiente <ChevronRight size={14} className="ml-1" />
                 </Button>
               </div>
@@ -427,6 +470,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
             <DialogFooter className="mt-5 flex gap-2 justify-end"><Button variant="outline" onClick={() => { setDuplicateModal({ open: false, duplicadosCount: 0, nuevosCount: 0 }); showToast('exito', 'Importación finalizada.'); fetchInstituciones(); if (onRefreshNeeded) onRefreshNeeded(); }} className="text-gray-500">No, dejarlas como están</Button><Button className="bg-amber-500 hover:bg-amber-600 text-white font-bold" onClick={ejecutarActualizacionDuplicados}>Sí, Actualizar Datos</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+      
       </div>
 
       {toastMsg && (

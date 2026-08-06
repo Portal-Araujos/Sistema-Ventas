@@ -6,73 +6,93 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 model Provincia {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique
-  cantones  Canton[]
+  id       Int       @id @default(autoincrement())
+  nombre   String    @unique
+  activo   Boolean   @default(true) 
+  cantones Canton[]
   @@map("provincias")
 }
+
 model Canton {
-  id           Int         @id @default(autoincrement())
-  provinciaId  Int         @map("provincia_id")
-  nombre       String
-  provincia    Provincia   @relation(fields: [provinciaId], references: [id], onDelete: Cascade)
-  parroquias   Parroquia[]
+  id          Int         @id @default(autoincrement())
+  provinciaId Int         @map("provincia_id")
+  nombre      String
+  activo      Boolean     @default(true) 
+  provincia   Provincia   @relation(fields: [provinciaId], references: [id], onDelete: Cascade)
+  parroquias  Parroquia[]
   @@map("cantones")
 }
+
 model Parroquia {
-  id           Int           @id @default(autoincrement())
-  cantonId     Int           @map("canton_id")
-  nombre       String
-  canton       Canton        @relation(fields: [cantonId], references: [id], onDelete: Cascade)
+  id            Int           @id @default(autoincrement())
+  cantonId      Int           @map("canton_id")
+  nombre        String
+  activo        Boolean       @default(true) 
+  canton        Canton        @relation(fields: [cantonId], references: [id], onDelete: Cascade)
   instituciones Institution[]
   @@map("parroquias")
 }
-// --- CATÁLOGOS DINÁMICOS ---
+
 model Sostenimiento {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
+  activo        Boolean       @default(true) 
   instituciones Institution[]
   @@map("sostenimientos")
 }
+
 model Jornada {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
+  activo        Boolean       @default(true)
   instituciones Institution[]
   @@map("jornadas")
 }
+
 model NivelEducativo {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
+  activo        Boolean       @default(true)
   instituciones Institution[]
   @@map("niveles_educativos")
 }
+
 model AreaEducativa {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
+  activo        Boolean       @default(true) 
   instituciones Institution[]
   @@map("areas_educativas")
 }
+
 model RegimenEscolar {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
+  activo        Boolean       @default(true) 
   instituciones Institution[]
   @@map("regimenes_escolares")
 }
+
 model Jurisdiccion {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
+  activo        Boolean       @default(true)
   instituciones Institution[]
   @@map("jurisdicciones")
 }
+
 model ModalidadEducativa {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
+  activo        Boolean       @default(true) 
   instituciones Institution[]
   @@map("modalidades_educativas")
 }
+
 model AccesoEdificio {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
+  activo        Boolean       @default(true) 
   instituciones Institution[]
   @@map("accesos_edificio")
 }
@@ -246,4 +266,10 @@ model MetaVendedor {
   updatedAt   DateTime @updatedAt @map("updated_at")
   @@unique    ([vendedorId, semanaAnio])
   @@map       ("metas_vendedores")
+}
+model TipoGestion {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @unique
+  activo    Boolean  @default(true)
+  @@map("tipos_gestion")
 }

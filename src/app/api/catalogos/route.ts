@@ -62,6 +62,14 @@ export async function GET() {
       tiposCobro = await prisma.tipoCobro.findMany({ orderBy: { id: 'asc' } });
     }
 
+    let tiposGestion = await prisma.tipoGestion.findMany({ orderBy: { id: 'asc' } });
+    if (tiposGestion.length === 0) {
+      await prisma.tipoGestion.createMany({
+        data: [{ nombre: 'Presencial' }, { nombre: 'Llamada Telefónica' }, { nombre: 'Reunión Virtual' }, { nombre: 'WhatsApp / Email' }]
+      });
+      tiposGestion = await prisma.tipoGestion.findMany({ orderBy: { id: 'asc' } });
+    }
+
     return NextResponse.json({
       userRol,
       userPermisos,
@@ -78,7 +86,8 @@ export async function GET() {
       estadosComerciales,
       estadosCliente,
       estadosContrato,
-      tiposCobro
+      tiposCobro,
+      tiposGestion
     });
   } catch (error) {
     return NextResponse.json({ error: 'Error al cargar catálogos' }, { status: 500 });
@@ -115,6 +124,7 @@ export async function POST(request: Request) {
       case 'estadoCliente': return NextResponse.json(await prisma.estadoCliente.create({ data: { nombre, activo: true } }), { status: 201 });
       case 'estadoContrato': return NextResponse.json(await prisma.estadoContrato.create({ data: { nombre, activo: true } }), { status: 201 });
       case 'tipoCobro': return NextResponse.json(await prisma.tipoCobro.create({ data: { nombre, activo: true } }), { status: 201 });
+      case 'tipoGestion': return NextResponse.json(await prisma.tipoGestion.create({ data: { nombre, activo: true } }), { status: 201 });
       default: return NextResponse.json({ error: 'Tipo de catálogo no válido' }, { status: 400 });
     }
   } catch (error) {
@@ -127,96 +137,53 @@ export async function PUT(request: Request) {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
 
     const body = await request.json();
     const { id, tipo, nombre, minDocentes, maxDocentes, activo } = body;
-
     if (!id) return NextResponse.json({ error: 'ID es requerido' }, { status: 400 });
 
     let item;
     const numericId = parseInt(id);
 
-    // 🔥 LA MAGIA: EL MOTOR DE RECÁLCULO Y VALIDACIÓN DE SOLAPAMIENTOS 🔥
+    // 1. REGLA DE TAMAÑO (Esta sigue teniendo su propia lógica por el recálculo masivo)
     if (tipo === 'reglaTamano') {
-      const minNuevo = parseInt(minDocentes);
-      const maxNuevo = parseInt(maxDocentes);
+      const minNuevo = parseInt(minDocentes); const maxNuevo = parseInt(maxDocentes);
+      const reglasActuales = await prisma.reglaTamano.findMany({ where: { id: { not: numericId } } });
+      const hayChoque = reglasActuales.some(regla => (minNuevo <= regla.maxDocentes && maxNuevo >= regla.minDocentes));
+      if (hayChoque) return NextResponse.json({ error: 'Rango inválido. Se solapa.' }, { status: 400 });
 
-      // 1. VALIDACIÓN BACKEND (Evitar choques)
-      const reglasActuales = await prisma.reglaTamano.findMany({
-        where: { id: { not: numericId } }
-      });
-
-      const hayChoque = reglasActuales.some(regla => {
-        return (minNuevo <= regla.maxDocentes && maxNuevo >= regla.minDocentes);
-      });
-
-      if (hayChoque) {
-        return NextResponse.json({ error: 'Rango inválido. Se solapa con otra regla existente.' }, { status: 400 });
-      }
-
-      // 2. Guardamos la nueva regla Y EL NOMBRE CORREGIDO
-      item = await prisma.reglaTamano.update({
-        where: { id: numericId },
-        data: { 
-          nombre: nombre, // AHORA ACTUALIZA EL NOMBRE
-          minDocentes: minNuevo, 
-          maxDocentes: maxNuevo 
-        }
-      });
-
-      // 3. Ejecutamos el barrido masivo en la Base de Datos
+      item = await prisma.reglaTamano.update({ where: { id: numericId }, data: { nombre, minDocentes: minNuevo, maxDocentes: maxNuevo } });
       const todasLasReglas = await prisma.reglaTamano.findMany();
-      const promesasActualizacion = todasLasReglas.map(regla => {
-        return prisma.institution.updateMany({
-          where: {
-            totalDocentes: {
-              gte: regla.minDocentes,
-              lte: regla.maxDocentes,
-            },
-          },
-          data: {
-            tamano: regla.nombre, // Le pega la etiqueta corregida a todas las escuelas
-          },
-        });
-      });
-
-      await Promise.all(promesasActualizacion);
+      await Promise.all(todasLasReglas.map(regla => prisma.institution.updateMany({ where: { totalDocentes: { gte: regla.minDocentes, lte: regla.maxDocentes } }, data: { tamano: regla.nombre } })));
       return NextResponse.json(item);
     }
 
-    if (['estadoComercial', 'estadoCliente', 'estadoContrato', 'tipoCobro'].includes(tipo)) {
-      const dataUpdate: any = {};
-      if (nombre) dataUpdate.nombre = nombre;
-      if (typeof activo === 'boolean') dataUpdate.activo = activo;
+    // 2. 🔥 LÓGICA UNIVERSAL PARA TODOS LOS DEMÁS CATÁLOGOS (Nombre + Soft Delete) 🔥
+    const dataUpdate: any = {};
+    if (nombre) dataUpdate.nombre = nombre;
+    if (typeof activo === 'boolean') dataUpdate.activo = activo;
 
-      if (tipo === 'estadoComercial') item = await prisma.estadoComercial.update({ where: { id: numericId }, data: dataUpdate });
-      if (tipo === 'estadoCliente') item = await prisma.estadoCliente.update({ where: { id: numericId }, data: dataUpdate });
-      if (tipo === 'estadoContrato') item = await prisma.estadoContrato.update({ where: { id: numericId }, data: dataUpdate });
-      if (tipo === 'tipoCobro') item = await prisma.tipoCobro.update({ where: { id: numericId }, data: dataUpdate });
-
-      return NextResponse.json(item);
-    }
-
-    const data = { nombre };
     switch (tipo) {
-      case 'provincia': item = await prisma.provincia.update({ where: { id: numericId }, data }); break;
-      case 'canton': item = await prisma.canton.update({ where: { id: numericId }, data }); break;
-      case 'parroquia': item = await prisma.parroquia.update({ where: { id: numericId }, data }); break;
-      case 'nivel': item = await prisma.nivelEducativo.update({ where: { id: numericId }, data }); break;
-      case 'area': item = await prisma.areaEducativa.update({ where: { id: numericId }, data }); break;
-      case 'regimen': item = await prisma.regimenEscolar.update({ where: { id: numericId }, data }); break;
-      case 'jurisdiccion': item = await prisma.jurisdiccion.update({ where: { id: numericId }, data }); break;
-      case 'modalidad': item = await prisma.modalidadEducativa.update({ where: { id: numericId }, data }); break;
-      case 'acceso': item = await prisma.accesoEdificio.update({ where: { id: numericId }, data }); break;
-      case 'sostenimiento': item = await prisma.sostenimiento.update({ where: { id: numericId }, data }); break;
-      case 'jornada': item = await prisma.jornada.update({ where: { id: numericId }, data }); break;
+      case 'provincia': item = await prisma.provincia.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'canton': item = await prisma.canton.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'parroquia': item = await prisma.parroquia.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'nivel': item = await prisma.nivelEducativo.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'area': item = await prisma.areaEducativa.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'regimen': item = await prisma.regimenEscolar.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'jurisdiccion': item = await prisma.jurisdiccion.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'modalidad': item = await prisma.modalidadEducativa.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'acceso': item = await prisma.accesoEdificio.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'sostenimiento': item = await prisma.sostenimiento.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'jornada': item = await prisma.jornada.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'estadoComercial': item = await prisma.estadoComercial.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'estadoCliente': item = await prisma.estadoCliente.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'estadoContrato': item = await prisma.estadoContrato.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'tipoCobro': item = await prisma.tipoCobro.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'tipoGestion': item = await prisma.tipoGestion.update({ where: { id: numericId }, data: dataUpdate }); break;
       default: return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 });
     }
     return NextResponse.json(item);
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al actualizar elemento' }, { status: 500 });
-  }
+  } catch (error) { return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 }); }
 }

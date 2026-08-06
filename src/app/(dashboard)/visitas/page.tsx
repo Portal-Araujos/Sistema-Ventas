@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  MapPin, Search, Filter, Download, DollarSign, Clock, Calendar, CheckCircle2
+  MapPin, Search, Filter, Download, DollarSign, Clock, Calendar, CheckCircle2, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +14,17 @@ import { Label } from '@/components/ui/label';
 export default function VisitasPage() {
   const [visitas, setVisitas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false); // Para Silent Fetch
   const [catalogos, setCatalogos] = useState<any>(null);
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [instituciones, setInstituciones] = useState<any[]>([]);
+
+  // Paginación de la Tabla de Visitas
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalMonto, setTotalMonto] = useState(0); // Sumatoria total que viene del backend
+  const itemsPerPage = 15;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
   // Filtros (Por defecto carga el mes actual)
   const fechaEcuador = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
@@ -31,8 +39,11 @@ export default function VisitasPage() {
     vendedorId: ''
   });
 
-  const cargarDatos = async () => {
-    setLoading(true);
+  const cargarDatos = async (isSilent = false) => {
+    const modoSilencioso = loading ? false : isSilent;
+    if (!modoSilencioso) setLoading(true);
+    else setIsRefreshing(true);
+
     try {
       const params = new URLSearchParams();
       if (filtros.fechaInicio) params.append('fechaInicio', filtros.fechaInicio);
@@ -40,182 +51,231 @@ export default function VisitasPage() {
       if (filtros.cantonId) params.append('cantonId', filtros.cantonId);
       if (filtros.institucionId) params.append('institucionId', filtros.institucionId);
       if (filtros.vendedorId) params.append('vendedorId', filtros.vendedorId);
+      
+      // Enviamos paginación a la API de Visitas (Si tu backend de visitas ya lo soporta, si no, igual no estorba)
+      params.append('page', currentPage.toString());
+      params.append('limit', itemsPerPage.toString());
 
-      const [resVisitas, resCat, resInst, resVend] = await Promise.all([
-        fetch(`/api/visitas?${params.toString()}`),
-        fetch('/api/catalogos'),
-        fetch('/api/instituciones'),
-        fetch('/api/usuarios/vendedores')
-      ]);
+      // Solo pedimos los catálogos y vendedores la primera vez para no saturar la red
+      const fetchPromises = [fetch(`/api/visitas?${params.toString()}`)];
+      
+      if (!catalogos) fetchPromises.push(fetch('/api/catalogos'));
+      if (instituciones.length === 0) fetchPromises.push(fetch('/api/instituciones?limit=500')); // Limit 500 para el select
+      if (vendedores.length === 0) fetchPromises.push(fetch('/api/usuarios/vendedores'));
 
-      setVisitas(await resVisitas.json());
-      setCatalogos(await resCat.json());
-      setInstituciones(await resInst.json());
-      setVendedores(await resVend.json());
+      const responses = await Promise.all(fetchPromises);
+      
+      const resVisitas = await responses[0].json();
+      
+      // Adaptamos por si el backend devuelve un arreglo directo o el formato {data, meta}
+      if (Array.isArray(resVisitas)) {
+        // Fallback: Si el backend aún no está paginado, paginamos en el cliente temporalmente
+        setTotalItems(resVisitas.length);
+        const paginatedData = resVisitas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+        setVisitas(paginatedData);
+        setTotalMonto(resVisitas.reduce((sum: number, v: any) => sum + (v.totalVendido || 0), 0));
+      } else {
+        setVisitas(resVisitas.data || []);
+        setTotalItems(resVisitas.meta?.total || 0);
+        setTotalMonto(resVisitas.meta?.totalGenerado || 0);
+      }
+
+      if (!catalogos) setCatalogos(await responses[1].json());
+      if (instituciones.length === 0) {
+        const instJson = await responses[2].json();
+        // 🔥 AQUÍ CORREGIMOS EL ERROR: Si es el objeto paginado extraemos la 'data', si no, es el arreglo
+        setInstituciones(instJson.data ? instJson.data : instJson);
+      }
+      if (vendedores.length === 0) setVendedores(await responses[3].json());
+
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
-  useEffect(() => { cargarDatos(); }, [filtros]);
+  useEffect(() => { setCurrentPage(1); }, [filtros]);
+  useEffect(() => { cargarDatos(true); }, [currentPage, filtros]);
 
-  // --- LÓGICA DE EXPORTACIÓN A EXCEL ---
-  const handleExportExcel = () => {
-    if (visitas.length === 0) {
-      alert("No hay datos para exportar.");
+  // --- LÓGICA DE EXPORTACIÓN A EXCEL INTELIGENTE ---
+  const handleExportExcel = async () => {
+    if (totalItems === 0) {
+      alert("No hay datos para exportar en este rango de fechas.");
       return;
     }
 
-    // Formatear columnas para que el Excel quede hermoso y profesional
-    const dataParaExcel = visitas.map(v => ({
-      'Fecha': v.fecha,
-      'Hora GPS': v.hora,
-      'Vendedor': v.vendedor,
-      'Provincia': v.provincia,
-      'Cantón': v.canton,
-      'Institución': v.institucion,
-      'Tipo de Gestión': v.tipoGestion,
-      'Resultado/Acuerdos': v.resumen,
-      'Contratos Cerrados': v.ventasRegistradas,
-      'Monto Vendido ($)': v.totalVendido,
-      'Números de Contrato': v.detallesContratos,
-      'Ubicación GPS': v.latitud ? `https://maps.google.com/?q=${v.latitud},${v.longitud}` : 'Sin GPS'
-    }));
+    try {
+      // Para exportar pedimos TODOS los datos sin límite de paginación
+      const params = new URLSearchParams();
+      if (filtros.fechaInicio) params.append('fechaInicio', filtros.fechaInicio);
+      if (filtros.fechaFin) params.append('fechaFin', filtros.fechaFin);
+      if (filtros.cantonId) params.append('cantonId', filtros.cantonId);
+      if (filtros.institucionId) params.append('institucionId', filtros.institucionId);
+      if (filtros.vendedorId) params.append('vendedorId', filtros.vendedorId);
+      params.append('limit', '99999'); // Hack para pedir todo de golpe
 
-    const ws = XLSX.utils.json_to_sheet(dataParaExcel);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Auditoría de Visitas");
-    XLSX.writeFile(wb, `Reporte_Consolidado_Visitas_Ventas_${hoyStr}.xlsx`);
+      const res = await fetch(`/api/visitas?${params.toString()}`);
+      const dataFull = await res.json();
+      const visitasFull = Array.isArray(dataFull) ? dataFull : dataFull.data || [];
+
+      const dataParaExcel = visitasFull.map((v: any) => ({
+        'Fecha': v.fecha,
+        'Hora GPS': v.hora,
+        'Vendedor': v.vendedor,
+        'Provincia': v.provincia,
+        'Cantón': v.canton,
+        'Institución': v.institucion,
+        'Tipo de Gestión': v.tipoGestion,
+        'Resultado/Acuerdos': v.resumen,
+        'Contratos Cerrados': v.ventasRegistradas,
+        'Monto Vendido ($)': v.totalVendido,
+        'Números de Contrato': v.detallesContratos,
+        'Ubicación GPS': v.latitud ? `https://maps.google.com/?q=${v.latitud},${v.longitud}` : 'Sin GPS'
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataParaExcel);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Auditoría de Visitas");
+      XLSX.writeFile(wb, `Reporte_Consolidado_Visitas_${hoyStr}.xlsx`);
+    } catch (e) {
+      alert("Hubo un error al generar el archivo Excel.");
+    }
   };
 
   const cantonesDisponibles = catalogos?.provincias?.flatMap((p: any) => p.cantones) || [];
-  const totalGenerado = visitas.reduce((sum, v) => sum + v.totalVendido, 0);
 
   return (
-    <div className="p-4 md:p-8 flex flex-col gap-6  min-h-screen">
+    <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-background">
       
       {/* CABECERA */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-            <MapPin className="text-primary" /> Auditoría de Campo y Ventas
+          <h1 className="text-h1 flex items-center gap-2">
+            <MapPin className="text-primary" /> Auditoría de Campo y Seguimientos
           </h1>
-          <p className="text-xs md:text-sm text-gray-500 mt-0.5">
-            Reporte consolidado que cruza las visitas GPS con los contratos de ventas generados.
+          <p className="text-secondary mt-0.5">
+            Reporte consolidado que cruza las visitas en ruta con los contratos de ventas generados.
           </p>
         </div>
 
         <Button onClick={handleExportExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md">
-          <Download size={18} className="mr-2" /> Descargar Excel
+          <Download size={18} className="mr-2" /> Descargar Todo a Excel
         </Button>
       </div>
-
-      {/* BARRA DE FILTROS */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-wrap items-end gap-3">
+      <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex flex-wrap items-end gap-3">
         <div>
-          <Label className="text-[11px] font-bold text-gray-500">Desde Fecha</Label>
-          <Input type="date" className="h-9 text-xs w-36 mt-1" value={filtros.fechaInicio} onChange={e => setFiltros({...filtros, fechaInicio: e.target.value})} />
+          <Label className="text-[11px] font-bold text-muted-foreground uppercase">Desde Fecha</Label>
+          <Input type="date" className="h-9 text-xs w-36 mt-1 bg-white" value={filtros.fechaInicio} onChange={e => setFiltros({...filtros, fechaInicio: e.target.value})} />
         </div>
         <div>
-          <Label className="text-[11px] font-bold text-gray-500">Hasta Fecha</Label>
-          <Input type="date" className="h-9 text-xs w-36 mt-1" value={filtros.fechaFin} onChange={e => setFiltros({...filtros, fechaFin: e.target.value})} />
+          <Label className="text-[11px] font-bold text-muted-foreground uppercase">Hasta Fecha</Label>
+          <Input type="date" className="h-9 text-xs w-36 mt-1 bg-white" value={filtros.fechaFin} onChange={e => setFiltros({...filtros, fechaFin: e.target.value})} />
         </div>
         <div>
-          <Label className="text-[11px] font-bold text-gray-500">Cantón</Label>
-          <select className="h-9 border rounded-md px-2 text-xs bg-white mt-1 w-32" value={filtros.cantonId} onChange={e => setFiltros({...filtros, cantonId: e.target.value, institucionId: ''})}>
+          <Label className="text-[11px] font-bold text-muted-foreground uppercase">Cantón</Label>
+          <select className="h-9 border rounded-md px-2 text-xs bg-white mt-1 w-32 outline-none" value={filtros.cantonId} onChange={e => setFiltros({...filtros, cantonId: e.target.value, institucionId: ''})}>
             <option value="">Todos</option>
             {cantonesDisponibles.map((c: any) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </div>
         <div>
-          <Label className="text-[11px] font-bold text-gray-500">Institución</Label>
-          <select className="h-9 border rounded-md px-2 text-xs bg-white mt-1 w-40" value={filtros.institucionId} onChange={e => setFiltros({...filtros, institucionId: e.target.value})}>
+          <Label className="text-[11px] font-bold text-muted-foreground uppercase">Institución</Label>
+          <select className="h-9 border rounded-md px-2 text-xs bg-white mt-1 w-48 outline-none" value={filtros.institucionId} onChange={e => setFiltros({...filtros, institucionId: e.target.value})}>
             <option value="">Todas</option>
             {instituciones.filter(i => !filtros.cantonId || i.cantonId === parseInt(filtros.cantonId)).map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}
           </select>
         </div>
         {catalogos?.userRol !== 'vendedor' && (
           <div>
-            <Label className="text-[11px] font-bold text-gray-500">Vendedor</Label>
-            <select className="h-9 border rounded-md px-2 text-xs bg-white mt-1 w-36" value={filtros.vendedorId} onChange={e => setFiltros({...filtros, vendedorId: e.target.value})}>
-              <option value="">Todos</option>
+            <Label className="text-[11px] font-bold text-muted-foreground uppercase">Vendedor</Label>
+            <select className="h-9 border rounded-md px-2 text-xs bg-white mt-1 w-40 outline-none" value={filtros.vendedorId} onChange={e => setFiltros({...filtros, vendedorId: e.target.value})}>
+              <option value="">Todos los vendedores</option>
               {vendedores.map((v: any) => <option key={v.id} value={v.id}>{v.nombre}</option>)}
             </select>
           </div>
         )}
       </div>
-
-      {/* MÉTRICAS RÁPIDAS DEL REPORTE */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-          <div><p className="text-xs font-bold text-gray-400">VISITAS EN RANGO</p><h3 className="text-xl font-bold">{visitas.length}</h3></div>
-          <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center"><Calendar size={20} /></div>
+        <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center justify-between transition-transform hover:-translate-y-1">
+          <div><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">TOTAL VISITAS RANGO</p><h3 className="text-2xl font-extrabold text-foreground">{totalItems}</h3></div>
+          <div className="h-10 w-10 bg-primary/10 text-primary rounded-lg flex items-center justify-center"><Calendar size={20} /></div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-          <div><p className="text-xs font-bold text-gray-400">CIERRES (VENTAS)</p><h3 className="text-xl font-bold text-emerald-600">{visitas.filter(v => v.ventasRegistradas > 0).length}</h3></div>
+        <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center justify-between transition-transform hover:-translate-y-1">
+          <div><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">CIERRES EN RUTA</p><h3 className="text-2xl font-extrabold text-emerald-600">{visitas.filter(v => v.ventasRegistradas > 0).length}</h3></div>
           <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center"><CheckCircle2 size={20} /></div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between sm:col-span-2">
-          <div><p className="text-xs font-bold text-gray-400">MONTO TOTAL CERRADO EN ESTAS VISITAS</p><h3 className="text-xl font-extrabold text-emerald-700">${totalGenerado.toFixed(2)}</h3></div>
+        <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center justify-between sm:col-span-2 transition-transform hover:-translate-y-1">
+          <div><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">MONTO TOTAL CERRADO EN ESTAS VISITAS</p><h3 className="text-2xl font-black text-emerald-700">${totalMonto.toFixed(2)}</h3></div>
           <div className="h-10 w-10 bg-emerald-100 text-emerald-700 rounded-lg flex items-center justify-center"><DollarSign size={20} /></div>
         </div>
       </div>
 
       {/* TABLA CONSOLIDADA */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
-        <Table>
-          <TableHeader className="bg-gray-50/80">
+      <div className="bg-card rounded-xl shadow-sm border border-border overflow-x-auto relative">
+        
+        {/* Indicador de Silent Fetch */}
+        {isRefreshing && (
+          <div className="absolute top-0 left-0 w-full h-1 bg-primary/20 overflow-hidden z-10">
+            <div className="h-full bg-primary animate-pulse w-1/3 rounded-full"></div>
+          </div>
+        )}
+
+        <Table className={isRefreshing ? 'opacity-80 transition-opacity' : 'transition-opacity'}>
+          <TableHeader className="bg-muted/50">
             <TableRow>
-              <TableHead className="font-semibold text-gray-700">Fecha y Hora</TableHead>
-              <TableHead className="font-semibold text-gray-700">Gestión en Campo</TableHead>
-              <TableHead className="font-semibold text-gray-700">Resultado de la Visita</TableHead>
-              <TableHead className="font-semibold text-gray-700 text-center bg-emerald-50/50">Venta Cerrada</TableHead>
+              <TableHead className="font-semibold text-foreground w-150px">Fecha y Hora</TableHead>
+              <TableHead className="font-semibold text-foreground w-220px">Gestión en Campo</TableHead>
+              <TableHead className="font-semibold text-foreground min-w-250px">Resultado de la Visita</TableHead>
+              <TableHead className="font-semibold text-foreground text-center bg-emerald-50/50 w-180px">Venta Cerrada</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? <TableRow><TableCell colSpan={4} className="text-center py-8">Buscando y cruzando datos...</TableCell></TableRow> : 
-             visitas.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-8">No hay visitas registradas en este periodo.</TableCell></TableRow> : 
+            {loading ? <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground font-semibold">Cruzando datos con geolocalización...</TableCell></TableRow> : 
+             visitas.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground">No hay visitas registradas con los filtros actuales.</TableCell></TableRow> : 
              visitas.map((v, i) => (
-              <TableRow key={i} className="hover:bg-gray-50">
+              <TableRow key={i} className="hover:bg-muted/30">
                 
                 {/* FECHA Y HORA */}
-                <TableCell>
-                  <div className="font-bold text-gray-900 text-xs">{v.fecha}</div>
-                  <div className="text-[10px] text-gray-500 flex items-center gap-1 mt-0.5"><Clock size={10} /> {v.hora}</div>
+                <TableCell className="align-top pt-4">
+                  <div className="font-bold text-foreground text-xs">{v.fecha}</div>
+                  <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5"><Clock size={10} /> {v.hora}</div>
                   {v.latitud && (
                     <a href={`http://maps.google.com/?q=${v.latitud},${v.longitud}`} target="_blank" className="text-[10px] text-primary font-bold hover:underline mt-1 block">📍 Ver Mapa GPS</a>
                   )}
                 </TableCell>
 
                 {/* GESTIÓN EN CAMPO */}
-                <TableCell>
-                  <div className="font-bold text-gray-900 text-sm">{v.institucion}</div>
-                  <div className="text-[10px] text-gray-500 mb-1">{v.provincia} / {v.canton}</div>
-                  <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700">{v.tipoGestion}</Badge>
-                  <div className="text-xs font-semibold text-gray-700 mt-1">👤 {v.vendedor}</div>
+                <TableCell className="align-top pt-4">
+                  <div className="font-bold text-foreground text-sm leading-tight">{v.institucion}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 mb-1.5">{v.provincia} / {v.canton}</div>
+                  <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200">{v.tipoGestion}</Badge>
+                  <div className="text-xs font-semibold text-foreground mt-2">👤 {v.vendedor}</div>
                 </TableCell>
 
                 {/* RESULTADO (MOTIVO) */}
-                <TableCell className="max-w-xs">
-                  <div className="text-xs text-gray-800 whitespace-pre-wrap overflow-wrap:anywhere leading-relaxed bg-gray-50 p-2 rounded-lg border border-gray-100">
+                <TableCell className="max-w-xs align-top pt-4">
+                  <div className="text-xs font-bold text-foreground mb-1">{v.estadoGestion}</div>
+                  <div className="text-[11px] text-muted-foreground whitespace-pre-wrap overflow-wrap:anywhere leading-relaxed bg-muted/30 p-2 rounded-lg border border-border">
                     {v.resumen}
                   </div>
                 </TableCell>
 
-                {/* VENTA CERRADA (LA MAGIA) */}
-                <TableCell className="text-center bg-emerald-50/20">
+                {/* VENTA CERRADA (LA MAGIA COMPACTA) */}
+                <TableCell className={`text-center align-top pt-4 ${v.ventasRegistradas > 0 ? 'bg-emerald-50/30' : ''}`}>
                   {v.ventasRegistradas > 0 ? (
                     <div className="flex flex-col items-center justify-center">
-                      <span className="text-sm font-extrabold text-emerald-600">${v.totalVendido.toFixed(2)}</span>
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold mt-1">
+                      <span className="text-sm font-extrabold text-emerald-600">${v.totalVendido?.toFixed(2)}</span>
+                      <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold mt-1 mb-1">
                         {v.ventasRegistradas} Contrato(s)
                       </span>
-                      <span className="text-[9px] text-gray-500 mt-1 font-mono">Ref: {v.detallesContratos}</span>
+                      <span className="text-[9px] text-muted-foreground mt-0.5 font-mono leading-tight max-w-full truncate" title={v.detallesContratos}>
+                        Ref: {v.detallesContratos}
+                      </span>
                     </div>
                   ) : (
-                    <span className="text-xs font-medium text-gray-400 italic">No hubo venta</span>
+                    <span className="text-xs font-medium text-muted-foreground italic mt-3 block">No hubo venta</span>
                   )}
                 </TableCell>
 
@@ -223,6 +283,23 @@ export default function VisitasPage() {
             ))}
           </TableBody>
         </Table>
+
+        {/* CONTROLES DE PAGINACIÓN */}
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-border flex justify-between items-center bg-muted/30">
+            <span className="text-xs text-muted-foreground font-medium">
+              Mostrando página {currentPage} de {totalPages} ({totalItems} registros)
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || isRefreshing}>
+                <ChevronLeft size={14} className="mr-1" /> Anterior
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || isRefreshing}>
+                Siguiente <ChevronRight size={14} className="ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>

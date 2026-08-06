@@ -30,17 +30,24 @@ export default function AgendaPage() {
   const [modalVisita, setModalVisita] = useState<{ open: boolean; inst: any; isLibre: boolean }>({ 
     open: false, inst: null, isLibre: false 
   });
-  const cargarAgenda = async () => {
-    setLoading(true);
+  // 🔥 AÑADIMOS EL PARÁMETRO "isSilent" 🔥
+  const cargarAgenda = async (isSilent = false) => {
+    // Si NO es silencioso (ej: primera vez que entra), mostramos el "Cargando..."
+    if (!isSilent) {
+      setLoading(true);
+    }
+    
     try {
       let url = '/api/agenda?';
       if (selectedVendedor) url += `vendedorId=${selectedVendedor}&`;
       if (fechaDesde) url += `fechaDesde=${fechaDesde}&`;
       if (fechaHasta) url += `fechaHasta=${fechaHasta}&`;
+
       const [resAgenda, resCat, resVend] = await Promise.all([ fetch(url), fetch('/api/catalogos'), fetch('/api/usuarios/vendedores') ]);
       const dataAgenda = await resAgenda.json();
       const dataCat = await resCat.json();
       const dataVend = await resVend.json();
+
       setPendientes(dataAgenda.pendientes || []);
       setRealizadas(dataAgenda.realizadas || []);
       setCatalogos(dataCat);
@@ -49,10 +56,13 @@ export default function AgendaPage() {
     } catch (e) {
       console.error("Error:", e);
     } finally {
-      setLoading(false);
+      // Solo apagamos el loading si lo encendimos nosotros
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
   };
-  useEffect(() => { cargarAgenda(); }, [selectedVendedor, fechaDesde, fechaHasta]);
+  useEffect(() => { cargarAgenda(false); }, [selectedVendedor, fechaDesde, fechaHasta]);
   useEffect(() => { setCurrentPage(1); }, [tabActiva, searchTerm, selectedProvincia, selectedCanton]);
   const getStatusColor = (status: string) => {
     const s = status?.toLowerCase() || '';
@@ -227,8 +237,6 @@ export default function AgendaPage() {
           </div>
         </div>
       )}
-
-      {/* 🔥 AQUÍ INYECTAMOS TU COMPONENTE MODULAR 🔥 */}
       <VisitaGPSForm 
         isOpen={modalVisita.open}
         onOpenChange={(val) => setModalVisita({ ...modalVisita, open: val })}
@@ -238,7 +246,7 @@ export default function AgendaPage() {
           nombre: modalVisita.inst.nombreInstitucion,
           canton: modalVisita.inst.canton
         } : null}
-        onSuccess={cargarAgenda} 
+        onSuccess={() => cargarAgenda(true)} 
       />
 
     </div>
