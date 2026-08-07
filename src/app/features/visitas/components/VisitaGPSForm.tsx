@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, Navigation, Save, AlertCircle, Plus, Clock,Trash2, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { MapPin, CheckCircle, Navigation, Save, AlertCircle, Plus, Clock, Trash2, ChevronDown, ChevronUp, Search, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -14,8 +14,8 @@ interface Props {
   isLibre?: boolean;
   institucionPreseleccionada?: { id: string; nombre: string; canton: string } | null;
 }
-export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true, institucionPreseleccionada = null }: Props) {
-  // Manejo de estado del modal (Interno o Externo)
+
+export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true, institucionPreseleccionada = null }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isOpen !== undefined ? isOpen : internalOpen;
   const setOpen = onOpenChange !== undefined ? onOpenChange : setInternalOpen;
@@ -28,6 +28,8 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
   const [estadosContrato, setEstadosContrato] = useState<any[]>([]);
   const [tiposGestion, setTiposGestion] = useState<any[]>([]);
   const [estadosComerciales, setEstadosComerciales] = useState<any[]>([]);
+  const [catalogoSKU, setCatalogoSKU] = useState<any[]>([]);
+  const [draftPrenda, setDraftPrenda] = useState({ tipoRopa: '', color: '', genero: '', talla: '', cantidad: 1, bordado: '', observacion: '' });
   const [gpsLoading, setGpsLoading] = useState(false);
   const [coordenadas, setCoordenadas] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
   const [busqueda, setBusqueda] = useState('');
@@ -36,14 +38,13 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
   const [formData, setFormData] = useState({
     institucionId: '',
     tipoGestion: 'Presencial',
-    estadoGestion: 'Visitada', // Opciones: Visitada, Seguimiento, No interesado
+    estadoGestion: 'Visitada',
     resumenAcuerdos: '',
     fechaProximoContacto: ''
   });
   const [huboVenta, setHuboVenta] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number>(0);
   const [ventasItem, setVentasItem] = useState<any[]>([]);
-  // Sincronizar escuela preseleccionada si no es visita libre
   useEffect(() => {
     if (!isLibre && institucionPreseleccionada) {
       setFormData(prev => ({ ...prev, institucionId: institucionPreseleccionada.id }));
@@ -51,15 +52,15 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
   }, [isLibre, institucionPreseleccionada, open]);
   useEffect(() => {
     if (huboVenta && ventasItem.length === 0) {
-      setVentasItem([{ numContrato: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '' }]);
+      // 🔥 AÑADIMOS EL ARREGLO VACÍO "prendas" A LA INICIALIZACIÓN
+      setVentasItem([{ numContrato: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', prendas: [] }]);
       setExpandedIndex(0);
-      setFormData(prev => ({ ...prev, estadoGestion: 'Visitada' })); // Si hay venta, se marca como visitada
+      setFormData(prev => ({ ...prev, estadoGestion: 'Visitada' }));
     }
   }, [huboVenta]);
   useEffect(() => {
     if (open) {
-      // Cargamos todas las instituciones en memoria para el buscador ultrarrápido
-      fetch('/api/instituciones').then(res => res.json()).then(data => setInstituciones(data));
+      fetch('/api/instituciones').then(res => res.json()).then(data => setInstituciones(data.data || data));
       fetch('/api/catalogos').then(res => res.json()).then(data => {
         if (data.tiposCobro) setTiposCobro(data.tiposCobro);
         if (data.estadosCliente) setEstadosCliente(data.estadosCliente);
@@ -67,12 +68,16 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
         if (data.tiposGestion) setTiposGestion(data.tiposGestion); 
         if (data.estadosComerciales) setEstadosComerciales(data.estadosComerciales);
       });
+      fetch('/api/pedidos/sku').then(res => res.json()).then(data => {
+        if(data.success && data.raw) setCatalogoSKU(data.raw);
+      }).catch(e => console.log('Sin modulo SKU aún'));
     } else {
       setCoordenadas({ lat: null, lng: null });
       setBusqueda('');
       setResultadosBusqueda([]);
       setHuboVenta(false);
       setVentasItem([]);
+      setDraftPrenda({ tipoRopa: '', color: '', genero: '', talla: '', cantidad: 1, bordado: '', observacion: '' });
       setFormData({ institucionId: '', tipoGestion: 'Presencial', estadoGestion: 'Visitada', resumenAcuerdos: '', fechaProximoContacto: '' });
     }
   }, [open]);
@@ -81,7 +86,7 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
     if (texto.length > 2) {
       const filtrados = instituciones
         .filter(i => i.nombre.toLowerCase().includes(texto.toLowerCase()) || i.canton?.toLowerCase().includes(texto.toLowerCase()))
-        .slice(0, 10); // Solo mostramos los primeros 10 para no saturar la pantalla
+        .slice(0, 10);
       setResultadosBusqueda(filtrados);
       setDropdownBusquedaOpen(true);
     } else {
@@ -106,7 +111,7 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
     setVentasItem(newVentas);
   };
   const addContrato = () => {
-    setVentasItem([...ventasItem, { numContrato: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '' }]);
+    setVentasItem([{ numContrato: '', nombreCliente: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', prendas: [] }]);
     setExpandedIndex(ventasItem.length);
   };
   const removeContrato = (index: number) => {
@@ -123,17 +128,43 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
+  const tiposRopaDisp = [...Array.from(new Set(catalogoSKU.map(s => s.tipoRopa)))];
+  const coloresDisp = [...Array.from(new Set(catalogoSKU.filter(s => s.tipoRopa === draftPrenda.tipoRopa).map(s => s.color)))];
+  const generosDisp = [...Array.from(new Set(catalogoSKU.filter(s => s.tipoRopa === draftPrenda.tipoRopa && s.color === draftPrenda.color).map(s => s.genero)))];
+  const tallasDisp = [...Array.from(new Set(catalogoSKU.filter(s => s.tipoRopa === draftPrenda.tipoRopa && s.color === draftPrenda.color && s.genero === draftPrenda.genero).map(s => s.talla)))];
+  const handleDraftChange = (field: string, value: string) => {
+    setDraftPrenda(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'tipoRopa') { next.color = ''; next.genero = ''; next.talla = ''; }
+      if (field === 'color') { next.genero = ''; next.talla = ''; }
+      if (field === 'genero') { next.talla = ''; }
+      return next;
+    });
+  };
+  const handleAddPrenda = (vIndex: number) => {
+    if (!draftPrenda.tipoRopa || !draftPrenda.color || !draftPrenda.genero || !draftPrenda.talla || draftPrenda.cantidad < 1) {
+      showToast('alerta', 'Por favor completa todos los campos de la prenda (Tipo, Color, Género y Talla).'); return;
+    }
+    const skuObj = catalogoSKU.find(s => s.tipoRopa === draftPrenda.tipoRopa && s.color === draftPrenda.color && s.genero === draftPrenda.genero && s.talla === draftPrenda.talla);
+    const skuCodigo = skuObj ? skuObj.codigo : 'S/COD'; // Fallback
+    const newVentas = [...ventasItem];
+    if (!newVentas[vIndex].prendas) newVentas[vIndex].prendas = [];
+    newVentas[vIndex].prendas.push({ ...draftPrenda, skuCodigo });
+    setVentasItem(newVentas);
+    setDraftPrenda({ ...draftPrenda, talla: '', cantidad: 1, bordado: '', observacion: '' });
+  };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.institucionId) { showToast('alerta', "Selecciona una institución válida."); return; }
-    // El GPS es requerido si es visita presencial (seguridad)
-    if (formData.tipoGestion === 'Presencial' && !coordenadas.lat) { 
-      showToast('alerta', "¡OBLIGATORIO! Captura tu ubicación GPS para visitas físicas."); return; 
-    }
+    if (formData.tipoGestion === 'Presencial' && !coordenadas.lat) { showToast('alerta', "¡OBLIGATORIO! Captura tu ubicación GPS para visitas físicas."); return; }
     if (huboVenta) {
       for (const v of ventasItem) {
         if (!v.numContrato || !v.valorContrato || !v.tipoCobroId) {
           showToast('alerta', "Revisa los contratos. N° Contrato, Monto y Tipo Cobro son obligatorios."); return;
+        }
+        const estadoNombre = estadosCliente.find(e => e.id.toString() === v.estadoClienteId)?.nombre?.toLowerCase();
+        if (estadoNombre === 'pedido' && (!v.prendas || v.prendas.length === 0)) {
+          showToast('error', `El contrato #${v.numContrato} está marcado como "Pedido" pero no tiene prendas en el carrito.`); return;
         }
       }
     }
@@ -143,65 +174,42 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formData,
-          latitud: coordenadas.lat,
-          longitud: coordenadas.lng,
-          huboVenta,
-          ventas: huboVenta ? ventasItem : []
+          ...formData, latitud: coordenadas.lat, longitud: coordenadas.lng, huboVenta, ventas: huboVenta ? ventasItem : []
         })
       });
       if (!res.ok) throw new Error('Error al registrar');
       setOpen(false);
       if (onSuccess) onSuccess();
-      showToast('exito', huboVenta ? "¡Venta Cerrada y Guardada!" : "¡Gestión registrada, misión cumplida!");
+      showToast('exito', huboVenta ? "¡Venta y/o Pedido guardado exitosamente!" : "¡Gestión registrada, misión cumplida!");
     } catch (error) { 
       showToast('error', "Hubo un error al guardar la gestión."); 
-    } finally { 
-      setLoading(false); 
-    }
+    } finally { setLoading(false); }
   };
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        {/* Solo mostramos el Trigger si no lo estamos controlando desde afuera */}
         {isOpen === undefined && (
-          <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-white shadow-sm font-bold flex gap-2"><MapPin size={18} /> Registrar Visita</Button>
-          </DialogTrigger>
+          <DialogTrigger asChild><Button className="bg-primary hover:bg-primary/90 text-white shadow-sm font-bold flex gap-2"><MapPin size={18} /> Registrar Visita</Button></DialogTrigger>
         )}
-        <DialogContent className="sm:max-w-xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[90vh]">
+        <DialogContent className="sm:max-w-2xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <Navigation className="text-primary" /> {isLibre ? 'Registrar Visita Libre' : 'Reporte de Gestión en Ruta'}
           </DialogTitle>
-          <p className="text-xs text-gray-500 mt-1">
-            {isLibre ? 'Busca cualquier escuela y registra tu avance.' : `Institución: ${institucionPreseleccionada?.nombre}`}
-          </p>
+          <p className="text-xs text-gray-500 mt-1">{isLibre ? 'Busca cualquier escuela y registra tu avance.' : `Institución: ${institucionPreseleccionada?.nombre}`}</p>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          {/* SECCIÓN 1: BUSCADOR DE ESCUELA (SOLO SI ES LIBRE) */}
           {isLibre && (
             <div className="space-y-1 relative">
               <Label className="text-xs font-bold text-gray-700">Buscar Institución en Base de Datos *</Label>
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
-                <Input 
-                  placeholder="Ej. Simón Bolívar..." 
-                  className="pl-9 h-10 text-sm bg-gray-50 focus:bg-white"
-                  value={busqueda}
-                  onChange={(e) => handleBuscarEscuela(e.target.value)}
-                  autoComplete="off"
-                />
+                <Input placeholder="Ej. Simón Bolívar..." className="pl-9 h-10 text-sm bg-gray-50 focus:bg-white" value={busqueda} onChange={(e) => handleBuscarEscuela(e.target.value)} autoComplete="off" />
               </div>
-              {/* Dropdown Predictivo */}
               {dropdownBusquedaOpen && resultadosBusqueda.length > 0 && (
                 <ul className="absolute z-50 w-full bg-white border border-gray-200 shadow-xl rounded-lg mt-1 max-h-48 overflow-y-auto">
                   {resultadosBusqueda.map(inst => (
-                    <li 
-                      key={inst.id} 
-                      className="px-4 py-2.5 hover:bg-primary/5 cursor-pointer border-b border-gray-50 last:border-0"
-                      onClick={() => seleccionarEscuelaBuscada(inst)}
-                    >
+                    <li key={inst.id} className="px-4 py-2.5 hover:bg-primary/5 cursor-pointer border-b border-gray-50 last:border-0" onClick={() => seleccionarEscuelaBuscada(inst)}>
                       <p className="text-sm font-bold text-gray-800">{inst.nombre}</p>
                       <p className="text-[10px] text-gray-500">{inst.provincia} / {inst.canton}</p>
                     </li>
@@ -210,7 +218,6 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
               )}
             </div>
           )}
-          {/* SECCIÓN 2: BOTÓN DE GPS */}
           <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl flex flex-col items-center justify-center gap-3">
             {!coordenadas.lat ? (
               <>
@@ -227,47 +234,25 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
               </div>
             )}
           </div>
-          {/* SECCIÓN 3: DATOS DE LA GESTIÓN DINÁMICOS */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-xs font-bold text-primary">Tipo de Gestión (Acción) *</Label>
-              <select 
-                className="w-full h-10 border rounded-md px-3 text-sm bg-white" 
-                value={formData.tipoGestion} 
-                onChange={e => setFormData({ ...formData, tipoGestion: e.target.value })}
-              >
+              <select className="w-full h-10 border rounded-md px-3 text-sm bg-white" value={formData.tipoGestion} onChange={e => setFormData({ ...formData, tipoGestion: e.target.value })}>
                 <option value="">Seleccione...</option>
-                {tiposGestion.filter(t => t.activo).map(t => (
-                  <option key={t.id} value={t.nombre}>{t.nombre}</option>
-                ))}
+                {tiposGestion.filter(t => t.activo).map(t => (<option key={t.id} value={t.nombre}>{t.nombre}</option>))}
               </select>
             </div>
             <div className="space-y-2">
-              {/* 🔥 TITULO ACLARADO PARA EL EMBUDO DE AGENDA 🔥 */}
               <Label className="text-xs font-bold text-primary">Resultado de la Visita *</Label>
-              <select 
-                className="w-full h-10 border rounded-md px-3 text-sm font-semibold bg-white" 
-                value={formData.estadoGestion} 
-                onChange={e => setFormData({ ...formData, estadoGestion: e.target.value })}
-                disabled={huboVenta} 
-              >
+              <select className="w-full h-10 border rounded-md px-3 text-sm font-semibold bg-white" value={formData.estadoGestion} onChange={e => setFormData({ ...formData, estadoGestion: e.target.value })} disabled={huboVenta}>
                 <option value="">Seleccione resultado...</option>
-                {estadosComerciales.filter(e => e.activo).map(e => (
-                  <option key={e.id} value={e.nombre}>
-                    {e.nombre}
-                  </option>
-                ))}
+                {estadosComerciales.filter(e => e.activo).map(e => (<option key={e.id} value={e.nombre}>{e.nombre}</option>))}
               </select>
             </div>
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-bold">Resumen de Acuerdos / Novedades</Label>
-            <textarea 
-              className="w-full min-h-80px border border-gray-300 rounded-md p-3 text-sm focus:ring-primary focus:border-primary outline-none"
-              placeholder="Ej: Se presentó el catálogo. La Rectora pidió que regresemos la próxima semana para firmar..."
-              value={formData.resumenAcuerdos}
-              onChange={e => setFormData({ ...formData, resumenAcuerdos: e.target.value })}
-            />
+            <textarea className="w-full min-h-80px border border-gray-300 rounded-md p-3 text-sm focus:ring-primary focus:border-primary outline-none" placeholder="Ej: Se presentó el catálogo..." value={formData.resumenAcuerdos} onChange={e => setFormData({ ...formData, resumenAcuerdos: e.target.value })} />
           </div>
           <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl">
             <Label className="text-xs font-bold text-amber-800 flex items-center gap-1"><Clock size={14}/> Agendar Próximo Contacto (Opcional)</Label>
@@ -280,35 +265,34 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
               <span className="text-sm font-extrabold text-emerald-800 uppercase tracking-wide">¿Se concretó una venta en esta visita?</span>
             </label>
             {huboVenta && (
-              <div className="space-y-3 mt-3">
+              <div className="space-y-4 mt-3">
                 {ventasItem.map((venta, index) => {
                   const isExpanded = expandedIndex === index;
+                  const estadoNombre = estadosCliente.find(e => e.id.toString() === venta.estadoClienteId)?.nombre?.toLowerCase() || '';
+                  // Detectará si la palabra tiene "pedido" en cualquier parte (ej: "nuevo pedido", "pedido", "pedidos")
+                  const isPedido = estadoNombre.includes('pedido');
                   return (
-                    <div key={index} className={`rounded-xl border transition-all ${isExpanded ? 'bg-emerald-50/40 border-emerald-400 shadow-md' : 'bg-white border-gray-200 hover:border-emerald-200'}`}>
-                      <div className="p-3 flex justify-between items-center cursor-pointer" onClick={() => setExpandedIndex(isExpanded ? -1 : index)}>
+                    <div key={index} className={`rounded-xl border transition-all overflow-hidden ${isExpanded ? 'bg-emerald-50/40 border-emerald-400 shadow-md' : 'bg-white border-gray-200 hover:border-emerald-200'}`}>
+                      <div className="p-3 flex justify-between items-center cursor-pointer bg-white" onClick={() => setExpandedIndex(isExpanded ? -1 : index)}>
                         <div className="flex items-center gap-2">
-                          <span className={`font-bold text-xs ${isExpanded ? 'text-emerald-800' : 'text-gray-700'}`}>
-                            📄 Contrato {venta.numContrato ? `#${venta.numContrato}` : (index + 1)}
-                          </span>
-                          {venta.valorContrato && (
-                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
-                              ${parseFloat(venta.valorContrato).toFixed(2)}
-                            </span>
-                          )}
+                          <span className={`font-bold text-xs ${isExpanded ? 'text-emerald-800' : 'text-gray-700'}`}>📄 Contrato {venta.numContrato ? `#${venta.numContrato}` : (index + 1)}</span>
+                          {venta.valorContrato && <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">${parseFloat(venta.valorContrato).toFixed(2)}</span>}
+                          {isPedido && <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded flex items-center gap-1"><ShoppingCart size={10}/> Pedido: {(venta.prendas || []).length} pz</span>}
                         </div>
                         <div className="flex items-center gap-3">
-                          {ventasItem.length > 1 && (
-                            <button type="button" onClick={(e) => { e.stopPropagation(); removeContrato(index); }} className="text-gray-400 hover:text-red-600 transition-colors">
-                              <Trash2 size={16} />
-                            </button>
-                          )}
+                          {ventasItem.length > 1 && <button type="button" onClick={(e) => { e.stopPropagation(); removeContrato(index); }} className="text-gray-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>}
                           {isExpanded ? <ChevronUp size={16} className="text-emerald-600"/> : <ChevronDown size={16} className="text-gray-400"/>}
                         </div>
                       </div>
+
                       {isExpanded && (
-                        <div className="p-4 pt-1 space-y-3 border-t border-emerald-100 animate-in fade-in">
+                        <div className="p-4 pt-1 space-y-3 border-t border-emerald-100 bg-emerald-50/10">
                           <div className="grid grid-cols-3 gap-2">
                             <div><Label className="text-[10px] font-bold text-gray-700 uppercase">N° Contrato *</Label><Input type="text" value={venta.numContrato} onChange={(e) => handleVentaChange(index, 'numContrato', e.target.value.replace(/\D/g, ''))} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
+                            <div>
+                              <Label className="text-[10px] font-bold text-gray-700 uppercase">Nombre Cliente</Label>
+                              <Input type="text" placeholder="Ej: Pepito Pérez" value={venta.nombreCliente || ''} onChange={(e) => handleVentaChange(index, 'nombreCliente', e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" />
+                            </div>
                             <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Monto Total *</Label><Input type="number" step="0.01" value={venta.valorContrato} onChange={(e) => handleVentaChange(index, 'valorContrato', e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
                             <div><Label className="text-[10px] font-bold uppercase text-blue-700">Abono Inicial</Label><Input type="number" step="0.01" value={venta.abono} onChange={(e) => handleVentaChange(index, 'abono', e.target.value)} className="h-8 text-xs mt-1 bg-white border-blue-200 focus-visible:ring-blue-500" placeholder="0.00" /></div>
                           </div>
@@ -319,9 +303,129 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
                           </div>
                           <div className="grid grid-cols-3 gap-2 border-t border-emerald-100 pt-2">
                             <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select value={venta.tipoCobroId} onChange={(e) => handleVentaChange(index, 'tipoCobroId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{tiposCobro.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-                            <div><Label className="text-[10px] font-bold text-emerald-800 uppercase">Est. Entrega Venta</Label><select value={venta.estadoClienteId} onChange={(e) => handleVentaChange(index, 'estadoClienteId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosCliente.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
+                            <div><Label className="text-[10px] font-bold text-emerald-800 uppercase">Est. Entrega Venta</Label><select value={venta.estadoClienteId} onChange={(e) => handleVentaChange(index, 'estadoClienteId', e.target.value)} className="w-full h-8 border border-emerald-400 bg-emerald-50 rounded-md px-1 text-[10px] font-bold text-emerald-900 mt-1 outline-none"><option value="">Seleccione...</option>{estadosCliente.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
                             <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Contrato</Label><select value={venta.estadoContratoId} onChange={(e) => handleVentaChange(index, 'estadoContratoId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosContrato.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
                           </div>
+                          {isPedido && (
+                            <div className="mt-4 border-t-2 border-blue-200 pt-3 bg-blue-50/50 p-3 rounded-xl">
+                              <h4 className="text-sm font-black text-blue-900 flex items-center gap-2 mb-3">
+                                <ShoppingCart size={16}/> Detalle de Pedido (Prendas)
+                              </h4>
+                              
+                              {/* 1. Mini-formulario de ingreso dinámico */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-3 rounded border border-blue-100 shadow-sm">
+                                <div className="col-span-2">
+                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Tipo Prenda *</Label>
+                                  <select className="w-full h-8 border rounded px-1 text-[10px] bg-white mt-1 outline-none" value={draftPrenda.tipoRopa} onChange={e => handleDraftChange('tipoRopa', e.target.value)}>
+                                    <option value="">Seleccione...</option>
+                                    {tiposRopaDisp.map((t: any) => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                </div>
+                                <div className="col-span-2">
+                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Color *</Label>
+                                  <select disabled={!draftPrenda.tipoRopa} className="w-full h-8 border rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100" value={draftPrenda.color} onChange={e => handleDraftChange('color', e.target.value)}>
+                                    <option value="">Seleccione...</option>
+                                    {coloresDisp.map((c: any) => <option key={c} value={c}>{c}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Género *</Label>
+                                  <select disabled={!draftPrenda.color} className="w-full h-8 border rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100" value={draftPrenda.genero} onChange={e => handleDraftChange('genero', e.target.value)}>
+                                    <option value="">...</option>
+                                    {generosDisp.map((g: any) => <option key={g} value={g}>{g}</option>)}
+                                  </select>
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Talla *</Label>
+                                  <select disabled={!draftPrenda.genero} className="w-full h-8 border rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100" value={draftPrenda.talla} onChange={e => handleDraftChange('talla', e.target.value)}>
+                                    <option value="">...</option>
+                                    {tallasDisp.map((t: any) => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                </div>
+                                <div className="col-span-2 sm:col-span-2">
+                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Cantidad *</Label>
+                                  <div className="flex gap-1 items-center mt-1">
+                                    <Input 
+                                      type="number" 
+                                      min="1" 
+                                      value={draftPrenda.cantidad} 
+                                      onChange={e => setDraftPrenda({...draftPrenda, cantidad: parseInt(e.target.value) || 1})} 
+                                      className="h-8 text-xs font-bold text-center border-blue-300 w-full" 
+                                    />
+                                    <Button 
+                                      type="button" 
+                                      onClick={() => handleAddPrenda(index)} 
+                                      title="Agregar prenda al carrito"
+                                      className="h-8 w-10 shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold p-0 shadow-sm rounded flex items-center justify-center"
+                                    >
+                                      <Plus size={16}/>
+                                    </Button>
+                                  </div>
+                                </div>
+                                <div className="col-span-2">
+                                  <Input type="text" placeholder="Texto de bordado..." value={draftPrenda.bordado} onChange={e => setDraftPrenda({...draftPrenda, bordado: e.target.value})} className="h-8 text-[10px] mt-5 sm:mt-0" />
+                                </div>
+                                <div className="col-span-2">
+                                  <Input type="text" placeholder="Observación..." value={draftPrenda.observacion} onChange={e => setDraftPrenda({...draftPrenda, observacion: e.target.value})} className="h-8 text-[10px] mt-1 sm:mt-0" />
+                                </div>
+                              </div>
+                              {(venta.prendas || []).length > 0 ? (
+                                <div className="mt-3 bg-white rounded border border-gray-200 overflow-x-auto shadow-sm">
+                                  <table className="w-full text-left">
+                                    <thead className="bg-gray-50 border-b text-[10px] text-gray-500 uppercase">
+                                      <tr>
+                                        <th className="p-2 font-bold">Prenda</th>
+                                        <th className="p-2 font-bold text-center">Cant.</th>
+                                        <th className="p-2 font-bold">Detalles</th>
+                                        <th className="p-2 font-bold text-center">Acción</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {venta.prendas.map((p: any, pIndex: number) => (
+                                        <tr key={pIndex} className="hover:bg-gray-50">
+                                          <td className="p-2 text-[10px]">
+                                            <div className="font-bold text-blue-900 leading-tight">{p.tipoRopa} - {p.color}</div>
+                                            <div className="text-gray-500">{p.genero} • Talla: <span className="font-black text-gray-900">{p.talla}</span></div>
+                                            <div className="text-[9px] text-gray-400 font-mono mt-0.5">SKU: {p.skuCodigo}</div>
+                                          </td>
+                                          <td className="p-2 text-center align-middle">
+                                            {/* 🔥 CANTIDAD EDITABLE EN VIVO 🔥 */}
+                                            <Input type="number" min="1" className="h-6 w-12 text-center text-xs font-bold mx-auto border-gray-300" value={p.cantidad} 
+                                              onChange={(e) => {
+                                                const newVentas = [...ventasItem];
+                                                newVentas[index].prendas[pIndex].cantidad = parseInt(e.target.value) || 1;
+                                                setVentasItem(newVentas);
+                                              }} 
+                                            />
+                                          </td>
+                                          <td className="p-2 text-[9px] text-gray-600">
+                                            {p.bordado && <div><span className="font-bold">B:</span> {p.bordado}</div>}
+                                            {p.observacion && <div><span className="font-bold">O:</span> {p.observacion}</div>}
+                                          </td>
+                                          <td className="p-2 text-center">
+                                            <button type="button" onClick={() => {
+                                              const newVentas = [...ventasItem];
+                                              newVentas[index].prendas.splice(pIndex, 1);
+                                              setVentasItem(newVentas);
+                                            }} className="text-red-400 hover:text-red-600 bg-red-50 p-1.5 rounded transition-colors"><Trash2 size={12}/></button>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                      <tr className="bg-blue-50/50">
+                                        <td className="p-2 text-[10px] font-black text-right uppercase text-blue-900">Total Prendas:</td>
+                                        <td className="p-2 text-center font-black text-blue-700">{venta.prendas.reduce((sum: number, p: any) => sum + p.cantidad, 0)}</td>
+                                        <td colSpan={2}></td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : (
+                                <div className="mt-3 text-center py-4 bg-white rounded border border-dashed border-blue-200 text-blue-400 text-xs font-bold">
+                                  Carrito vacío. Agregue las prendas arriba.
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -339,7 +443,6 @@ export function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre = true,
         </form>
         </DialogContent>
       </Dialog>
-      {/* NOTIFICACIONES */}
       {toastMsg && (
         <div className={`fixed bottom-6 right-6 z-10000 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-[#34c759] text-white' : toastMsg.tipo === 'alerta' ? 'bg-[#ff9500] text-white' : 'bg-[#ff3b30] text-white'}`}>
           {toastMsg.tipo === 'exito' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}

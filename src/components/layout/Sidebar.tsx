@@ -3,17 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  Home, Building2, CalendarDays, MapPin, 
-  BarChart2, User, Settings,
-  ChevronLeft, ChevronRight, LogOut, DollarSign, Shield, Menu, X
-} from 'lucide-react';
+import { Home, Building2, CalendarDays, MapPin, BarChart2, User, Settings, ChevronLeft, ChevronRight, LogOut, DollarSign, Shield, Menu, X, Factory, Barcode } from 'lucide-react';
+
 const allMenuItems = [
   { icon: Home, label: 'Inicio', href: '/inicio', permiso: 'inicio:ver' },
   { icon: Building2, label: 'Instituciones', href: '/instituciones', permiso: 'instituciones:ver' },
   { icon: CalendarDays, label: 'Agenda', href: '/agenda', permiso: 'agenda:ver' },
   { icon: DollarSign, label: 'Ventas', href: '/ventas', permiso: 'ventas:ver' },
   { icon: MapPin, label: 'Seguimientos', href: '/visitas', permiso: 'visitas:ver' },
+  { icon: Factory, label: 'Producción', href: '/pedidos', permiso: 'admin_only' },
+  { icon: Barcode, label: 'Catálogo SKU', href: '/configuracion/skus', permiso: 'admin_only' },
   { icon: BarChart2, label: 'Indicadores', href: '/indicadores', permiso: 'indicadores:ver' },
   { icon: Settings, label: 'Configuración', href: '/configuracion', permiso: 'configuracion:ver' },
   { icon: User, label: 'Usuarios', href: '/usuarios', permiso: 'usuarios:gestionar' },
@@ -41,11 +40,12 @@ export function Sidebar() {
     } catch (e) {}
   };
   const menuItems = allMenuItems.filter(item => {
-    if (userRol === 'super_admin') return true;
+    if (userRol === 'super_admin') return true; // El Super Admin ve todo
     if (item.permiso === 'super_admin_only') return false; 
+    // 🔥 Nueva regla: Solo administradores ven Producción y SKUs
+    if (item.permiso === 'admin_only') return userRol === 'administrador'; 
     return userPermisos.includes(item.permiso);
   });
-
   return (
     <>
       <aside className={`hidden md:flex flex-col shrink-0 bg-white border-r border-border transition-all duration-300 sticky top-0 h-screen z-40 ${isCollapsed ? 'w-20' : 'w-64'}`}>

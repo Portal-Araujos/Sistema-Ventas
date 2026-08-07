@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { VisitaGPSForm } from '@/app/features/visitas/components/VisitaGPSForm';
+import VisitaGPSForm from '@/app/features/visitas/components/VisitaGPSForm';
 
 export default function AgendaPage() {
   const router = useRouter();
@@ -30,24 +30,20 @@ export default function AgendaPage() {
   const [modalVisita, setModalVisita] = useState<{ open: boolean; inst: any; isLibre: boolean }>({ 
     open: false, inst: null, isLibre: false 
   });
-  // 🔥 AÑADIMOS EL PARÁMETRO "isSilent" 🔥
   const cargarAgenda = async (isSilent = false) => {
     // Si NO es silencioso (ej: primera vez que entra), mostramos el "Cargando..."
     if (!isSilent) {
       setLoading(true);
     }
-    
     try {
       let url = '/api/agenda?';
       if (selectedVendedor) url += `vendedorId=${selectedVendedor}&`;
       if (fechaDesde) url += `fechaDesde=${fechaDesde}&`;
       if (fechaHasta) url += `fechaHasta=${fechaHasta}&`;
-
       const [resAgenda, resCat, resVend] = await Promise.all([ fetch(url), fetch('/api/catalogos'), fetch('/api/usuarios/vendedores') ]);
       const dataAgenda = await resAgenda.json();
       const dataCat = await resCat.json();
       const dataVend = await resVend.json();
-
       setPendientes(dataAgenda.pendientes || []);
       setRealizadas(dataAgenda.realizadas || []);
       setCatalogos(dataCat);
@@ -56,7 +52,6 @@ export default function AgendaPage() {
     } catch (e) {
       console.error("Error:", e);
     } finally {
-      // Solo apagamos el loading si lo encendimos nosotros
       if (!isSilent) {
         setLoading(false);
       }
@@ -84,7 +79,6 @@ export default function AgendaPage() {
   const itemsPaginados = listaActual.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const cantonesDisponibles = selectedProvincia ? catalogos?.provincias?.find((p: any) => p.id === parseInt(selectedProvincia))?.cantones || [] : [];
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
-
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-background">
       {/* HEADER Y BOTÓN VISITA LIBRE */}
@@ -102,7 +96,6 @@ export default function AgendaPage() {
           <Navigation size={18} className="mr-2" /> Nueva Visita (Libre)
         </Button>
       </div>
-      {/* TABS PRINCIPALES */}
       <div className="flex gap-4 border-b border-border">
         <button 
           onClick={() => setTabActiva('pendientes')} 
@@ -115,11 +108,10 @@ export default function AgendaPage() {
           onClick={() => setTabActiva('realizadas')} 
           className={`pb-3 px-2 text-sm font-bold transition-all border-b-2 ${tabActiva === 'realizadas' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
         >
-          ✅ Visitas Realizadas
+           Visitas Realizadas
           <Badge className="ml-2 bg-muted text-muted-foreground">{realizadas.length}</Badge>
         </button>
       </div>
-      {/* BARRA DE FILTROS Y KPI */}
       <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
           <div className="relative">
@@ -152,7 +144,6 @@ export default function AgendaPage() {
           </div>
         )}
       </div>
-      {/* CUADRÍCULA DE TARJETAS */}
       {loading ? (
         <div className="p-12 text-center text-secondary font-medium">Cargando pipeline...</div>
       ) : itemsPaginados.length === 0 ? (
@@ -191,9 +182,7 @@ export default function AgendaPage() {
                 ) : (
                   <div className="bg-muted p-3 rounded-lg border border-border">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Resumen de esta visita</p>
-                    {/* 🔥 CORREGIDO: resumenAcuerdos */}
                     <p className="text-xs text-foreground line-clamp-2">{item.resumenAcuerdos || 'Sin resumen detallado'}</p> 
-                    {/* 🔥 CORREGIDO: fechaVisitaReal */}
                     <p className="text-[10px] text-emerald-600 font-bold mt-2">
                       Realizada el: {new Date(item.fechaVisitaReal).toLocaleDateString('es-EC')}
                     </p>
@@ -204,8 +193,6 @@ export default function AgendaPage() {
                 <Button variant="outline" size="sm" className="flex-1 text-xs font-bold text-foreground border-border hover:bg-muted" onClick={() => router.push(`/instituciones/${item.institucionId}`)}>
                   <Eye size={14} className="mr-1" /> Ficha Técnica
                 </Button>
-                
-                {/* 🔥 BOTÓN QUE ABRE EL COMPONENTE CON LOS DATOS DE ESTA ESCUELA 🔥 */}
                 {tabActiva === 'pendientes' && (
                   <Button 
                     size="sm" 
@@ -220,8 +207,6 @@ export default function AgendaPage() {
           ))}
         </div>
       )}
-
-      {/* PAGINACIÓN */}
       {totalPages > 1 && (
         <div className="mt-4 p-4 border border-border bg-card rounded-xl flex justify-between items-center shadow-sm">
           <span className="text-xs text-muted-foreground font-bold uppercase tracking-wide">
@@ -237,7 +222,6 @@ export default function AgendaPage() {
           </div>
         </div>
       )}
-
       <VisitaGPSForm 
         isOpen={modalVisita.open}
         onOpenChange={(val) => setModalVisita({ ...modalVisita, open: val })}
@@ -247,10 +231,8 @@ export default function AgendaPage() {
           nombre: modalVisita.inst.nombreInstitucion,
           canton: modalVisita.inst.canton
         } : null}
-        // 🔥 ESTE ES EL TRUCO: Le pasamos TRUE para que recargue sin borrar la pantalla
         onSuccess={() => cargarAgenda(true)} 
       />
-
     </div>
   );
 }

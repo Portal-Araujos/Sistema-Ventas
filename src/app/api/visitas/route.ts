@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
+
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 export async function GET(request: Request) {
@@ -22,7 +23,6 @@ export async function GET(request: Request) {
     const dateEnd = fFin ? new Date(`${fFin}T23:59:59.999-05:00`) : new Date(new Date().setHours(23,59,59,999));
     const instFilters: any = {};
     if (cantonId) instFilters.parroquia = { cantonId: parseInt(cantonId) };
-
     const visitaFilters: any = {
       createdAt: { gte: dateStart, lte: dateEnd },
       institucionId: institucionId ? institucionId : undefined,
@@ -115,7 +115,8 @@ export async function POST(request: Request) {
         longitud,
         fechaProgramada: hoy,
         horaProgramada: String(horaDefecto),
-        fechaProximoContacto: fechaProximo // <-- Guardamos la fecha de seguimiento
+        fechaProximoContacto: fechaProximo,
+        esVisitaLibre: true 
       }
     });
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
@@ -124,7 +125,6 @@ export async function POST(request: Request) {
         const abonoVal = parseFloat(v.abono) || 0;
         const m = parseInt(v.meses) || 1;
         const cuota = parseFloat(v.cuotaMensual) || parseFloat(((valor - abonoVal) / m).toFixed(2));
-
         return prisma.venta.create({
           data: {
             institucionId,
@@ -144,6 +144,33 @@ export async function POST(request: Request) {
         });
       });
       await Promise.all(transaccionesVentas);
+      const transaccionesPedidos = ventas
+        .filter((v: any) => (Array.isArray(v.prendas) && v.prendas.length > 0) || v.nombreCliente)
+        .map((v: any) => {
+          return prisma.pedido.create({
+            data: {
+              institucionId,
+              usuarioId: userId,
+              nombreCliente: v.nombreCliente || `Cliente Contrato #${v.numContrato || 'S/N'}`,
+              observacion: resumenAcuerdos || null,
+              detalles: {
+                create: (v.prendas || []).map((p: any) => ({
+                  skuCodigo: p.skuCodigo || 'S/COD',
+                  tipoRopa: p.tipoRopa,
+                  color: p.color,
+                  genero: p.genero,
+                  talla: p.talla,
+                  cantidad: parseInt(p.cantidad) || 1,
+                  bordado: p.bordado || null,
+                  observacion: p.observacion || null
+                }))
+              }
+            }
+          });
+        });
+      if (transaccionesPedidos.length > 0) {
+        await Promise.all(transaccionesPedidos);
+      }
     }
     await prisma.institution.update({
       where: { id: institucionId },
@@ -152,10 +179,9 @@ export async function POST(request: Request) {
         vendedorId: userId 
       }
     });
-
     return NextResponse.json(nuevaVisita, { status: 201 });
   } catch (error) {
-    console.error("Error guardando visita y ventas:", error);
+    console.error("Error guardando visita, ventas y pedidos:", error);
     return NextResponse.json({ error: 'Error interno al registrar la gestión' }, { status: 500 });
   }
 }

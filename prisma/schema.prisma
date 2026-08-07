@@ -149,6 +149,7 @@ model Usuario {
   visitas                        VisitaAgenda[]
   ventasRealizadas               Venta[]
   metas                          MetaVendedor[]
+  pedidos                        Pedido[]
   @@map("usuarios")
 }
 model Institution {
@@ -186,6 +187,7 @@ model Institution {
   createdAt            DateTime            @default(now()) @map("created_at")
   visitas              VisitaAgenda[]
   ventas               Venta[]
+  pedidos              Pedido[]
   @@map("instituciones")
 }
 model VisitaAgenda {
@@ -273,4 +275,55 @@ model TipoGestion {
   nombre    String   @unique
   activo    Boolean  @default(true)
   @@map("tipos_gestion")
+}
+// =======================================================
+// 🔥 MÓDULO DE PRODUCCIÓN E INVENTARIO (NUEVO) 🔥
+// =======================================================
+
+// 1. Diccionario de Códigos (Para no memorizar los SKUs)
+model CatalogoSKU {
+  id          Int      @id @default(autoincrement())
+  codigo      String   @unique                  // Ej: UN1843
+  tipoRopa    String                            // Ej: CHALECO PREMIUM SA, POLO MAO
+  color       String                            // Ej: AZUL MARINO, NOVA BLANCO
+  genero      String                            // Ej: HOMBRE, MUJER, UNISEX
+  talla       String                            // Ej: XS, S, M, L, XL...
+  activo      Boolean  @default(true)
+  @@map("catalogo_sku")
+}
+
+// 2. Cabecera del Pedido (La ficha del cliente "Pepito")
+model Pedido {
+  id                String          @id @default(uuid())
+  institucionId     String          @map("institucion_id")
+  usuarioId         String          @map("usuario_id") // El vendedor que tomó el pedido
+  nombreCliente     String          @map("nombre_cliente") // Ej: Pepito Pérez
+  fechaPedido       DateTime        @default(now()) @map("fecha_pedido")
+  estado            String          @default("Pendiente") // Pendiente, En Confección, Entregado
+  observacion       String?         @db.Text
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  // Relaciones
+  institucion       Institution     @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  usuario           Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  detalles          DetallePedido[] // El carrito de ropa de Pepito
+
+  @@map("pedidos")
+}
+
+model DetallePedido {
+  id                String   @id @default(uuid())
+  pedidoId          String   @map("pedido_id")
+  skuCodigo         String   @map("sku_codigo") // El sistema lo pegará aquí (Ej: UN1843)
+  tipoRopa          String   @map("tipo_ropa")  // Ej: CHALECO PREMIUM
+  color             String
+  genero            String   // HOMBRE, MUJER, UNISEX
+  talla             String
+  cantidad          Int      // Ej: 3
+  bordado           String?  @db.Text // Ej: "Pepito P."
+  observacion       String?  @db.Text // Ej: "Hacerlo un poco más largo"
+  pedido            Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@map("detalles_pedido")
 }
