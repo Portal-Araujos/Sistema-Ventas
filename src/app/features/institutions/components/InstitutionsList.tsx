@@ -3,7 +3,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
-import { Eye, Pencil, UserCheck, Save, Upload, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+// 🔥 SE AGREGARON: CalendarPlus y Route para los iconos de rutas masivas
+import { Eye, Pencil, UserCheck, Save, Upload, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Download, CalendarPlus, Route } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -31,6 +32,12 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 15;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
+  // 🔥 NUEVOS ESTADOS: SISTEMA DE CHECKBOXES Y RUTAS 🔥
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [rutaModal, setRutaModal] = useState({ open: false, isAllFiltered: false });
+  const [rutaData, setRutaData] = useState({ vendedorId: '', fecha: '', hora: '08:30' });
+  const [savingRuta, setSavingRuta] = useState(false);
 
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => { setToastMsg({ tipo, texto }); setTimeout(() => setToastMsg(null), 5000); };
@@ -108,11 +115,78 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     }
   };
 
-  // Resetear a la página 1 cuando cambian los filtros
-  useEffect(() => { setCurrentPage(1); }, [filtros]);
+  // Resetear a la página 1 y vaciar selección cuando cambian los filtros
+  useEffect(() => { setCurrentPage(1); setSelectedIds([]); }, [filtros]);
 
   // Vigilar los cambios para pedir los datos a la BD
   useEffect(() => { fetchInstituciones(true); }, [currentPage, filtros]);
+
+  // 🔥 LÓGICA DE CHECKBOXES Y ASIGNACIÓN MASIVA 🔥
+  const toggleSelection = (id: number) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+  
+  const toggleAllCurrentPage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const idsOnPage = institutions.map(i => i.id);
+      setSelectedIds(prev => Array.from(new Set([...prev, ...idsOnPage])));
+    } else {
+      const idsOnPage = institutions.map(i => i.id);
+      setSelectedIds(prev => prev.filter(id => !idsOnPage.includes(id)));
+    }
+  };
+
+  const handleArmarRutaGuardar = async () => {
+    if (!rutaData.vendedorId || !rutaData.fecha) {
+      showToast('alerta', 'Selecciona el vendedor y la fecha obligatoriamente.'); return;
+    }
+    setSavingRuta(true);
+    
+    try {
+      let idsParaRuta = [...selectedIds];
+
+      if (rutaModal.isAllFiltered) {
+        showToast('exito', 'Extrayendo el listado masivo, espera un segundo...');
+        const params = new URLSearchParams();
+        params.append('limit', '99999');
+        if (filtros.search) params.append('search', filtros.search);
+        if (filtros.provinciaId) params.append('provinciaId', filtros.provinciaId);
+        if (filtros.cantonId) params.append('cantonId', filtros.cantonId);
+        if (filtros.parroquiaId) params.append('parroquiaId', filtros.parroquiaId);
+        if (filtros.tamano) params.append('tamano', filtros.tamano);
+        if (filtros.estado) params.append('estado', filtros.estado);
+        if (filtros.sostenimientoId) params.append('sostenimientoId', filtros.sostenimientoId);
+        if (filtros.vendedorId) params.append('vendedorId', filtros.vendedorId);
+        
+        const resList = await fetch(`/api/instituciones?${params.toString()}`);
+        const fullData = await resList.json();
+        idsParaRuta = fullData.data.map((i: any) => i.id);
+      }
+
+      const res = await fetch('/api/agenda/masiva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          institucionIds: idsParaRuta,
+          vendedorId: rutaData.vendedorId,
+          fechaProgramada: rutaData.fecha,
+          horaProgramada: rutaData.hora
+        })
+      });
+
+      if (!res.ok) throw new Error();
+      
+      setRutaModal({ open: false, isAllFiltered: false });
+      setSelectedIds([]); 
+      showToast('exito', `¡Éxito! Ruta de ${idsParaRuta.length} visitas armada para el vendedor.`);
+      fetchInstituciones(true); 
+      
+    } catch (e) {
+      showToast('error', 'Hubo un error al armar la ruta masiva.');
+    } finally {
+      setSavingRuta(false);
+    }
+  };
 
 
   const handleGuardarAsignacion = async () => {
@@ -297,12 +371,13 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   };
 
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
+  const todosSeleccionados = institutions.length > 0 && institutions.every(i => selectedIds.includes(i.id));
   
   if (loading) return <div className="p-12 text-center text-secondary font-semibold animate-pulse">Descargando registros desde la base de datos...</div>;
 
   return (
     <>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 pb-20">
         {esAdmin && (
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={handleExportarExcel} className="text-emerald-700 border-emerald-200 hover:bg-emerald-50 shadow-sm font-bold">
@@ -327,6 +402,17 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           <Table className={isRefreshing ? 'opacity-70 transition-opacity duration-300' : 'transition-opacity duration-300'}>
             <TableHeader className="bg-muted/50">
               <TableRow>
+                {/* 🔥 CABECERA CHECKBOX 🔥 */}
+                {esAdmin && (
+                  <TableHead className="w-50px text-center px-2">
+                    <input 
+                      type="checkbox" 
+                      checked={todosSeleccionados}
+                      onChange={toggleAllCurrentPage}
+                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" 
+                    />
+                  </TableHead>
+                )}
                 <TableHead className="font-semibold text-foreground">Institución</TableHead>
                 <TableHead className="font-semibold text-foreground">Ubicación</TableHead>
                 <TableHead className="font-semibold text-foreground text-center">Docentes</TableHead>
@@ -337,7 +423,20 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
             </TableHeader>
             <TableBody>
               {institutions.map((inst) => (
-                <TableRow key={inst.id} className="hover:bg-muted/30">
+                <TableRow key={inst.id} className={`hover:bg-muted/30 ${selectedIds.includes(inst.id) ? 'bg-primary/5' : ''}`}>
+                  
+                  {/* 🔥 CELDA CHECKBOX 🔥 */}
+                  {esAdmin && (
+                    <TableCell className="text-center px-2">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedIds.includes(inst.id)}
+                        onChange={() => toggleSelection(inst.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" 
+                      />
+                    </TableCell>
+                  )}
+
                   <TableCell>
                     <div className="font-semibold text-foreground text-sm">{inst.nombre}</div>
                     <div className="text-xs text-muted-foreground">{inst.sostenimiento} • {inst.jornada}</div>
@@ -403,6 +502,84 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
             </div>
           )}
         </div>
+
+        {/* 🔥 BARRA FLOTANTE MÁGICA DE ASIGNACIÓN (Solo sale si hay checks) 🔥 */}
+        {/* 🔥 BARRA FLOTANTE MÁGICA DE ASIGNACIÓN (Responsive 📱💻) 🔥 */}
+        {esAdmin && selectedIds.length > 0 && (
+          <div className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-full shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-6 animate-in slide-in-from-bottom-10 fade-in w-[95%] md:w-auto max-w-400px md:max-w-none">
+            
+            <div className="flex items-center justify-between w-full md:w-auto gap-2">
+              <div className="flex items-center gap-2">
+                <div className="bg-primary text-white h-7 w-7 rounded-full flex items-center justify-center font-bold text-sm">
+                  {selectedIds.length}
+                </div>
+                {/* En celular dice algo corto, en PC dice el texto completo */}
+                <span className="text-sm font-medium hidden md:inline">Escuelas marcadas en pantalla</span>
+                <span className="text-sm font-medium md:hidden">Seleccionadas</span>
+              </div>
+            </div>
+            
+            {/* Separador vertical solo visible en PC */}
+            <div className="hidden md:block h-6 w-px bg-gray-700"></div> 
+            
+            <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
+              <Button onClick={() => setRutaModal({ open: true, isAllFiltered: false })} className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg md:rounded-full h-10 md:h-9 w-full md:w-auto px-5">
+                <CalendarPlus size={16} className="mr-2" /> Agendar estas {selectedIds.length}
+              </Button>
+
+              {totalItems > selectedIds.length && (
+                <Button onClick={() => setRutaModal({ open: true, isAllFiltered: true })} variant="outline" className="border-gray-600 bg-transparent hover:bg-gray-800 text-gray-300 font-semibold rounded-lg md:rounded-full h-10 md:h-9 w-full md:w-auto px-5">
+                  <Route size={16} className="mr-2 hidden md:inline" /> 
+                  <span className="md:hidden">Agendar TODAS ({totalItems})</span>
+                  <span className="hidden md:inline">Agendar TODAS ({totalItems}) del filtro</span>
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 MODAL PARA ARMAR LA RUTA 🔥 */}
+        <Dialog open={rutaModal.open} onOpenChange={val => setRutaModal({ ...rutaModal, open: val })}>
+          <DialogContent className="sm:max-w-md bg-card p-6 rounded-xl border-t-4 border-t-primary">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Route size={20} className="text-primary"/> 
+                Asignación Masiva de Ruta
+              </DialogTitle>
+            </DialogHeader>
+            <div className="mt-2 space-y-4">
+              <div className="bg-primary/10 text-primary text-xs font-bold p-3 rounded-lg text-center">
+                Estás a punto de agendar {rutaModal.isAllFiltered ? totalItems : selectedIds.length} instituciones de un solo golpe.
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase text-muted-foreground">Vendedor a cargo de la ruta *</Label>
+                <select className="w-full h-11 border rounded-md px-3 text-sm bg-white font-medium outline-none" value={rutaData.vendedorId} onChange={e => setRutaData({...rutaData, vendedorId: e.target.value})}>
+                  <option value="">Seleccione el Vendedor...</option>
+                  {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground">Fecha de Visita *</Label>
+                  <Input type="date" className="h-11 bg-white" value={rutaData.fecha} onChange={e => setRutaData({...rutaData, fecha: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground">Hora sugerida</Label>
+                  <Input type="time" className="h-11 bg-white" value={rutaData.hora} onChange={e => setRutaData({...rutaData, hora: e.target.value})} />
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter className="mt-6 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRutaModal({ ...rutaModal, open: false })}>Cancelar</Button>
+              <Button className="bg-primary text-primary-foreground font-bold" onClick={handleArmarRutaGuardar} disabled={savingRuta}>
+                {savingRuta ? 'Armando Ruta...' : 'Generar Visitas'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* MODAL REASIGNAR VENDEDOR */}
         <Dialog open={assignModal.open} onOpenChange={val => setAssignModal({ ...assignModal, open: val })}>
@@ -474,7 +651,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       </div>
 
       {toastMsg && (
-        <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
+        <div className={`fixed bottom-6 right-6 z-[ 9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
           {toastMsg.tipo === 'exito' ? <CheckCircle2 size={20} className="text-emerald-100" /> : <AlertCircle size={20} className="text-white/90" />}
           <span className="font-bold text-sm tracking-wide">{toastMsg.texto}</span>
         </div>

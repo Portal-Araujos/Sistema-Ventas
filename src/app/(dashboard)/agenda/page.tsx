@@ -237,6 +237,7 @@ export default function AgendaPage() {
           </div>
         </div>
       )}
+
       <VisitaGPSForm 
         isOpen={modalVisita.open}
         onOpenChange={(val) => setModalVisita({ ...modalVisita, open: val })}
@@ -246,6 +247,7 @@ export default function AgendaPage() {
           nombre: modalVisita.inst.nombreInstitucion,
           canton: modalVisita.inst.canton
         } : null}
+        // 🔥 ESTE ES EL TRUCO: Le pasamos TRUE para que recargue sin borrar la pantalla
         onSuccess={() => cargarAgenda(true)} 
       />
 

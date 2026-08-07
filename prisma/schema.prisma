@@ -204,6 +204,7 @@ model VisitaAgenda {
   institucion          Institution @relation(fields: [institucionId], references: [id], onDelete: Cascade)
   usuario              Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   ventas               Venta[]
+  esVisitaLibre        Boolean  @default(false)
   @@map("visitas_agenda")
 }
 model EstadoCliente {
