@@ -11,8 +11,8 @@ const allMenuItems = [
   { icon: CalendarDays, label: 'Agenda', href: '/agenda', permiso: 'agenda:ver' },
   { icon: DollarSign, label: 'Ventas', href: '/ventas', permiso: 'ventas:ver' },
   { icon: MapPin, label: 'Seguimientos', href: '/visitas', permiso: 'visitas:ver' },
-  { icon: Factory, label: 'Producción', href: '/pedidos', permiso: 'admin_only' },
-  { icon: Barcode, label: 'Catálogo SKU', href: '/configuracion/skus', permiso: 'admin_only' },
+  { icon: Factory, label: 'Producción', href: '/pedidos', permiso: 'pedidos:ver' }, 
+  { icon: Barcode, label: 'Catálogo SKU', href: '/configuracion/skus', permiso: 'skus:ver' }, 
   { icon: BarChart2, label: 'Indicadores', href: '/indicadores', permiso: 'indicadores:ver' },
   { icon: Settings, label: 'Configuración', href: '/configuracion', permiso: 'configuracion:ver' },
   { icon: User, label: 'Usuarios', href: '/usuarios', permiso: 'usuarios:gestionar' },
@@ -40,10 +40,8 @@ export function Sidebar() {
     } catch (e) {}
   };
   const menuItems = allMenuItems.filter(item => {
-    if (userRol === 'super_admin') return true; // El Super Admin ve todo
+    if (userRol === 'super_admin') return true;
     if (item.permiso === 'super_admin_only') return false; 
-    // 🔥 Nueva regla: Solo administradores ven Producción y SKUs
-    if (item.permiso === 'admin_only') return userRol === 'administrador'; 
     return userPermisos.includes(item.permiso);
   });
   return (

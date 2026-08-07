@@ -73,7 +73,8 @@ export default function VentasPage() {
       
       setVentas(Array.isArray(dataVentas) ? dataVentas : []);
       setCatalogos(dataCat);
-      setInstitucionesDisponibles(await resInst.json());
+      const data = await resInst.json();
+      setInstitucionesDisponibles(data.data ? data.data : data);
       
       if (dataCat.userRol) setUserRol(dataCat.userRol);
       if (dataCat.userPermisos) setUserPermisos(dataCat.userPermisos); 
@@ -210,15 +211,12 @@ export default function VentasPage() {
   if (searchTerm) {
     ventasFiltradas = ventasFiltradas.filter(v => String(v.numContrato).includes(searchTerm));
   }
-
   if (filtros.vendedorNombre) ventasFiltradas = ventasFiltradas.filter(v => v.vendedorNombre === filtros.vendedorNombre);
   if (filtros.estadoContratoId) ventasFiltradas = ventasFiltradas.filter(v => String(v.estadoContratoId) === filtros.estadoContratoId);
   if (filtros.estadoClienteId) ventasFiltradas = ventasFiltradas.filter(v => String(v.estadoClienteId) === filtros.estadoClienteId);
   if (filtros.mesCobro) ventasFiltradas = ventasFiltradas.filter(v => v.mesCobro === filtros.mesCobro);
-
   const totalPages = Math.max(1, Math.ceil(ventasFiltradas.length / itemsPerPage));
   const ventasPaginadas = ventasFiltradas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
   const exportarExcel = () => {
     const dataToExport = ventasFiltradas.map(v => ({
       'N° Contrato': v.numContrato,
@@ -241,7 +239,6 @@ export default function VentasPage() {
     XLSX.utils.book_append_sheet(wb, ws, "Base_Ventas");
     XLSX.writeFile(wb, "Reporte_Ventas_Sistema.xlsx");
   };
-
   return (
     <>
       <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen relative">
@@ -269,8 +266,6 @@ export default function VentasPage() {
             </Button>
           </div>
         </div>
-
-        {/* TARJETAS KPI */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div onClick={() => setFiltroTarjeta('Todas')} className={`p-4 rounded-xl border cursor-pointer transition-all ${filtroTarjeta === 'Todas' ? 'bg-blue-600 text-white shadow-md' : 'bg-white hover:border-blue-300'}`}>
             <p className={`text-[10px] font-bold uppercase ${filtroTarjeta === 'Todas' ? 'text-blue-100' : 'text-gray-500'}`}>📘 Total Ventas</p>
@@ -289,8 +284,6 @@ export default function VentasPage() {
             <h3 className="text-2xl font-extrabold mt-1">{kpiAprobadas}</h3>
           </div>
         </div>
-
-        {/* FILTROS DINÁMICOS */}
         <div className={`bg-white p-4 rounded-xl border border-gray-200 shadow-sm grid grid-cols-1 gap-3 ${esAdmin ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
           <div className="relative">
             <Label className="text-[11px] font-bold text-gray-500">Buscar Contrato</Label>
@@ -304,7 +297,6 @@ export default function VentasPage() {
               />
             </div>
           </div>
-
           {esAdmin && (
             <div>
               <Label className="text-[11px] font-bold text-gray-500">Vendedor</Label>
@@ -314,7 +306,6 @@ export default function VentasPage() {
               </select>
             </div>
           )}
-
           <div>
             <Label className="text-[11px] font-bold text-gray-500">Estado Contrato</Label>
             <select className="w-full h-9 border rounded-md px-2 text-xs mt-1 bg-white outline-none" value={filtros.estadoContratoId} onChange={e => setFiltros({ ...filtros, estadoContratoId: e.target.value })}>
@@ -337,8 +328,6 @@ export default function VentasPage() {
             </select>
           </div>
         </div>
-
-        {/* TABLA DE VENTAS CON TABLE-FIXED PARA QUE NUNCA SE DESFORME */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto flex flex-col">
           <Table className="w-full table-fixed min-w-900px">
             <TableHeader className="bg-gray-50/80">
@@ -349,10 +338,7 @@ export default function VentasPage() {
                 <TableHead className="font-semibold text-gray-700 text-center w-28">Cobro / Mes</TableHead>
                 <TableHead className="font-semibold text-gray-700 text-center w-32">Estados</TableHead>
                 <TableHead className="font-semibold text-gray-700 text-center w-28">Verificación</TableHead>
-                
-                {/* ANCHO ESTRICTO DE 192px PARA OBSERVACIONES */}
                 <TableHead className="font-semibold text-gray-700 w-48">Observaciones</TableHead>
-                
                 <TableHead className="font-semibold text-gray-700 text-center w-28">Acción</TableHead>
               </TableRow>
             </TableHeader>
@@ -381,14 +367,11 @@ export default function VentasPage() {
                     <span className="block text-[10px] px-1.5 py-0.5 rounded font-bold bg-purple-50 text-purple-700 border border-purple-200 mb-1 truncate" title={v.estadoClienteNombre}>Cli: {v.estadoClienteNombre}</span>
                     <span className="block text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-50 text-amber-700 border border-amber-200 truncate" title={v.estadoContratoNombre}>Con: {v.estadoContratoNombre}</span>
                   </TableCell>
-                  
                   <TableCell className="text-center w-28">
                     <span className={`text-xs px-2 py-1 rounded-md font-bold block truncate ${v.verificacionFact !== 'Sin validar' ? "bg-emerald-100 text-emerald-700 border border-emerald-300" : "bg-gray-100 text-gray-500"}`}>
                       {v.verificacionFact !== 'Sin validar' ? v.verificacionFact : 'Pendiente'}
                     </span>
                   </TableCell>
-                  
-                  {/* CELDA DE OBSERVACIONES BLOQUEADA EN ANCHO Y CORTADA EN 2 LÍNEAS */}
                   <TableCell className="w-48 max-w-192px align-middle">
                     <div 
                       className={`text-[11px] font-medium italic wrap-break-word line-clamp-2 max-w-192px overflow-hidden ${v.observacionesFact !== 'Sin observaciones' && v.observacionesFact.trim() !== '' ? 'text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200' : 'text-gray-400'}`} 
@@ -397,13 +380,11 @@ export default function VentasPage() {
                       {v.observacionesFact}
                     </div>
                   </TableCell>
-
                   <TableCell className="text-center w-28">
                     <div className="flex justify-center gap-1">
                       <Button variant="ghost" size="sm" className="h-8 w-8 text-blue-600 hover:bg-blue-50 p-0" onClick={() => handleOpenEdit(v)} title="Editar / Ver Notas">
                         <Pencil size={14} />
                       </Button>
-                      
                       {puedeValidar && (
                         <Button variant="outline" size="sm" className="h-8 text-xs text-primary border-primary/30 px-2" onClick={() => { setFactData({ observacionesFact: v.observacionesFact === 'Sin observaciones' ? '' : v.observacionesFact, verificacionFact: v.verificacionFact === 'Sin validar' ? '' : v.verificacionFact }); setFactModal({ open: true, venta: v }); }}>
                           <Edit3 size={14} className="mr-1" /> Auditar
@@ -415,8 +396,6 @@ export default function VentasPage() {
               ))}
             </TableBody>
           </Table>
-
-          {/* CONTROLES DE PAGINACIÓN */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50/50 rounded-b-xl">
               <span className="text-xs text-gray-500 font-medium">
@@ -433,8 +412,6 @@ export default function VentasPage() {
             </div>
           )}
         </div>
-
-        {/* MODAL 1: REGISTRAR O EDITAR VENTA */}
         <Dialog open={openCreate} onOpenChange={setOpenCreate}>
           <DialogContent className="sm:max-w-xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
             <DialogHeader>
@@ -459,7 +436,6 @@ export default function VentasPage() {
                   </select>
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs font-semibold">Fecha del Día *</Label>
