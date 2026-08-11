@@ -5,6 +5,7 @@ import { jwtVerify } from 'jose';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
+
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -87,6 +88,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Error al generar reporte consolidado' }, { status: 500 });
   }
 }
+
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -101,9 +103,33 @@ export async function POST(request: Request) {
       huboVenta, ventas 
     } = body;
     if (!institucionId) return NextResponse.json({ error: 'Falta la institución' }, { status: 400 });
+
+    // 🔥 1. VALIDACIÓN PREVIA DE CONTRATOS DUPLICADOS 🔥
+    if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
+      const numerosContratos = ventas
+        .map((v: any) => String(v.numContrato).trim())
+        .filter((n: string) => n && n !== 'S/N' && n !== '');
+
+      if (numerosContratos.length > 0) {
+        const contratosExistentes = await prisma.venta.findMany({
+          where: { numContrato: { in: numerosContratos } },
+          select: { numContrato: true }
+        });
+
+        if (contratosExistentes.length > 0) {
+          const duplicados = contratosExistentes.map(c => c.numContrato).join(', ');
+          return NextResponse.json(
+            { error: `¡Atención! El contrato N° ${duplicados} ya se encuentra registrado en la base de datos.` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const hoy = new Date();
     const horaDefecto = horaProgramada || hoy.toTimeString().slice(0, 5);
     const fechaProximo = fechaProximoContacto ? new Date(`${fechaProximoContacto}T12:00:00Z`) : null;
+    
     const nuevaVisita = await prisma.visitaAgenda.create({
       data: {
         institucionId,
@@ -119,7 +145,9 @@ export async function POST(request: Request) {
         esVisitaLibre: true 
       }
     });
+
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
+      // 2. CREACIÓN DE VENTAS (CONTRATOS)
       const transaccionesVentas = ventas.map((v: any) => {
         const valor = parseFloat(v.valorContrato) || 0;
         const abonoVal = parseFloat(v.abono) || 0;
@@ -144,6 +172,8 @@ export async function POST(request: Request) {
         });
       });
       await Promise.all(transaccionesVentas);
+
+      // 3. CREACIÓN DE PEDIDOS DE ROPA Y DETALLES
       const transaccionesPedidos = ventas
         .filter((v: any) => (Array.isArray(v.prendas) && v.prendas.length > 0) || v.nombreCliente)
         .map((v: any) => {
@@ -172,6 +202,7 @@ export async function POST(request: Request) {
         await Promise.all(transaccionesPedidos);
       }
     }
+
     await prisma.institution.update({
       where: { id: institucionId },
       data: { 
@@ -179,6 +210,7 @@ export async function POST(request: Request) {
         vendedorId: userId 
       }
     });
+
     return NextResponse.json(nuevaVisita, { status: 201 });
   } catch (error) {
     console.error("Error guardando visita, ventas y pedidos:", error);

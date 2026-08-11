@@ -99,19 +99,28 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
     setDropdownBusquedaOpen(false);
   };
   const handleVentaChange = (index: number, field: string, value: string) => {
-    const newVentas = [...ventasItem];
-    newVentas[index][field] = value;
-    if (['valorContrato', 'abono', 'meses'].includes(field)) {
-      const valNum = parseFloat(newVentas[index].valorContrato) || 0;
-      const abonoNum = parseFloat(newVentas[index].abono) || 0;
-      const mesNum = parseInt(newVentas[index].meses) || 1;
-      const restante = Math.max(0, valNum - abonoNum);
-      newVentas[index].cuotaMensual = mesNum > 0 ? (restante / mesNum).toFixed(2) : '0';
-    }
-    setVentasItem(newVentas);
+    setVentasItem(prev => {
+      const newVentas = [...prev];
+      // Clonamos el objeto específico para no mutar el estado y dañar otros contratos
+      newVentas[index] = { ...newVentas[index], [field]: value };
+      
+      if (['valorContrato', 'abono', 'meses'].includes(field)) {
+        const valNum = parseFloat(newVentas[index].valorContrato) || 0;
+        const abonoNum = parseFloat(newVentas[index].abono) || 0;
+        const mesNum = parseInt(newVentas[index].meses) || 1;
+        const restante = Math.max(0, valNum - abonoNum);
+        newVentas[index].cuotaMensual = mesNum > 0 ? (restante / mesNum).toFixed(2) : '0';
+      }
+      return newVentas;
+    });
   };
+
   const addContrato = () => {
-    setVentasItem([{ numContrato: '', nombreCliente: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', prendas: [] }]);
+    setVentasItem(prev => [
+      ...prev, 
+      { numContrato: '', nombreCliente: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', prendas: [] }
+    ]);
+    // Expandimos el último contrato que se acaba de crear
     setExpandedIndex(ventasItem.length);
   };
   const removeContrato = (index: number) => {
@@ -157,17 +166,20 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
     e.preventDefault();
     if (!formData.institucionId) { showToast('alerta', "Selecciona una institución válida."); return; }
     if (formData.tipoGestion === 'Presencial' && !coordenadas.lat) { showToast('alerta', "¡OBLIGATORIO! Captura tu ubicación GPS para visitas físicas."); return; }
+    
     if (huboVenta) {
       for (const v of ventasItem) {
         if (!v.numContrato || !v.valorContrato || !v.tipoCobroId) {
           showToast('alerta', "Revisa los contratos. N° Contrato, Monto y Tipo Cobro son obligatorios."); return;
         }
-        const estadoNombre = estadosCliente.find(e => e.id.toString() === v.estadoClienteId)?.nombre?.toLowerCase();
-        if (estadoNombre === 'pedido' && (!v.prendas || v.prendas.length === 0)) {
+        const estadoNombre = estadosCliente.find(e => e.id.toString() === v.estadoClienteId)?.nombre?.toLowerCase() || '';
+        const isPedido = estadoNombre.includes('pedido');
+        if (isPedido && (!v.prendas || v.prendas.length === 0)) {
           showToast('error', `El contrato #${v.numContrato} está marcado como "Pedido" pero no tiene prendas en el carrito.`); return;
         }
       }
     }
+
     setLoading(true);
     try {
       const res = await fetch('/api/visitas', {
@@ -177,13 +189,23 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
           ...formData, latitud: coordenadas.lat, longitud: coordenadas.lng, huboVenta, ventas: huboVenta ? ventasItem : []
         })
       });
-      if (!res.ok) throw new Error('Error al registrar');
+      
+      const data = await res.json();
+      
+      // 🔥 NUEVO: Si el backend rechaza (por ejemplo, contrato duplicado), mostramos SU error
+      if (!res.ok) {
+        showToast('error', data.error || 'Error al registrar la gestión.');
+        setLoading(false);
+        return; 
+      }
+      
       setOpen(false);
       if (onSuccess) onSuccess();
       showToast('exito', huboVenta ? "¡Venta y/o Pedido guardado exitosamente!" : "¡Gestión registrada, misión cumplida!");
     } catch (error) { 
-      showToast('error', "Hubo un error al guardar la gestión."); 
-    } finally { setLoading(false); }
+      showToast('error', "Hubo un error de conexión al guardar la gestión."); 
+      setLoading(false);
+    } 
   };
   return (
     <>
