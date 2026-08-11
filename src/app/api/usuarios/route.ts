@@ -75,7 +75,9 @@ export async function PUT(request: Request) {
     if (email) updateData.email = email;
     if (rolId) updateData.rolId = parseInt(rolId);
     if (activo !== undefined) updateData.activo = activo;
-    if (password) updateData.password = await argon2.hash(password);
+    
+    // 🔥 AQUÍ ESTABA EL ERROR: Cambiado de 'password' a 'passwordHash'
+    if (password) updateData.passwordHash = await argon2.hash(password);
 
     const usuarioActualizado = await prisma.usuario.update({
       where: { id },

@@ -12,7 +12,6 @@ model Provincia {
   cantones Canton[]
   @@map("provincias")
 }
-
 model Canton {
   id          Int         @id @default(autoincrement())
   provinciaId Int         @map("provincia_id")
@@ -22,7 +21,6 @@ model Canton {
   parroquias  Parroquia[]
   @@map("cantones")
 }
-
 model Parroquia {
   id            Int           @id @default(autoincrement())
   cantonId      Int           @map("canton_id")
@@ -32,7 +30,6 @@ model Parroquia {
   instituciones Institution[]
   @@map("parroquias")
 }
-
 model Sostenimiento {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -40,7 +37,6 @@ model Sostenimiento {
   instituciones Institution[]
   @@map("sostenimientos")
 }
-
 model Jornada {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -48,7 +44,6 @@ model Jornada {
   instituciones Institution[]
   @@map("jornadas")
 }
-
 model NivelEducativo {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -56,7 +51,6 @@ model NivelEducativo {
   instituciones Institution[]
   @@map("niveles_educativos")
 }
-
 model AreaEducativa {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -64,7 +58,6 @@ model AreaEducativa {
   instituciones Institution[]
   @@map("areas_educativas")
 }
-
 model RegimenEscolar {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -72,7 +65,6 @@ model RegimenEscolar {
   instituciones Institution[]
   @@map("regimenes_escolares")
 }
-
 model Jurisdiccion {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -80,7 +72,6 @@ model Jurisdiccion {
   instituciones Institution[]
   @@map("jurisdicciones")
 }
-
 model ModalidadEducativa {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -88,7 +79,6 @@ model ModalidadEducativa {
   instituciones Institution[]
   @@map("modalidades_educativas")
 }
-
 model AccesoEdificio {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
@@ -103,7 +93,6 @@ model ReglaTamano {
   maxDocentes  Int      @default(9999) @map("max_docentes")
   @@map("reglas_tamano")
 }
-// --- SEGURIDAD ---
 model Rol {
   id          Int       @id @default(autoincrement())
   nombre      String    @unique
@@ -230,7 +219,6 @@ model TipoCobro {
   ventas    Venta[]
   @@map("tipos_cobro")
 }
-// MÓDULO DE VENTAS (EL MOTOR FINANCIERO Y TICKETS)
 model Venta {
   id                  String   @id @default(uuid())
   fechaVenta          DateTime @default(now()) @map("fecha_venta")
@@ -276,23 +264,16 @@ model TipoGestion {
   activo    Boolean  @default(true)
   @@map("tipos_gestion")
 }
-// =======================================================
-// 🔥 MÓDULO DE PRODUCCIÓN E INVENTARIO (NUEVO) 🔥
-// =======================================================
-
-// 1. Diccionario de Códigos (Para no memorizar los SKUs)
 model CatalogoSKU {
   id          Int      @id @default(autoincrement())
-  codigo      String   @unique                  // Ej: UN1843
-  tipoRopa    String                            // Ej: CHALECO PREMIUM SA, POLO MAO
-  color       String                            // Ej: AZUL MARINO, NOVA BLANCO
-  genero      String                            // Ej: HOMBRE, MUJER, UNISEX
-  talla       String                            // Ej: XS, S, M, L, XL...
+  codigo      String   @unique                 
+  tipoRopa    String                          
+  color       String                           
+  genero      String                          
+  talla       String                           
   activo      Boolean  @default(true)
   @@map("catalogo_sku")
 }
-
-// 2. Cabecera del Pedido (La ficha del cliente "Pepito")
 model Pedido {
   id                String          @id @default(uuid())
   institucionId     String          @map("institucion_id")
@@ -303,15 +284,11 @@ model Pedido {
   observacion       String?         @db.Text
   createdAt         DateTime        @default(now()) @map("created_at")
   updatedAt         DateTime        @updatedAt @map("updated_at")
-
-  // Relaciones
   institucion       Institution     @relation(fields: [institucionId], references: [id], onDelete: Cascade)
   usuario           Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   detalles          DetallePedido[] // El carrito de ropa de Pepito
-
   @@map("pedidos")
 }
-
 model DetallePedido {
   id                String   @id @default(uuid())
   pedidoId          String   @map("pedido_id")
@@ -324,6 +301,5 @@ model DetallePedido {
   bordado           String?  @db.Text // Ej: "Pepito P."
   observacion       String?  @db.Text // Ej: "Hacerlo un poco más largo"
   pedido            Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-
   @@map("detalles_pedido")
 }
