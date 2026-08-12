@@ -297,7 +297,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
                     <div key={index} className={`rounded-xl border transition-all overflow-hidden ${isExpanded ? 'bg-emerald-50/40 border-emerald-400 shadow-md' : 'bg-white border-gray-200 hover:border-emerald-200'}`}>
                       <div className="p-3 flex justify-between items-center cursor-pointer bg-white" onClick={() => setExpandedIndex(isExpanded ? -1 : index)}>
                         <div className="flex items-center gap-2">
-                          <span className={`font-bold text-xs ${isExpanded ? 'text-emerald-800' : 'text-gray-700'}`}>📄 Contrato {venta.numContrato ? `#${venta.numContrato}` : (index + 1)}</span>
+                          <span className={`font-bold text-xs ${isExpanded ? 'text-emerald-800' : 'text-gray-700'}`}> Contrato {venta.numContrato ? `#${venta.numContrato}` : (index + 1)}</span>
                           {venta.valorContrato && <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">${parseFloat(venta.valorContrato).toFixed(2)}</span>}
                           {isPedido && <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded flex items-center gap-1"><ShoppingCart size={10}/> Pedido: {(venta.prendas || []).length} pz</span>}
                         </div>
@@ -333,8 +333,6 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
                               <h4 className="text-sm font-black text-blue-900 flex items-center gap-2 mb-3">
                                 <ShoppingCart size={16}/> Detalle de Pedido (Prendas)
                               </h4>
-                              
-                              {/* 1. Mini-formulario de ingreso dinámico */}
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-3 rounded border border-blue-100 shadow-sm">
                                 <div className="col-span-2">
                                   <Label className="text-[10px] font-bold uppercase text-gray-600">Tipo Prenda *</Label>

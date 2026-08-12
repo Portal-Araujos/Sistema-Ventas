@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, MapPin, Users, Trash2, CalendarCheck,Calendar, Navigation, DollarSign, FileText, CheckCircle2, AlertCircle, Pencil, Save, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Building2, MapPin, Users, Trash2, CalendarCheck, Calendar, Navigation, DollarSign, FileText, CheckCircle2, AlertCircle, Pencil, Save, ChevronLeft, ChevronRight, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -32,6 +32,7 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
   const [editCanton, setEditCanton] = useState('');
   const [editCantones, setEditCantones] = useState<any[]>([]);
   const [editParroquias, setEditParroquias] = useState<any[]>([]);
+
   const cargarFicha = async () => {
     setLoading(true);
     try {
@@ -50,7 +51,9 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
       setLoading(false);
     }
   };
+
   useEffect(() => { cargarFicha(); }, [resolvedParams.id]);
+
   const handleEliminar = async () => {
     if (!confirm(`¿Estás seguro de eliminar "${inst.nombre}"? Se perderá todo su historial.`)) return;
     try {
@@ -59,7 +62,7 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
       router.push('/instituciones');
     } catch (e) { showToast('error', "Error al eliminar institución."); }
   };
-  // LOGICA PARA ABRIR Y GUARDAR EDICIÓN
+
   const handleOpenEdit = () => {
     setEditProvincia(inst.provinciaId?.toString() || '');
     setEditCanton(inst.cantonId?.toString() || '');
@@ -76,16 +79,19 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
     });
     setEditModal(true);
   };
+
   const handleProvinciaChangeEdit = (provId: string) => {
     setEditProvincia(provId); setEditCanton(''); setEditFormData({ ...editFormData, parroquiaId: '' });
     const prov = catalogos?.provincias?.find((p: any) => p.id === parseInt(provId));
     setEditCantones(prov ? prov.cantones : []); setEditParroquias([]);
   };
+
   const handleCantonChangeEdit = (cantonId: string) => {
     setEditCanton(cantonId); setEditFormData({ ...editFormData, parroquiaId: '' });
     const cant = editCantones.find((c: any) => c.id === parseInt(cantonId));
     setEditParroquias(cant ? cant.parroquias : []);
   };
+
   const handleGuardarEdicion = async () => {
     if (!editFormData.parroquiaId || !editFormData.sostenimientoId || !editFormData.jornadaId) {
       showToast('error', 'Provincia, Cantón, Parroquia, Sostenimiento y Jornada son obligatorios.'); return;
@@ -96,18 +102,24 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
       if (!res.ok) throw new Error();
       setEditModal(false);
       showToast('exito', 'Institución actualizada con éxito.');
-      cargarFicha(); // Recargamos para ver los cambios instantáneamente
+      cargarFicha(); 
     } catch (e) { showToast('error', 'Error al guardar los cambios.'); } finally { setSavingEdit(false); }
   };
+
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
+
   if (loading) return <div className="p-12 text-center text-secondary font-medium">Cargando Ficha Técnica...</div>;
   if (!inst) return <div className="p-12 text-center text-primary font-bold text-subtitle">La institución no existe.</div>;
+
+  // 🔥 MEJORA: Construcción de historial mixto (Visitas y Ventas)
   const historial: any[] = [];
   if (inst.visitas) inst.visitas.forEach((v: any) => historial.push({ ...v, tipoHistorial: 'visita', fechaReal: new Date(v.createdAt) }));
   if (inst.ventas) inst.ventas.forEach((v: any) => historial.push({ ...v, tipoHistorial: 'venta', fechaReal: new Date(v.fechaVenta) }));
   historial.sort((a, b) => b.fechaReal.getTime() - a.fechaReal.getTime());
+  
   const totalPages = Math.max(1, Math.ceil(historial.length / itemsPerPage));
   const paginatedHistorial = historial.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   return (
     <div className="p-4 md:p-8 min-h-screen flex flex-col gap-6 bg-background">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -125,6 +137,7 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
           </div>
         )}
       </div>
+
       <div className="bg-card p-6 md:p-8 rounded-2xl border border-border shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-h1 mb-2">{inst.nombre}</h1> 
@@ -154,6 +167,7 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
           )}
         </div>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-card p-6 rounded-2xl border border-border shadow-sm">
@@ -172,26 +186,27 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
               <div className="flex justify-between"><span className="text-gray-500">Acceso Edificio:</span><span className="font-semibold">{inst.accesoEdificio?.nombre || 'N/A'}</span></div>
             </div>
           </div>
-          {/* BLOQUE 3: AUDITORÍA */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-primary uppercase tracking-wider border-b pb-2 flex items-center gap-2">
-            <Calendar size={18} /> Auditoría del Registro
-          </h3>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between border-b pb-1.5">
-              <span className="text-gray-500">Registrada por:</span>
-              <span className="font-semibold">{inst.usuarioCreador?.nombre || 'Sistema'}</span>
-            </div>
-            <div className="flex justify-between border-b pb-1.5">
-              <span className="text-gray-500">Fecha de creacion:</span>
-              <span className="font-semibold">{new Date(inst.createdAt).toLocaleDateString('es-EC')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Total Visitas Realizadas:</span>
-              <span className="font-bold text-emerald-600">{inst.visitas?.length || 0} visitas</span>
+
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+            <h3 className="text-sm font-bold text-primary uppercase tracking-wider border-b pb-2 flex items-center gap-2">
+              <Calendar size={18} /> Auditoría del Registro
+            </h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between border-b pb-1.5">
+                <span className="text-gray-500">Registrada por:</span>
+                <span className="font-semibold">{inst.usuarioCreador?.nombre || 'Sistema'}</span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5">
+                <span className="text-gray-500">Fecha de creacion:</span>
+                <span className="font-semibold">{new Date(inst.createdAt).toLocaleDateString('es-EC')}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Total Visitas Realizadas:</span>
+                <span className="font-bold text-emerald-600">{inst.visitas?.length || 0} visitas</span>
+              </div>
             </div>
           </div>
-        </div>
+
           <div className="bg-card p-6 rounded-2xl border border-border shadow-sm">
             <h3 className="text-card-title border-b border-border pb-3 flex items-center gap-2 mb-4">
               <Users className="text-primary" size={20} /> Personal Docente
@@ -212,11 +227,13 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         </div>
+
         <div className="lg:col-span-2">
           <div className="bg-card p-6 md:p-8 rounded-2xl border border-border shadow-sm h-full flex flex-col">
             <h2 className="text-subtitle mb-6 flex items-center gap-2 border-b border-border pb-4">
               <CalendarCheck className="text-primary" size={24} /> Historial de Relación Comercial
             </h2>
+            
             {historial.length === 0 ? (
               <div className="text-center py-12 flex-1">
                 <FileText size={48} className="mx-auto text-border mb-3" />
@@ -225,41 +242,54 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
               </div>
             ) : (
               <div className="space-y-3">
-                {inst.visitas.map((visita: any) => (
-                  <div key={visita.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 flex flex-col md:flex-row justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-blue-600 text-white text-[10px]">{visita.tipoGestion}</Badge>
-                        <span className="text-xs font-bold text-gray-700">{visita.estadoGestion}</span>
-                        <span className="text-xs text-gray-400">• {new Date(visita.createdAt).toLocaleString('es-EC')}</span>
+                {/* 🔥 CORRECCIÓN: Ahora dibuja el arreglo correcto y respeta la paginación 🔥 */}
+                {paginatedHistorial.map((item: any) => (
+                  <div key={item.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 flex flex-col md:flex-row justify-between gap-4">
+                    
+                    {item.tipoHistorial === 'visita' ? (
+                      <div className="space-y-1 w-full">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-blue-600 text-white text-[10px]">{item.tipoGestion}</Badge>
+                          <span className="text-xs font-bold text-gray-700">{item.estadoGestion}</span>
+                          <span className="text-xs text-gray-400">• {new Date(item.createdAt).toLocaleString('es-EC')}</span>
+                        </div>
+                        <div className="mt-2 bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-2xs">
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">Observaciones y Acuerdos Alcanzados</p>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap overflow-wrap:anywhere leading-relaxed">
+                            {item.resumenAcuerdos || 'Sin observaciones detalladas.'}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500">Gestión realizada por: <strong>{item.usuario?.nombre}</strong></p>
+                        
+                        {item.latitud && item.longitud && (
+                          <div className="mt-2">
+                            <a href={`http://maps.google.com/?q=${item.latitud},${item.longitud}`} target="_blank" rel="noreferrer" className="inline-flex text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-bold items-center gap-1 hover:bg-emerald-100">
+                              📍 Ver GPS en Google Maps
+                            </a>
+                          </div>
+                        )}
                       </div>
-                      <div className="mt-2 bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-2xs">
-                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                          Observaciones y Acuerdos Alcanzados
-                        </p>
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap overflow-wrap:anywhere leading-relaxed">
-                          {visita.resumenAcuerdos || 'Sin observaciones detalladas.'}
-                        </p>
-                      </div>
-                      <p className="text-xs text-gray-500">Gestión realizada por: <strong>{visita.usuario?.nombre}</strong></p>
-                    </div>
-                    {visita.latitud && visita.longitud && (
-                      <div className="shrink-0 flex items-center">
-                        <a 
-                          href={`https://maps.google.com/?q=${visita.latitud},${visita.longitud}`} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 hover:bg-emerald-100"
-                        >
-                          📍 Ver GPS en Google Maps
-                        </a>
+                    ) : (
+                      <div className="space-y-1 w-full">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-emerald-600 text-white text-[10px]">Contrato / Venta</Badge>
+                          <span className="text-xs font-bold text-gray-700">Contrato N° {item.numContrato}</span>
+                          <span className="text-xs text-gray-400">• {new Date(item.fechaVenta).toLocaleString('es-EC')}</span>
+                        </div>
+                        <div className="mt-2 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200/80 shadow-2xs">
+                          <div className="flex justify-between items-center">
+                            <p className="text-sm font-black text-emerald-900 flex items-center gap-1"><DollarSign size={16}/> Monto Total: ${item.valorContrato}</p>
+                            <Badge variant="outline" className="text-[10px] border-emerald-300 text-emerald-700 bg-white">Estado: {item.estadoTicket}</Badge>
+                          </div>
+                        </div>
                       </div>
                     )}
+
                   </div>
                 ))}
               </div>
             )}
-            {/* CONTROLES DE PAGINACIÓN TIMELINE */}
+
             {totalPages > 1 && (
               <div className="mt-6 pt-4 border-t border-border flex justify-between items-center">
                 <span className="text-xs text-muted-foreground font-medium">
@@ -278,7 +308,7 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       </div>
-      {/* SÚPER MODAL DE EDICIÓN EN LA FICHA */}
+
       <Dialog open={editModal} onOpenChange={setEditModal}>
         <DialogContent className="sm:max-w-2xl bg-card p-6 rounded-xl overflow-y-auto max-h-[85vh]">
           <DialogHeader><DialogTitle className="text-lg font-bold text-foreground">Editar Institución Completa</DialogTitle></DialogHeader>
@@ -310,7 +340,6 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* TOAST GLOBAL */}
       {toastMsg && (
         <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
           {toastMsg.tipo === 'exito' ? <CheckCircle2 size={20} className="text-emerald-100" /> : <AlertCircle size={20} className="text-white/90" />}

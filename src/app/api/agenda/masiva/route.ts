@@ -19,34 +19,30 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     
-    // NOTA: vendedorId es lo que manda el front, pero en Prisma se llama usuarioId
     const { institucionIds, vendedorId, fechaProgramada, horaProgramada } = body;
 
     if (!institucionIds || institucionIds.length === 0 || !vendedorId || !fechaProgramada) {
       return NextResponse.json({ error: 'Faltan datos obligatorios para armar la ruta' }, { status: 400 });
     }
 
-    // Convertimos la fecha de string ("2026-08-07") a objeto Date en ISO, que es lo que exige Prisma para @db.Date
     const fechaISO = new Date(`${fechaProgramada}T00:00:00Z`);
 
-    // 1. Preparamos el arreglo con los nombres EXACTOS de tu schema.prisma
     const nuevasVisitas = institucionIds.map((instId: string) => ({
       institucionId: instId,
-      usuarioId: vendedorId, // 🔥 CORREGIDO: En tu schema se llama usuarioId
-      fechaProgramada: fechaISO, // 🔥 CORREGIDO: Formato Date
+      usuarioId: vendedorId, 
+      fechaProgramada: fechaISO, 
       horaProgramada: horaProgramada || '08:30',
-      tipoGestion: 'Asignación Masiva', // 🔥 CORREGIDO: Este campo es obligatorio en tu DB
-      estadoGestion: 'Pendiente', 
+      tipoGestion: 'Asignación Masiva', 
+      // 🔥 LA MAGIA ESTÁ AQUÍ: Lo cambiamos a "No Visitada" para que la Ficha Técnica lo ignore automáticamente
+      estadoGestion: 'No Visitada', 
       esVisitaLibre: false
     }));
 
-    // 2. INYECCIÓN MASIVA EN LA AGENDA
     const result = await prisma.visitaAgenda.createMany({
       data: nuevasVisitas,
       skipDuplicates: true
     });
 
-    // 3. Actualizamos automáticamente el responsable principal de esas escuelas
     await prisma.institution.updateMany({
       where: { id: { in: institucionIds } },
       data: { vendedorId: vendedorId }

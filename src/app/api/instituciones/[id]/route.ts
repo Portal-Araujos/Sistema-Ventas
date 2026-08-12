@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -29,8 +30,14 @@ export async function GET(
         vendedor: { select: { id: true, nombre: true, email: true } },
         usuarioCreador: { select: { id: true, nombre: true } },
         visitas: {
+          // 🔥 FILTRO MAGISTRAL: Ignoramos las asignaciones de ruta
+          where: { estadoGestion: { not: 'No Visitada' } },
           include: { usuario: { select: { nombre: true, email: true } } },
           orderBy: { createdAt: 'desc' }
+        },
+        ventas: {
+          // 🔥 Faltaba incluir las ventas para el historial comercial
+          orderBy: { fechaVenta: 'desc' }
         }
       }
     });
@@ -43,6 +50,7 @@ export async function GET(
     return NextResponse.json({ error: 'Error al obtener institución' }, { status: 500 });
   }
 }
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -55,9 +63,11 @@ export async function PUT(
       docentesHombres, docentesMujeres, nivelEducativoId, areaId, regimenId,
       jurisdiccionId, modalidadId, accesoEdificioId, vendedorId
     } = body;
+    
     const hombres = parseInt(docentesHombres) || 0;
     const mujeres = parseInt(docentesMujeres) || 0;
     const totalDocentes = hombres + mujeres;
+    
     const reglas = await prisma.reglaTamano.findMany();
     let tamanoCalculado = 'Pequeña';
     for (const regla of reglas) {
