@@ -111,10 +111,26 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
   if (loading) return <div className="p-12 text-center text-secondary font-medium">Cargando Ficha Técnica...</div>;
   if (!inst) return <div className="p-12 text-center text-primary font-bold text-subtitle">La institución no existe.</div>;
 
-  // 🔥 MEJORA: Construcción de historial mixto (Visitas y Ventas)
+  // 🔥 FILTRO INTELIGENTE: Ignorar "Asignación Masiva" en el historial 🔥
   const historial: any[] = [];
-  if (inst.visitas) inst.visitas.forEach((v: any) => historial.push({ ...v, tipoHistorial: 'visita', fechaReal: new Date(v.createdAt) }));
-  if (inst.ventas) inst.ventas.forEach((v: any) => historial.push({ ...v, tipoHistorial: 'venta', fechaReal: new Date(v.fechaVenta) }));
+  
+  if (inst.visitas) {
+    inst.visitas.forEach((v: any) => {
+      const tipo = String(v.tipoGestion || '').toLowerCase();
+      const resumen = String(v.resumenAcuerdos || v.resumen || '').toLowerCase();
+      const isAsignacion = tipo.includes('asignación') || tipo.includes('asignacion') || resumen.includes('asignación masiva') || resumen.includes('asignacion masiva');
+      
+      // Solo agregamos al historial si NO es una asignación masiva
+      if (!isAsignacion) {
+        historial.push({ ...v, tipoHistorial: 'visita', fechaReal: new Date(v.createdAt) });
+      }
+    });
+  }
+
+  if (inst.ventas) {
+    inst.ventas.forEach((v: any) => historial.push({ ...v, tipoHistorial: 'venta', fechaReal: new Date(v.fechaVenta) }));
+  }
+  
   historial.sort((a, b) => b.fechaReal.getTime() - a.fechaReal.getTime());
   
   const totalPages = Math.max(1, Math.ceil(historial.length / itemsPerPage));
@@ -202,7 +218,8 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Total Visitas Realizadas:</span>
-                <span className="font-bold text-emerald-600">{inst.visitas?.length || 0} visitas</span>
+                {/* Mostramos el tamaño del historial (que ya no cuenta asignaciones masivas) pero restando las ventas */}
+                <span className="font-bold text-emerald-600">{historial.filter(h => h.tipoHistorial === 'visita').length} visitas</span>
               </div>
             </div>
           </div>
@@ -238,11 +255,10 @@ export default function FichaTecnicaPage({ params }: { params: Promise<{ id: str
               <div className="text-center py-12 flex-1">
                 <FileText size={48} className="mx-auto text-border mb-3" />
                 <p className="text-normal font-bold text-foreground">Sin historial registrado</p>
-                <p className="text-secondary mt-1">Aún no hay visitas ni ventas en esta escuela.</p>
+                <p className="text-secondary mt-1">Aún no hay visitas ni ventas reales en esta escuela.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {/* 🔥 CORRECCIÓN: Ahora dibuja el arreglo correcto y respeta la paginación 🔥 */}
                 {paginatedHistorial.map((item: any) => (
                   <div key={item.id} className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 flex flex-col md:flex-row justify-between gap-4">
                     

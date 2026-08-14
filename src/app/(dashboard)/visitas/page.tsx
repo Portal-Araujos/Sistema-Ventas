@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 export default function VisitasPage() {
   const [visitas, setVisitas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false); // Para Silent Fetch
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [catalogos, setCatalogos] = useState<any>(null);
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [instituciones, setInstituciones] = useState<any[]>([]);
@@ -22,7 +22,7 @@ export default function VisitasPage() {
   // Paginación de la Tabla de Visitas
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const [totalMonto, setTotalMonto] = useState(0); // Sumatoria total que viene del backend
+  const [totalMonto, setTotalMonto] = useState(0); 
   const itemsPerPage = 15;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
@@ -52,38 +52,42 @@ export default function VisitasPage() {
       if (filtros.institucionId) params.append('institucionId', filtros.institucionId);
       if (filtros.vendedorId) params.append('vendedorId', filtros.vendedorId);
       
-      // Enviamos paginación a la API de Visitas (Si tu backend de visitas ya lo soporta, si no, igual no estorba)
       params.append('page', currentPage.toString());
       params.append('limit', itemsPerPage.toString());
 
-      // Solo pedimos los catálogos y vendedores la primera vez para no saturar la red
       const fetchPromises = [fetch(`/api/visitas?${params.toString()}`)];
       
       if (!catalogos) fetchPromises.push(fetch('/api/catalogos'));
-      if (instituciones.length === 0) fetchPromises.push(fetch('/api/instituciones?limit=500')); // Limit 500 para el select
+      if (instituciones.length === 0) fetchPromises.push(fetch('/api/instituciones?limit=500'));
       if (vendedores.length === 0) fetchPromises.push(fetch('/api/usuarios/vendedores'));
 
       const responses = await Promise.all(fetchPromises);
-      
       const resVisitas = await responses[0].json();
       
-      // Adaptamos por si el backend devuelve un arreglo directo o el formato {data, meta}
+      // 🔥 FILTRO INTELIGENTE: Ignorar las Asignaciones Masivas 🔥
+      const filtrarVisitasReales = (lista: any[]) => lista.filter(v => {
+        const tipo = String(v.tipoGestion || '').toLowerCase();
+        const resumen = String(v.resumen || '').toLowerCase();
+        return !tipo.includes('asignación') && !tipo.includes('asignacion') && !resumen.includes('asignación masiva');
+      });
+
       if (Array.isArray(resVisitas)) {
-        // Fallback: Si el backend aún no está paginado, paginamos en el cliente temporalmente
-        setTotalItems(resVisitas.length);
-        const paginatedData = resVisitas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+        const visitasReales = filtrarVisitasReales(resVisitas);
+        
+        setTotalItems(visitasReales.length);
+        const paginatedData = visitasReales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
         setVisitas(paginatedData);
-        setTotalMonto(resVisitas.reduce((sum: number, v: any) => sum + (v.totalVendido || 0), 0));
+        setTotalMonto(visitasReales.reduce((sum: number, v: any) => sum + (v.totalVendido || 0), 0));
       } else {
-        setVisitas(resVisitas.data || []);
-        setTotalItems(resVisitas.meta?.total || 0);
+        const visitasReales = filtrarVisitasReales(resVisitas.data || []);
+        setVisitas(visitasReales);
+        setTotalItems(visitasReales.length);
         setTotalMonto(resVisitas.meta?.totalGenerado || 0);
       }
 
       if (!catalogos) setCatalogos(await responses[1].json());
       if (instituciones.length === 0) {
         const instJson = await responses[2].json();
-        // 🔥 AQUÍ CORREGIMOS EL ERROR: Si es el objeto paginado extraemos la 'data', si no, es el arreglo
         setInstituciones(instJson.data ? instJson.data : instJson);
       }
       if (vendedores.length === 0) setVendedores(await responses[3].json());
@@ -107,18 +111,24 @@ export default function VisitasPage() {
     }
 
     try {
-      // Para exportar pedimos TODOS los datos sin límite de paginación
       const params = new URLSearchParams();
       if (filtros.fechaInicio) params.append('fechaInicio', filtros.fechaInicio);
       if (filtros.fechaFin) params.append('fechaFin', filtros.fechaFin);
       if (filtros.cantonId) params.append('cantonId', filtros.cantonId);
       if (filtros.institucionId) params.append('institucionId', filtros.institucionId);
       if (filtros.vendedorId) params.append('vendedorId', filtros.vendedorId);
-      params.append('limit', '99999'); // Hack para pedir todo de golpe
+      params.append('limit', '99999'); 
 
       const res = await fetch(`/api/visitas?${params.toString()}`);
       const dataFull = await res.json();
-      const visitasFull = Array.isArray(dataFull) ? dataFull : dataFull.data || [];
+      let visitasFull = Array.isArray(dataFull) ? dataFull : dataFull.data || [];
+
+      // 🔥 FILTRO EXCEL: Solo exportar visitas reales 🔥
+      visitasFull = visitasFull.filter((v: any) => {
+        const tipo = String(v.tipoGestion || '').toLowerCase();
+        const resumen = String(v.resumen || '').toLowerCase();
+        return !tipo.includes('asignación') && !tipo.includes('asignacion') && !resumen.includes('asignación masiva');
+      });
 
       const dataParaExcel = visitasFull.map((v: any) => ({
         'Fecha': v.fecha,
@@ -164,6 +174,7 @@ export default function VisitasPage() {
           <Download size={18} className="mr-2" /> Descargar Todo a Excel
         </Button>
       </div>
+      
       <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex flex-wrap items-end gap-3">
         <div>
           <Label className="text-[11px] font-bold text-muted-foreground uppercase">Desde Fecha</Label>
@@ -197,6 +208,7 @@ export default function VisitasPage() {
           </div>
         )}
       </div>
+      
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex items-center justify-between transition-transform hover:-translate-y-1">
           <div><p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">TOTAL VISITAS RANGO</p><h3 className="text-2xl font-extrabold text-foreground">{totalItems}</h3></div>
