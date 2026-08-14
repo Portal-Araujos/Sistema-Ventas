@@ -52,7 +52,6 @@ export default function AgendaPage() {
         fetch('/api/usuarios/vendedores')
       ]);
 
-      // 🔥 CORRECCIÓN CRÍTICA: Se leen los JSON una sola vez en variables separadas
       const dataAgendaJson = await resAgenda.json();
       const catDataJson = await resCat.json();
       const vendDataJson = await resVend.json();
@@ -94,6 +93,8 @@ export default function AgendaPage() {
   const itemsPaginados = listaActual.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   
   const cantonesDisponibles = selectedProvincia ? catalogos?.provincias?.find((p: any) => p.id === parseInt(selectedProvincia))?.cantones || [] : [];
+  
+  // 🔥 VARIABLE DE SEGURIDAD 🔥
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
 
   return (
@@ -119,7 +120,8 @@ export default function AgendaPage() {
           </Button>
         </div>
       </div>
-      {/* 🚀 BARRA DE PESTAÑAS (INCLUYE "SIN ASIGNAR") */}
+
+      {/* 🚀 BARRA DE PESTAÑAS */}
       <div className="flex overflow-x-auto gap-3 border-b border-gray-200 hide-scrollbar pb-1">
         <button onClick={() => setTabActiva('ruta')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'ruta' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
           <MapPin size={18}/> Mi Ruta (Hoy) <Badge className="bg-primary/10 text-primary border border-primary/20">{dataAgenda.ruta.length}</Badge>
@@ -133,15 +135,21 @@ export default function AgendaPage() {
         <button onClick={() => setTabActiva('vencidas')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'vencidas' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
           <AlertTriangle size={18}/> Vencidas <Badge className="bg-red-100 text-red-700 border border-red-200">{dataAgenda.vencidas.length}</Badge>
         </button>
-        <button onClick={() => setTabActiva('sinAsignar')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'sinAsignar' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
-          <UserX size={18}/> Sin Asignar <Badge className="bg-amber-100 text-amber-800 border border-amber-200">{dataAgenda.sinAsignar.length}</Badge>
-        </button>
+        
+        {/* 🔥 PESTAÑA OCULTA PARA VENDEDORES 🔥 */}
+        {esAdmin && (
+          <button onClick={() => setTabActiva('sinAsignar')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'sinAsignar' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
+            <UserX size={18}/> Sin Asignar <Badge className="bg-amber-100 text-amber-800 border border-amber-200">{dataAgenda.sinAsignar.length}</Badge>
+          </button>
+        )}
+
         {esAdmin && (
           <button onClick={() => setTabActiva('cobertura')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'cobertura' ? 'border-purple-500 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
             <PieChart size={18}/> Cobertura Territorio
           </button>
         )}
       </div>
+
       {tabActiva !== 'cobertura' && (
         <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col xl:flex-row gap-4 justify-between items-center">
           <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
@@ -159,7 +167,6 @@ export default function AgendaPage() {
             </select>
           </div>
           
-          {/* 🔥 FILTRO DE CALENDARIO AHORA DISPONIBLE PARA TODA LA AGENDA 🔥 */}
           <div className="flex items-center gap-3 bg-blue-50/50 px-4 py-2 rounded-xl border border-blue-100 w-full xl:w-auto">
             <CalendarCheck className="text-blue-500" size={20}/>
             <div className="flex flex-wrap items-center gap-2 w-full justify-between sm:justify-start">

@@ -15,23 +15,18 @@ export async function GET(request: Request) {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userRol = payload.rol as string;
     const userIdSession = payload.id as string;
-    
     const { searchParams } = new URL(request.url);
     const vendedorId = searchParams.get('vendedorId');
     const fechaDesde = searchParams.get('fechaDesde');
     const fechaHasta = searchParams.get('fechaHasta');
-
     const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
     const targetUserId = (esAdmin && vendedorId) ? vendedorId : (!esAdmin ? userIdSession : null);
-
     const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
     hoy.setHours(0,0,0,0);
     const manana = new Date(hoy);
     manana.setDate(manana.getDate() + 1);
-
     const start = fechaDesde ? new Date(`${fechaDesde}T00:00:00-05:00`) : hoy;
     const end = fechaHasta ? new Date(`${fechaHasta}T23:59:59-05:00`) : new Date(manana.getTime() - 1);
-
     const baseWhereVisita: any = {};
     if (targetUserId) baseWhereVisita.usuarioId = targetUserId;
 
@@ -65,8 +60,7 @@ export async function GET(request: Request) {
     const vencidasMap = new Map();
     vencidasRaw.forEach(v => { if(!vencidasMap.has(v.institucionId)) vencidasMap.set(v.institucionId, v); });
     const vencidas = Array.from(vencidasMap.values());
-
-    // 🔥 5. SIN ASIGNAR (LÍMITE REMOVIDO) 🔥
+    //  5. SIN ASIGNAR (LÍMITE REMOVIDO) 
     const sinAsignarEscuelas = await prisma.institution.findMany({
       where: { OR: [ { vendedorId: null }, { vendedorId: '' }, { visitas: { none: {} } } ] },
       include: { parroquia: { include: { canton: { include: { provincia: true } } } } },
@@ -74,7 +68,6 @@ export async function GET(request: Request) {
       orderBy: { nombre: 'asc' }
     });
 
-    // 6. COBERTURA DE TERRITORIO
     const instWhere = targetUserId 
       ? { vendedorId: targetUserId } 
       : { vendedorId: { not: null }, NOT: { vendedorId: '' } };
@@ -85,19 +78,14 @@ export async function GET(request: Request) {
     });
     const porcentaje = totalAsignadas === 0 ? 0 : Math.round((visitadasCount / totalAsignadas) * 100);
 
-    // 🔥 CORRECCIÓN HORARIA (MAGIA DE FECHAS) 🔥
     const formatearFechaExacta = (fechaObj: any) => {
       if (!fechaObj) return null;
       const d = new Date(fechaObj);
-      // Si el sistema lo guardó exactamente a las 00:00 (Como hace el asignador masivo)
-      // forzamos el horario a UTC para que el -5 de Ecuador no retroceda un día.
       if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
         return `${d.getUTCDate().toString().padStart(2, '0')}/${(d.getUTCMonth() + 1).toString().padStart(2, '0')}/${d.getUTCFullYear()}`;
       }
-      // De lo contrario, respeta el horario del sistema
       return d.toLocaleDateString("es-EC", { timeZone: "America/Guayaquil" });
     };
-
     const mapVisita = (v: any) => ({
       id: v.id, institucionId: v.institucionId, nombreInstitucion: v.institucion?.nombre || 'Desconocida',
       provinciaId: v.institucion?.parroquia?.canton?.provincia?.id, cantonId: v.institucion?.parroquia?.canton?.id,

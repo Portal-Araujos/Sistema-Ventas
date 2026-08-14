@@ -104,7 +104,7 @@ export async function POST(request: Request) {
     } = body;
     if (!institucionId) return NextResponse.json({ error: 'Falta la institución' }, { status: 400 });
 
-    // 🔥 1. VALIDACIÓN PREVIA DE CONTRATOS DUPLICADOS 🔥
+    // VALIDACIÓN PREVIA DE CONTRATOS DUPLICADOS
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
       const numerosContratos = ventas
         .map((v: any) => String(v.numContrato).trim())
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
     });
 
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
-      // 2. CREACIÓN DE VENTAS (CONTRATOS)
+      // 1. REGISTRO DE VENTAS
       const transaccionesVentas = ventas.map((v: any) => {
         const valor = parseFloat(v.valorContrato) || 0;
         const abonoVal = parseFloat(v.abono) || 0;
@@ -173,15 +173,17 @@ export async function POST(request: Request) {
       });
       await Promise.all(transaccionesVentas);
 
-      // 3. CREACIÓN DE PEDIDOS DE ROPA Y DETALLES
+      // 2. REGISTRO DE PEDIDOS (AHORA CON NUMCONTRATO DIRECTO 🔥)
       const transaccionesPedidos = ventas
         .filter((v: any) => (Array.isArray(v.prendas) && v.prendas.length > 0) || v.nombreCliente)
         .map((v: any) => {
+          const numContratoLimpio = String(v.numContrato || '').trim();
           return prisma.pedido.create({
             data: {
               institucionId,
               usuarioId: userId,
-              nombreCliente: v.nombreCliente || `Cliente Contrato #${v.numContrato || 'S/N'}`,
+              numContrato: numContratoLimpio || null, // 🔥 AQUÍ SE GUARDA EL NÚMERO DE CONTRATO
+              nombreCliente: v.nombreCliente || `Cliente Contrato #${numContratoLimpio || 'S/N'}`,
               observacion: resumenAcuerdos || null,
               detalles: {
                 create: (v.prendas || []).map((p: any) => ({

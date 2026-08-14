@@ -275,18 +275,29 @@ model CatalogoSKU {
   @@map("catalogo_sku")
 }
 model Pedido {
-  id                String          @id @default(uuid())
-  institucionId     String          @map("institucion_id")
-  usuarioId         String          @map("usuario_id") // El vendedor que tomó el pedido
-  nombreCliente     String          @map("nombre_cliente") // Ej: Pepito Pérez
-  fechaPedido       DateTime        @default(now()) @map("fecha_pedido")
-  estado            String          @default("Pendiente") // Pendiente, En Confección, Entregado
-  observacion       String?         @db.Text
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
-  institucion       Institution     @relation(fields: [institucionId], references: [id], onDelete: Cascade)
-  usuario           Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  detalles          DetallePedido[] // El carrito de ropa de Pepito
+  id               String          @id @default(uuid())
+  institucionId    String          @map("institucion_id")
+  usuarioId        String          @map("usuario_id") // El vendedor que tomó el pedido
+  nombreCliente    String          @map("nombre_cliente") // Ej: Pepito Pérez
+  numContrato      String?         @map("num_contrato") // Ej: Contrato 1212
+  tipoPedido       String          @default("Pedido") @map("tipo_pedido") // Pedido o Reposición
+  operarioAsignado String?         @map("operario_asignado") // Ej: Genesis, Monica
+  lineaProduccion   String?         @map("linea_produccion")
+  fechaRequerida    DateTime?       @map("fecha_requerida") @db.Date // Cuándo lo prometió el vendedor
+  motivoCambioFecha String?         @map("motivo_cambio_fecha") @db.Text // Por qué Producción lo atrasó
+  fechaPedido      DateTime        @default(now()) @map("fecha_pedido")
+  estado           String          @default("Borrador") // Borrador, En Operaciones, En Taller, Entregado
+  observacion      String?         @db.Text
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  institucion      Institution     @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  usuario          Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  detalles         DetallePedido[]
+  responsableEmpaque String?         @map("responsable_empaque")
+  fechaInicioEmpaque DateTime?       @map("fecha_inicio_empaque")
+  fechaFinEmpaque    DateTime?       @map("fecha_fin_empaque")
+  
+
   @@map("pedidos")
 }
 model DetallePedido {
@@ -301,5 +312,34 @@ model DetallePedido {
   bordado           String?  @db.Text // Ej: "Pepito P."
   observacion       String?  @db.Text // Ej: "Hacerlo un poco más largo"
   pedido            Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  estadoEmpaque    String          @default("Pendiente") @map("estado_empaque") // Pendiente, En preparación, Preparado
   @@map("detalles_pedido")
+}
+model EstadoOperacion {
+  id       Int      @id @default(autoincrement())
+  nombre   String   @unique
+  activo   Boolean  @default(true)
+
+  @@map("estados_operacion")
+}
+
+model EstadoProduccion {
+  id       Int      @id @default(autoincrement())
+  nombre   String   @unique
+  activo   Boolean  @default(true)
+  @@map("estados_produccion")
+}
+
+model LineaProduccion {
+  id       Int      @id @default(autoincrement())
+  nombre   String   @unique
+  activo   Boolean  @default(true)
+  @@map("lineas_produccion")
+}
+
+model Operario {
+  id             Int      @id @default(autoincrement())
+  nombreApellido String   @unique @map("nombre_apellido")
+  activo         Boolean  @default(true)
+  @@map("operarios")
 }

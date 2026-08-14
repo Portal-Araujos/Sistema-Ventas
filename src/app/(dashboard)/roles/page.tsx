@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Plus, Edit3, ShieldAlert, Check } from 'lucide-react';
+import { ShieldCheck, Plus, Edit3, ShieldAlert, Check, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -9,45 +9,46 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
-// 🔥 MATRIZ DEFINITIVA DE PERMISOS (ACTUALIZADA CON LOGÍSTICA Y PRODUCCIÓN) 🔥
+// 🔥 MATRIZ DEFINITIVA ALINEADA CON EL SIDEBAR ACORDEÓN 🔥
 const MODULOS_PERMISOS = [
-  { modulo: 'Panel de Inicio', permisos: [{ id: 'inicio:ver', label: 'Ver Panel de Métricas Generales' }] },
-  { modulo: 'Instituciones', permisos: [
-    { id: 'instituciones:ver', label: 'Ver Base de Instituciones' },
-    { id: 'instituciones:crear', label: 'Registrar Nuevas Instituciones' },
-    { id: 'instituciones:editar', label: 'Editar Datos de Instituciones' }
-  ]},
-  { modulo: 'Ventas y Facturación', permisos: [
-    { id: 'ventas:ver', label: 'Ver Historial de Ventas' },
-    { id: 'ventas:crear', label: 'Registrar Nuevos Contratos' },
-    { id: 'ventas:validar', label: 'Auditar / Llenar Campos de Facturación' }
-  ]},
-  { modulo: 'Agenda de Campo', permisos: [{ id: 'agenda:ver', label: 'Ver Agenda y Registrar Visitas' }] },
-  { modulo: 'Auditoría', permisos: [{ id: 'visitas:ver', label: 'Auditoría de Visitas y GPS' }]},
-  
-  // 🔥 NUEVOS MÓDULOS INYECTADOS 🔥
-  { modulo: 'Producción y Pedidos', permisos: [
-    { id: 'pedidos:ver', label: 'Ver Consolidado de Pedidos de Ropa' },
-    { id: 'pedidos:exportar', label: 'Exportar Excel para la Fábrica' }
-  ]},
-  { modulo: 'Catálogos de Inventario', permisos: [
-    { id: 'skus:ver', label: 'Ver Diccionario de Códigos SKU' },
-    { id: 'skus:gestionar', label: 'Subir Excel y Editar Códigos SKU' }
-  ]},
-  { modulo: 'Módulo de Tickets', permisos: [
-    { id: 'tickets:ver', label: 'Ver y Responder Tickets de Observación' },
-    { id: 'tickets:crear', label: 'Abrir Tickets a Vendedores' }
-  ]},
-  // ===================================
-
-  { modulo: 'Reportes e Indicadores', permisos: [
-    { id: 'indicadores:ver', label: 'Ver Indicadores y Cierre Semanal' },
-    { id: 'indicadores:metas', label: 'Definir Metas Semanales' }
-  ]},
-  { modulo: 'Administración', permisos: [
-    { id: 'usuarios:gestionar', label: 'Crear y Administrar Usuarios' },
-    { id: 'configuracion:ver', label: 'Gestionar Catálogos del Sistema' }
-  ]}
+  { 
+    modulo: 'Panel Principal', 
+    permisos: [
+      { id: 'inicio:ver', label: 'Ver Panel de Inicio y Métricas' }
+    ] 
+  },
+  { 
+    modulo: 'Visitas y Ventas', 
+    permisos: [
+      { id: 'instituciones:ver', label: 'Ver Base de Instituciones' },
+      { id: 'instituciones:crear', label: 'Registrar Nuevas Instituciones' },
+      { id: 'instituciones:editar', label: 'Editar Instituciones' },
+      { id: 'agenda:ver', label: 'Ver Agenda y Registrar Visitas' },
+      { id: 'ventas:ver', label: 'Ver Historial de Ventas' },
+      { id: 'ventas:crear', label: 'Crear Contratos / Ventas' },
+      { id: 'ventas:validar', label: 'Auditar Campos de Facturación' },
+      { id: 'visitas:ver', label: 'Ver Seguimientos y Rutas GPS' },
+      { id: 'indicadores:ver', label: 'Ver Indicadores y KPIs de Ventas' }
+    ]
+  },
+  { 
+    modulo: 'Cadena de Producción', 
+    permisos: [
+      { id: 'skus:ver', label: 'Ver Catálogo SKU' },
+      { id: 'skus:gestionar', label: 'Subir Excel y Editar SKUs' },
+      { id: 'pedidos:ver', label: 'Ver Pedidos y Enviar a Operaciones' },
+      { id: 'operaciones:ver', label: 'Gestionar Operaciones (Aprobar Stock)' },
+      { id: 'produccion:ver', label: 'Taller de Producción (Corte/Costura)' },
+      { id: 'empaque:ver', label: 'Bodega, Empaque y Despachos' }
+    ]
+  },
+  { 
+    modulo: 'Configuraciones', 
+    permisos: [
+      { id: 'configuracion:ver', label: 'Gestionar Catálogos Generales' },
+      { id: 'usuarios:gestionar', label: 'Crear y Administrar Usuarios' }
+    ]
+  }
 ];
 
 export default function RolesPage() {
@@ -56,7 +57,7 @@ export default function RolesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formRol, setFormRol] = useState({ id: '', nombre: '', descripcion: '', permisos: [] as string[] });
-  
+
   const cargarRoles = async () => {
     setLoading(true);
     try {
@@ -64,9 +65,9 @@ export default function RolesPage() {
       setRoles(await res.json());
     } catch (e) {} finally { setLoading(false); }
   };
-  
+
   useEffect(() => { cargarRoles(); }, []);
-  
+
   const handleCheckboxChange = (permisoId: string) => {
     setFormRol(prev => {
       const tienePermiso = prev.permisos.includes(permisoId);
@@ -77,7 +78,7 @@ export default function RolesPage() {
       }
     });
   };
-  
+
   const handleGuardarRol = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -85,7 +86,7 @@ export default function RolesPage() {
       const method = formRol.id ? 'PUT' : 'POST';
       await fetch('/api/roles', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formRol) });
       setModalOpen(false);
-      cargarRoles(); // ← Arreglé "cargarDatos()" por "cargarRoles()"
+      cargarRoles();
     } catch (e) {} finally { setSaving(false); }
   };
 
@@ -98,11 +99,11 @@ export default function RolesPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Controla exactamente qué puede ver y hacer cada perfil en el sistema.</p>
         </div>
-        <Button onClick={() => { setFormRol({ id: '', nombre: '', descripcion: '', permisos: [] }); setModalOpen(true); }} className="bg-primary text-white font-bold">
+        <Button onClick={() => { setFormRol({ id: '', nombre: '', descripcion: '', permisos: [] }); setModalOpen(true); }} className="bg-primary hover:bg-primary/90 text-white font-bold">
           <Plus size={18} className="mr-1" /> Nuevo Rol
         </Button>
       </div>
-      
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <Table>
           <TableHeader className="bg-gray-50/80">
@@ -147,6 +148,7 @@ export default function RolesPage() {
         </Table>
       </div>
 
+      {/* MODAL DE EDICIÓN DE MATRIZ DE PERMISOS */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-4xl bg-white p-6 rounded-2xl max-h-[90vh] overflow-y-auto border-t-4 border-t-primary">
           <DialogHeader>
@@ -157,21 +159,21 @@ export default function RolesPage() {
           <form onSubmit={handleGuardarRol} className="space-y-4 mt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
               <div>
-                <Label className="text-xs font-bold text-gray-700 uppercase">Nombre del Rol (Ej: Facturación)</Label>
-                <Input required disabled={!!formRol.id} value={formRol.nombre} onChange={e => setFormRol({ ...formRol, nombre: e.target.value })} className="mt-1 bg-white" />
+                <Label className="text-xs font-bold text-gray-700 uppercase">Nombre del Rol (Ej: Bodeguero)</Label>
+                <Input required disabled={!!formRol.id} value={formRol.nombre} onChange={e => setFormRol({ ...formRol, nombre: e.target.value })} className="mt-1 bg-white" placeholder="Ej: logistica" />
               </div>
               <div>
                 <Label className="text-xs font-bold text-gray-700 uppercase">Breve Descripción</Label>
-                <Input required value={formRol.descripcion} onChange={e => setFormRol({ ...formRol, descripcion: e.target.value })} className="mt-1 bg-white" />
+                <Input required value={formRol.descripcion} onChange={e => setFormRol({ ...formRol, descripcion: e.target.value })} className="mt-1 bg-white" placeholder="Encargado de empacar y despachar" />
               </div>
             </div>
-            
+
             <div className="border-t border-gray-200 pt-5">
               <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2">
-                <Check size={18} className="text-emerald-500"/> Matriz de Acceso a Módulos
+                <LayoutGrid size={18} className="text-emerald-500"/> Matriz de Acceso a Módulos
               </h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {MODULOS_PERMISOS.map((mod) => (
                   <div key={mod.modulo} className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
                     <h4 className="text-[11px] font-black text-primary uppercase mb-3 pb-2 border-b border-gray-100">{mod.modulo}</h4>
@@ -183,7 +185,7 @@ export default function RolesPage() {
                             <div className={`mt-0.5 w-4 h-4 rounded border flex shrink-0 items-center justify-center transition-colors ${isChecked ? 'bg-primary border-primary' : 'bg-white border-gray-300 group-hover:border-primary/50'}`}>
                               {isChecked && <Check size={12} className="text-white" />}
                             </div>
-                            <span className={`text-[11px] leading-tight ${isChecked ? 'font-bold text-gray-900' : 'font-medium text-gray-600 group-hover:text-gray-900'}`}>
+                            <span className={`text-xs leading-tight ${isChecked ? 'font-bold text-gray-900' : 'font-medium text-gray-600 group-hover:text-gray-900'}`}>
                               {permiso.label}
                             </span>
                             <input type="checkbox" className="hidden" checked={isChecked} onChange={() => handleCheckboxChange(permiso.id)} />
@@ -195,6 +197,7 @@ export default function RolesPage() {
                 ))}
               </div>
             </div>
+
             <DialogFooter className="pt-6 mt-4 border-t border-gray-100">
               <Button variant="outline" type="button" onClick={() => setModalOpen(false)}>Cancelar</Button>
               <Button type="submit" disabled={saving} className="bg-primary hover:bg-primary/90 text-white font-bold px-8 shadow-sm">
