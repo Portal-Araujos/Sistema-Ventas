@@ -320,7 +320,7 @@ model DetallePedido {
   operarioAsignado          String?   @map("operario_asignado") // Conservamos solo al operario
   estadoEmpaque             String    @default("Pendiente") @map("estado_empaque") 
   createdAt                 DateTime  @default(now()) @map("created_at")
-  updated_at                DateTime @updatedAt @default(now())
+  updated_at                DateTime @updatedAt @default(now()) 
   @@map("detalles_pedido")
 }
 model EstadoOperacion {
