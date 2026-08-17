@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
-// 🔥 SE AGREGARON: CalendarPlus y Route para los iconos de rutas masivas
 import { Eye, Pencil, UserCheck, Save, Upload, ArrowRight, CheckCircle2, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Download, CalendarPlus, Route } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,10 +32,16 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const itemsPerPage = 15;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
-  // 🔥 NUEVOS ESTADOS: SISTEMA DE CHECKBOXES Y RUTAS 🔥
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  // 🔥 NUEVOS ESTADOS: SISTEMA DE CHECKBOXES Y RUTAS (CON TIPO DE ASIGNACIÓN) 🔥
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [rutaModal, setRutaModal] = useState({ open: false, isAllFiltered: false });
-  const [rutaData, setRutaData] = useState({ vendedorId: '', fecha: '', hora: '08:30' });
+  const [rutaData, setRutaData] = useState({ 
+    vendedorId: '', 
+    tipoAsignacion: 'dia', // 'dia' o 'rango'
+    fecha: '', 
+    hora: '08:30',
+    fechaLimite: '' // Para la opción de rango
+  });
   const [savingRuta, setSavingRuta] = useState(false);
 
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
@@ -67,11 +72,8 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const [importProgress, setImportProgress] = useState({ actual: 0, total: 0 });
   const [duplicateModal, setDuplicateModal] = useState({ open: false, duplicadosCount: 0, nuevosCount: 0 });
 
-  // 🔥 LA NUEVA FUNCIÓN OPTIMIZADA 🔥
   const fetchInstituciones = async (isSilent = false) => {
-    // Si estamos en la carga inicial, forzamos a que no sea silenciosa para poder destrabar la pantalla
     const modoSilencioso = loading ? false : isSilent;
-
     if (!modoSilencioso) setLoading(true);
     else setIsRefreshing(true);
 
@@ -96,7 +98,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       setInstitutions(instData.data || []);
       setTotalItems(instData.meta?.total || 0);
 
-      // Carga eficiente: Solo pedimos catálogos si no los tenemos en memoria
       if (vendedores.length === 0) {
         const resVend = await fetch('/api/usuarios/vendedores');
         setVendedores(await resVend.json());
@@ -109,20 +110,16 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     } catch (error) { 
       showToast('error', 'Error de conexión.');
     } finally { 
-      // 🔥 EL TRUCO: Siempre apagamos el loading principal para liberar la pantalla
       setLoading(false);
       setIsRefreshing(false);
     }
   };
 
-  // Resetear a la página 1 y vaciar selección cuando cambian los filtros
   useEffect(() => { setCurrentPage(1); setSelectedIds([]); }, [filtros]);
-
-  // Vigilar los cambios para pedir los datos a la BD
   useEffect(() => { fetchInstituciones(true); }, [currentPage, filtros]);
 
   // 🔥 LÓGICA DE CHECKBOXES Y ASIGNACIÓN MASIVA 🔥
-  const toggleSelection = (id: number) => {
+  const toggleSelection = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
   
@@ -136,10 +133,18 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     }
   };
 
+  // 🔥 NUEVA FUNCIÓN PARA ARMAR RUTAS INTELIGENTES 🔥
   const handleArmarRutaGuardar = async () => {
-    if (!rutaData.vendedorId || !rutaData.fecha) {
-      showToast('alerta', 'Selecciona el vendedor y la fecha obligatoriamente.'); return;
+    if (!rutaData.vendedorId) {
+      showToast('alerta', 'Debes seleccionar el vendedor.'); return;
     }
+    if (rutaData.tipoAsignacion === 'dia' && !rutaData.fecha) {
+      showToast('alerta', 'Selecciona la fecha exacta de la visita.'); return;
+    }
+    if (rutaData.tipoAsignacion === 'rango' && !rutaData.fechaLimite) {
+      showToast('alerta', 'Selecciona la fecha límite (hasta cuándo tiene para visitarlas).'); return;
+    }
+    
     setSavingRuta(true);
     
     try {
@@ -163,31 +168,43 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
         idsParaRuta = fullData.data.map((i: any) => i.id);
       }
 
-      const res = await fetch('/api/agenda/masiva', {
+      // Preparamos el payload dependiendo del Switch que eligió el Admin
+      const payload = {
+        institucionIds: idsParaRuta,
+        vendedorId: rutaData.vendedorId,
+        ...(rutaData.tipoAsignacion === 'dia' 
+          ? {
+              fechaProgramada: rutaData.fecha,
+              horaProgramada: rutaData.hora,
+              tipoGestion: 'Asignación Masiva (Ruta)'
+            } 
+          : {
+              fechaProximoContacto: rutaData.fechaLimite,
+              tipoGestion: 'Asignación Masiva (Rango)'
+            }
+        )
+      };
+
+      // Apuntamos al endpoint maestro de Visitas que programamos en el paso anterior
+      const res = await fetch('/api/visitas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          institucionIds: idsParaRuta,
-          vendedorId: rutaData.vendedorId,
-          fechaProgramada: rutaData.fecha,
-          horaProgramada: rutaData.hora
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!res.ok) throw new Error();
       
       setRutaModal({ open: false, isAllFiltered: false });
       setSelectedIds([]); 
-      showToast('exito', `¡Éxito! Ruta de ${idsParaRuta.length} visitas armada para el vendedor.`);
+      showToast('exito', `¡Éxito! ${idsParaRuta.length} escuelas asignadas correctamente al vendedor.`);
       fetchInstituciones(true); 
       
     } catch (e) {
-      showToast('error', 'Hubo un error al armar la ruta masiva.');
+      showToast('error', 'Hubo un error al armar la asignación masiva.');
     } finally {
       setSavingRuta(false);
     }
   };
-
 
   const handleGuardarAsignacion = async () => {
     setSavingAssign(true);
@@ -404,7 +421,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
               <TableRow>
                 {/* 🔥 CABECERA CHECKBOX 🔥 */}
                 {esAdmin && (
-                  <TableHead className="w-50px text-center px-2">
+                  <TableHead className="w-[50px] text-center px-2">
                     <input 
                       type="checkbox" 
                       checked={todosSeleccionados}
@@ -503,23 +520,20 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           )}
         </div>
 
-        {/* 🔥 BARRA FLOTANTE MÁGICA DE ASIGNACIÓN (Solo sale si hay checks) 🔥 */}
         {/* 🔥 BARRA FLOTANTE MÁGICA DE ASIGNACIÓN (Responsive 📱💻) 🔥 */}
         {esAdmin && selectedIds.length > 0 && (
-          <div className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-full shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-6 animate-in slide-in-from-bottom-10 fade-in w-[95%] md:w-auto max-w-400px md:max-w-none">
+          <div className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-full shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-6 animate-in slide-in-from-bottom-10 fade-in w-[95%] md:w-auto max-w-[400px] md:max-w-none">
             
             <div className="flex items-center justify-between w-full md:w-auto gap-2">
               <div className="flex items-center gap-2">
                 <div className="bg-primary text-white h-7 w-7 rounded-full flex items-center justify-center font-bold text-sm">
                   {selectedIds.length}
                 </div>
-                {/* En celular dice algo corto, en PC dice el texto completo */}
                 <span className="text-sm font-medium hidden md:inline">Escuelas marcadas en pantalla</span>
                 <span className="text-sm font-medium md:hidden">Seleccionadas</span>
               </div>
             </div>
             
-            {/* Separador vertical solo visible en PC */}
             <div className="hidden md:block h-6 w-px bg-gray-700"></div> 
             
             <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
@@ -538,49 +552,79 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           </div>
         )}
 
-        {/* 🔥 MODAL PARA ARMAR LA RUTA 🔥 */}
+        {/* 🔥 MODAL PARA ARMAR LA RUTA O RANGO LÍMITE 🔥 */}
         <Dialog open={rutaModal.open} onOpenChange={val => setRutaModal({ ...rutaModal, open: val })}>
-          <DialogContent className="sm:max-w-md bg-card p-6 rounded-xl border-t-4 border-t-primary">
+          <DialogContent className="sm:max-w-md bg-card p-6 rounded-xl border-t-4 border-t-primary overflow-y-auto max-h-[90vh]">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
                 <Route size={20} className="text-primary"/> 
-                Asignación Masiva de Ruta
+                Asignación Masiva
               </DialogTitle>
             </DialogHeader>
+            
             <div className="mt-2 space-y-4">
               <div className="bg-primary/10 text-primary text-xs font-bold p-3 rounded-lg text-center">
-                Estás a punto de agendar {rutaModal.isAllFiltered ? totalItems : selectedIds.length} instituciones de un solo golpe.
+                Estás a punto de asignar {rutaModal.isAllFiltered ? totalItems : selectedIds.length} escuelas al vendedor.
               </div>
               
               <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase text-muted-foreground">Vendedor a cargo de la ruta *</Label>
+                <Label className="text-xs font-semibold uppercase text-muted-foreground">Vendedor a cargo *</Label>
                 <select className="w-full h-11 border rounded-md px-3 text-sm bg-white font-medium outline-none" value={rutaData.vendedorId} onChange={e => setRutaData({...rutaData, vendedorId: e.target.value})}>
                   <option value="">Seleccione el Vendedor...</option>
                   {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase text-muted-foreground">Fecha de Visita *</Label>
-                  <Input type="date" className="h-11 bg-white" value={rutaData.fecha} onChange={e => setRutaData({...rutaData, fecha: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase text-muted-foreground">Hora sugerida</Label>
-                  <Input type="time" className="h-11 bg-white" value={rutaData.hora} onChange={e => setRutaData({...rutaData, hora: e.target.value})} />
-                </div>
+              {/* TABS DE TIPO DE ASIGNACIÓN */}
+              <div className="flex gap-2 p-1 bg-muted rounded-lg mt-4 mb-2 border border-border">
+                <button 
+                  className={`flex-1 text-xs font-bold py-2.5 rounded-md transition-all ${rutaData.tipoAsignacion === 'dia' ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setRutaData({...rutaData, tipoAsignacion: 'dia'})}
+                >
+                  📅 Día Específico
+                </button>
+                <button 
+                  className={`flex-1 text-xs font-bold py-2.5 rounded-md transition-all ${rutaData.tipoAsignacion === 'rango' ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setRutaData({...rutaData, tipoAsignacion: 'rango'})}
+                >
+                  ⏳ Rango Abierto (Límite)
+                </button>
               </div>
+
+              {/* INPUTS CONDICIONALES */}
+              {rutaData.tipoAsignacion === 'dia' ? (
+                <div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase text-muted-foreground">Día de Visita *</Label>
+                    <Input type="date" className="h-11 bg-white" value={rutaData.fecha} onChange={e => setRutaData({...rutaData, fecha: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase text-muted-foreground">Hora sugerida</Label>
+                    <Input type="time" className="h-11 bg-white" value={rutaData.hora} onChange={e => setRutaData({...rutaData, hora: e.target.value})} />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground">Fecha Límite (Día Máximo para visitar) *</Label>
+                  <Input type="date" className="h-11 bg-white border-amber-300 focus:border-amber-500 focus:ring-amber-500" value={rutaData.fechaLimite} onChange={e => setRutaData({...rutaData, fechaLimite: e.target.value})} />
+                  <p className="text-[10.5px] leading-tight text-gray-500 mt-1 bg-amber-50 p-2 rounded border border-amber-100">
+                    💡 El vendedor tendrá estas escuelas en su pestaña de <strong>"Próximas"</strong> hasta esta fecha límite. Si se le olvida visitarlas, pasarán a <strong>"Vencidas"</strong>.
+                  </p>
+                </div>
+              )}
+
             </div>
             
             <DialogFooter className="mt-6 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setRutaModal({ ...rutaModal, open: false })}>Cancelar</Button>
               <Button className="bg-primary text-primary-foreground font-bold" onClick={handleArmarRutaGuardar} disabled={savingRuta}>
-                {savingRuta ? 'Armando Ruta...' : 'Generar Visitas'}
+                {savingRuta ? 'Asignando...' : 'Confirmar Asignación'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
+        {/* RESTO DE MODALES (ASIGNAR, EDITAR, IMPORTAR, DUPLICADOS) */}
         {/* MODAL REASIGNAR VENDEDOR */}
         <Dialog open={assignModal.open} onOpenChange={val => setAssignModal({ ...assignModal, open: val })}>
           <DialogContent className="sm:max-w-md bg-card p-5 rounded-xl"><DialogHeader><DialogTitle className="text-base font-bold text-foreground">Asignar Vendedor</DialogTitle></DialogHeader><div className="mt-3 space-y-3"><p className="text-xs text-muted-foreground">Escuela: <strong className="text-foreground">{assignModal.instNombre}</strong></p><select className="w-full h-10 border rounded-md px-3 text-sm bg-white" value={selectedVendedor} onChange={e => setSelectedVendedor(e.target.value)}><option value="">-- Liberar (Sin Vendedor) --</option>{vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}</select></div><DialogFooter className="mt-4 flex gap-2 justify-end"><Button variant="outline" size="sm" onClick={() => setAssignModal({ ...assignModal, open: false })}>Cancelar</Button><Button size="sm" className="bg-primary text-primary-foreground" disabled={savingAssign} onClick={handleGuardarAsignacion}>{savingAssign ? 'Guardando...' : 'Guardar'}</Button></DialogFooter></DialogContent>
@@ -651,7 +695,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       </div>
 
       {toastMsg && (
-        <div className={`fixed bottom-6 right-6 z-[ 9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
+        <div className={`fixed bottom-6 right-6 z-[9999] px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
           {toastMsg.tipo === 'exito' ? <CheckCircle2 size={20} className="text-emerald-100" /> : <AlertCircle size={20} className="text-white/90" />}
           <span className="font-bold text-sm tracking-wide">{toastMsg.texto}</span>
         </div>

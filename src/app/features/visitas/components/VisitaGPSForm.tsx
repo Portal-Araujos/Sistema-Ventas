@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import ContratoVentaForm from '@/components/shared/ContratoVentaForm';
 
 interface Props {
   onSuccess?: () => void;
@@ -52,7 +53,6 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
   }, [isLibre, institucionPreseleccionada, open]);
   useEffect(() => {
     if (huboVenta && ventasItem.length === 0) {
-      // 🔥 AÑADIMOS EL ARREGLO VACÍO "prendas" A LA INICIALIZACIÓN
       setVentasItem([{ numContrato: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', prendas: [] }]);
       setExpandedIndex(0);
       setFormData(prev => ({ ...prev, estadoGestion: 'Visitada' }));
@@ -81,16 +81,38 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       setFormData({ institucionId: '', tipoGestion: 'Presencial', estadoGestion: 'Visitada', resumenAcuerdos: '', fechaProximoContacto: '' });
     }
   }, [open]);
-  const handleBuscarEscuela = (texto: string) => {
-    setBusqueda(texto);
-    if (texto.length > 2) {
-      const filtrados = instituciones
-        .filter(i => i.nombre.toLowerCase().includes(texto.toLowerCase()) || i.canton?.toLowerCase().includes(texto.toLowerCase()))
-        .slice(0, 10);
-      setResultadosBusqueda(filtrados);
-      setDropdownBusquedaOpen(true);
-    } else {
+  // 🔥 REUTILIZAMOS EL BUSCADOR EXISTENTE DE INSTITUCIONES 🔥
+  const handleBuscarEscuela = async (termino: string) => {
+    setBusqueda(termino);
+    
+    // Si borra el texto o tiene menos de 2 letras, cerramos el menú desplegable
+    if (termino.trim().length < 2) {
+      setResultadosBusqueda([]);
       setDropdownBusquedaOpen(false);
+      return;
+    }
+
+    try {
+      // Usamos exactamente el mismo endpoint /api/instituciones con el parámetro search
+      const res = await fetch(`/api/instituciones?search=${encodeURIComponent(termino)}&limit=20`);
+      const json = await res.json();
+      
+      // Adaptamos la respuesta por si viene en formato { data: [...] } o como arreglo directo [...]
+      const lista = Array.isArray(json) ? json : (json.data || []);
+
+      // Formateamos los campos para asegurarnos de que la lista desplegable los muestre correctamente
+      const formateados = lista.map((inst: any) => ({
+        id: inst.id,
+        nombre: inst.nombre,
+        parroquia: inst.parroquia?.nombre || '',
+        canton: inst.parroquia?.canton?.nombre || inst.canton || '',
+        provincia: inst.parroquia?.canton?.provincia?.nombre || inst.provincia || ''
+      }));
+
+      setResultadosBusqueda(formateados);
+      setDropdownBusquedaOpen(true);
+    } catch (error) {
+      console.error("Error buscando escuela:", error);
     }
   };
   const seleccionarEscuelaBuscada = (inst: any) => {
@@ -286,6 +308,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
               <input type="checkbox" checked={huboVenta} onChange={(e) => { setHuboVenta(e.target.checked); if (!e.target.checked) setVentasItem([]); }} className="w-5 h-5 text-emerald-600 rounded cursor-pointer accent-emerald-600" />
               <span className="text-sm font-extrabold text-emerald-800 uppercase tracking-wide">¿Se concretó una venta en esta visita?</span>
             </label>
+            
             {huboVenta && (
               <div className="space-y-4 mt-3">
                 {ventasItem.map((venta, index) => {
@@ -307,145 +330,23 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
                         </div>
                       </div>
 
+                      
+
                       {isExpanded && (
-                        <div className="p-4 pt-1 space-y-3 border-t border-emerald-100 bg-emerald-50/10">
-                          <div className="grid grid-cols-3 gap-2">
-                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">N° Contrato *</Label><Input type="text" value={venta.numContrato} onChange={(e) => handleVentaChange(index, 'numContrato', e.target.value.replace(/\D/g, ''))} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
-                            <div>
-                              <Label className="text-[10px] font-bold text-gray-700 uppercase">Nombre Cliente</Label>
-                              <Input type="text" placeholder="Ej: Pepito Pérez" value={venta.nombreCliente || ''} onChange={(e) => handleVentaChange(index, 'nombreCliente', e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" />
-                            </div>
-                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Monto Total *</Label><Input type="number" step="0.01" value={venta.valorContrato} onChange={(e) => handleVentaChange(index, 'valorContrato', e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
-                            <div><Label className="text-[10px] font-bold uppercase text-blue-700">Abono Inicial</Label><Input type="number" step="0.01" value={venta.abono} onChange={(e) => handleVentaChange(index, 'abono', e.target.value)} className="h-8 text-xs mt-1 bg-white border-blue-200 focus-visible:ring-blue-500" placeholder="0.00" /></div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Meses Plazo</Label><Input type="number" min="1" value={venta.meses} onChange={(e) => handleVentaChange(index, 'meses', e.target.value)} className="h-8 text-xs mt-1 bg-white border-emerald-200 focus-visible:ring-emerald-500" /></div>
-                            <div><Label className="text-[10px] font-bold uppercase text-emerald-700">Cuota Mensual</Label><Input disabled type="text" value={`$ ${venta.cuotaMensual}`} className="h-8 text-xs mt-1 bg-emerald-50 border-emerald-200 font-bold text-emerald-800" /></div>
-                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Mes Cobro</Label><select value={venta.mesCobro} onChange={(e) => handleVentaChange(index, 'mesCobro', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[11px] bg-white mt-1 outline-none">{['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 border-t border-emerald-100 pt-2">
-                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select value={venta.tipoCobroId} onChange={(e) => handleVentaChange(index, 'tipoCobroId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{tiposCobro.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-                            <div><Label className="text-[10px] font-bold text-emerald-800 uppercase">Est. Entrega Venta</Label><select value={venta.estadoClienteId} onChange={(e) => handleVentaChange(index, 'estadoClienteId', e.target.value)} className="w-full h-8 border border-emerald-400 bg-emerald-50 rounded-md px-1 text-[10px] font-bold text-emerald-900 mt-1 outline-none"><option value="">Seleccione...</option>{estadosCliente.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-                            <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Contrato</Label><select value={venta.estadoContratoId} onChange={(e) => handleVentaChange(index, 'estadoContratoId', e.target.value)} className="w-full h-8 border border-emerald-200 rounded-md px-1 text-[10px] bg-white mt-1 outline-none"><option value="">Seleccione...</option>{estadosContrato.filter(t=>t.activo).map(t => (<option key={t.id} value={t.id}>{t.nombre}</option>))}</select></div>
-                          </div>
-                          {isPedido && (
-                            <div className="mt-4 border-t-2 border-blue-200 pt-3 bg-blue-50/50 p-3 rounded-xl">
-                              <h4 className="text-sm font-black text-blue-900 flex items-center gap-2 mb-3">
-                                <ShoppingCart size={16}/> Detalle de Pedido (Prendas)
-                              </h4>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white p-3 rounded border border-blue-100 shadow-sm">
-                                <div className="col-span-2">
-                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Tipo Prenda *</Label>
-                                  <select className="w-full h-8 border rounded px-1 text-[10px] bg-white mt-1 outline-none" value={draftPrenda.tipoRopa} onChange={e => handleDraftChange('tipoRopa', e.target.value)}>
-                                    <option value="">Seleccione...</option>
-                                    {tiposRopaDisp.map((t: any) => <option key={t} value={t}>{t}</option>)}
-                                  </select>
-                                </div>
-                                <div className="col-span-2">
-                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Color *</Label>
-                                  <select disabled={!draftPrenda.tipoRopa} className="w-full h-8 border rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100" value={draftPrenda.color} onChange={e => handleDraftChange('color', e.target.value)}>
-                                    <option value="">Seleccione...</option>
-                                    {coloresDisp.map((c: any) => <option key={c} value={c}>{c}</option>)}
-                                  </select>
-                                </div>
-                                <div>
-                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Género *</Label>
-                                  <select disabled={!draftPrenda.color} className="w-full h-8 border rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100" value={draftPrenda.genero} onChange={e => handleDraftChange('genero', e.target.value)}>
-                                    <option value="">...</option>
-                                    {generosDisp.map((g: any) => <option key={g} value={g}>{g}</option>)}
-                                  </select>
-                                </div>
-                                <div>
-                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Talla *</Label>
-                                  <select disabled={!draftPrenda.genero} className="w-full h-8 border rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100" value={draftPrenda.talla} onChange={e => handleDraftChange('talla', e.target.value)}>
-                                    <option value="">...</option>
-                                    {tallasDisp.map((t: any) => <option key={t} value={t}>{t}</option>)}
-                                  </select>
-                                </div>
-                                <div className="col-span-2 sm:col-span-2">
-                                  <Label className="text-[10px] font-bold uppercase text-gray-600">Cantidad *</Label>
-                                  <div className="flex gap-1 items-center mt-1">
-                                    <Input 
-                                      type="number" 
-                                      min="1" 
-                                      value={draftPrenda.cantidad} 
-                                      onChange={e => setDraftPrenda({...draftPrenda, cantidad: parseInt(e.target.value) || 1})} 
-                                      className="h-8 text-xs font-bold text-center border-blue-300 w-full" 
-                                    />
-                                    <Button 
-                                      type="button" 
-                                      onClick={() => handleAddPrenda(index)} 
-                                      title="Agregar prenda al carrito"
-                                      className="h-8 w-10 shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold p-0 shadow-sm rounded flex items-center justify-center"
-                                    >
-                                      <Plus size={16}/>
-                                    </Button>
-                                  </div>
-                                </div>
-                                <div className="col-span-2">
-                                  <Input type="text" placeholder="Texto de bordado..." value={draftPrenda.bordado} onChange={e => setDraftPrenda({...draftPrenda, bordado: e.target.value})} className="h-8 text-[10px] mt-5 sm:mt-0" />
-                                </div>
-                                <div className="col-span-2">
-                                  <Input type="text" placeholder="Observación..." value={draftPrenda.observacion} onChange={e => setDraftPrenda({...draftPrenda, observacion: e.target.value})} className="h-8 text-[10px] mt-1 sm:mt-0" />
-                                </div>
-                              </div>
-                              {(venta.prendas || []).length > 0 ? (
-                                <div className="mt-3 bg-white rounded border border-gray-200 overflow-x-auto shadow-sm">
-                                  <table className="w-full text-left">
-                                    <thead className="bg-gray-50 border-b text-[10px] text-gray-500 uppercase">
-                                      <tr>
-                                        <th className="p-2 font-bold">Prenda</th>
-                                        <th className="p-2 font-bold text-center">Cant.</th>
-                                        <th className="p-2 font-bold">Detalles</th>
-                                        <th className="p-2 font-bold text-center">Acción</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                      {venta.prendas.map((p: any, pIndex: number) => (
-                                        <tr key={pIndex} className="hover:bg-gray-50">
-                                          <td className="p-2 text-[10px]">
-                                            <div className="font-bold text-blue-900 leading-tight">{p.tipoRopa} - {p.color}</div>
-                                            <div className="text-gray-500">{p.genero} • Talla: <span className="font-black text-gray-900">{p.talla}</span></div>
-                                            <div className="text-[9px] text-gray-400 font-mono mt-0.5">SKU: {p.skuCodigo}</div>
-                                          </td>
-                                          <td className="p-2 text-center align-middle">
-                                            {/* 🔥 CANTIDAD EDITABLE EN VIVO 🔥 */}
-                                            <Input type="number" min="1" className="h-6 w-12 text-center text-xs font-bold mx-auto border-gray-300" value={p.cantidad} 
-                                              onChange={(e) => {
-                                                const newVentas = [...ventasItem];
-                                                newVentas[index].prendas[pIndex].cantidad = parseInt(e.target.value) || 1;
-                                                setVentasItem(newVentas);
-                                              }} 
-                                            />
-                                          </td>
-                                          <td className="p-2 text-[9px] text-gray-600">
-                                            {p.bordado && <div><span className="font-bold">B:</span> {p.bordado}</div>}
-                                            {p.observacion && <div><span className="font-bold">O:</span> {p.observacion}</div>}
-                                          </td>
-                                          <td className="p-2 text-center">
-                                            <button type="button" onClick={() => {
-                                              const newVentas = [...ventasItem];
-                                              newVentas[index].prendas.splice(pIndex, 1);
-                                              setVentasItem(newVentas);
-                                            }} className="text-red-400 hover:text-red-600 bg-red-50 p-1.5 rounded transition-colors"><Trash2 size={12}/></button>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                      <tr className="bg-blue-50/50">
-                                        <td className="p-2 text-[10px] font-black text-right uppercase text-blue-900">Total Prendas:</td>
-                                        <td className="p-2 text-center font-black text-blue-700">{venta.prendas.reduce((sum: number, p: any) => sum + p.cantidad, 0)}</td>
-                                        <td colSpan={2}></td>
-                                      </tr>
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : (
-                                <div className="mt-3 text-center py-4 bg-white rounded border border-dashed border-blue-200 text-blue-400 text-xs font-bold">
-                                  Carrito vacío. Agregue las prendas arriba.
-                                </div>
-                              )}
-                            </div>
-                          )}
+                        <div className="p-4 pt-4 border-t border-emerald-100 bg-emerald-50/10">
+                          
+                          {/* 🔥 AQUÍ LLAMAMOS AL SÚPER COMPONENTE UNIVERSAL 🔥 */}
+                          <ContratoVentaForm 
+                            data={venta} 
+                            catalogos={{ tiposCobro, estadosCliente, estadosContrato }}
+                            onChange={(newData) => {
+                              // Reemplazamos los 50 "handleVentaChange" por esta simple función
+                              const nuevasVentas = [...ventasItem];
+                              nuevasVentas[index] = newData;
+                              setVentasItem(nuevasVentas);
+                            }}
+                          />
+
                         </div>
                       )}
                     </div>

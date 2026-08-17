@@ -196,6 +196,7 @@ model VisitaAgenda {
   usuario              Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   ventas               Venta[]
   esVisitaLibre        Boolean  @default(false)
+  edicionFechaHabilitada Boolean  @default(false) @map("edicion_fecha_habilitada")
   @@map("visitas_agenda")
 }
 model EstadoCliente {
@@ -301,18 +302,25 @@ model Pedido {
   @@map("pedidos")
 }
 model DetallePedido {
-  id                String   @id @default(uuid())
-  pedidoId          String   @map("pedido_id")
-  skuCodigo         String   @map("sku_codigo") // El sistema lo pegará aquí (Ej: UN1843)
-  tipoRopa          String   @map("tipo_ropa")  // Ej: CHALECO PREMIUM
-  color             String
-  genero            String   // HOMBRE, MUJER, UNISEX
-  talla             String
-  cantidad          Int      // Ej: 3
-  bordado           String?  @db.Text // Ej: "Pepito P."
-  observacion       String?  @db.Text // Ej: "Hacerlo un poco más largo"
-  pedido            Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-  estadoEmpaque    String          @default("Pendiente") @map("estado_empaque") // Pendiente, En preparación, Preparado
+  id                        String   @id @default(uuid())
+  pedidoId                  String   @map("pedido_id")
+  skuCodigo                 String   @map("sku_codigo") 
+  tipoRopa                  String   @map("tipo_ropa")  
+  color                     String
+  genero                    String   
+  talla                     String
+  cantidad                  Int      
+  bordado                   String?  @db.Text 
+  observacion               String?  @db.Text 
+  pedido                    Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  estadoOperacion           String    @default("Revision") @map("estado_operacion") 
+  fechaEstimadaConfeccion   DateTime? @map("fecha_estimada_confeccion")
+  observacionOperaciones    String?   @map("observacion_operaciones")
+  estadoProduccion          String    @default("Planificacion") @map("estado_produccion") 
+  operarioAsignado          String?   @map("operario_asignado") // Conservamos solo al operario
+  estadoEmpaque             String    @default("Pendiente") @map("estado_empaque") 
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
   @@map("detalles_pedido")
 }
 model EstadoOperacion {

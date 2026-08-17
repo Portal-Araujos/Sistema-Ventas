@@ -12,149 +12,152 @@ export async function GET(request: Request) {
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    await jwtVerify(token, JWT_SECRET);
-
-    const countEstados = await prisma.estadoOperacion.count();
-    if (countEstados === 0) {
-      await prisma.estadoOperacion.createMany({
-        data: [
-          { nombre: 'Pendiente en revisión' },
-          { nombre: 'En producción' },
-          { nombre: 'En empaque' },
-          { nombre: 'Listos para el despacho' },
-          { nombre: 'Despachado' }
-        ]
-      });
-    }
-
     const { searchParams } = new URL(request.url);
+    const estadoFiltro = searchParams.get('estado') || 'TODOS';
     const fechaInicio = searchParams.get('fechaInicio');
     const fechaFin = searchParams.get('fechaFin');
 
-    const whereCondition: any = { estado: { not: 'Borrador' } };
+    const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
+    hoy.setHours(0, 0, 0, 0);
+    const finHoy = new Date(hoy);
+    finHoy.setHours(23, 59, 59, 999);
 
-    if (fechaInicio && fechaFin) {
-      whereCondition.updatedAt = {
-        gte: new Date(`${fechaInicio}T00:00:00-05:00`),
-        lte: new Date(`${fechaFin}T23:59:59-05:00`)
-      };
-    }
-
-    const pedidos = await prisma.pedido.findMany({
-      where: whereCondition,
-      include: {
-        institucion: { select: { id: true, nombre: true } },
-        usuario: { select: { id: true, nombre: true } },
-        detalles: true
-      },
-      orderBy: { updatedAt: 'desc' }
-    });
-
-    const catalogosEstados = await prisma.estadoOperacion.findMany({ where: { activo: true } });
-
-    const hoyEcuador = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
-    hoyEcuador.setHours(0,0,0,0);
-    const mananaEcuador = new Date(hoyEcuador);
-    mananaEcuador.setDate(mananaEcuador.getDate() + 1);
-
-    const kpis = {
-      enRevision: 0, enProduccion: 0, enEmpaque: 0, listosDespacho: 0,
-      despachosHoy: 0, totalPendientes: 0, atrasados: 0
+    const whereBase: any = {
+      pedido: { estado: { not: 'Borrador' } }
     };
 
-    pedidos.forEach(p => {
-      const estadoReal = p.estado === 'En Operaciones' ? 'Pendiente en revisión' : p.estado;
+    if (fechaInicio || fechaFin) {
+      const startStr = fechaInicio ? `${fechaInicio}T00:00:00-05:00` : '1970-01-01T00:00:00-05:00';
+      const endStr = fechaFin ? `${fechaFin}T23:59:59.999-05:00` : '2099-12-31T23:59:59.999-05:00';
+      whereBase.createdAt = { gte: new Date(startStr), lte: new Date(endStr) };
+    }
 
-      if (estadoReal === 'Pendiente en revisión') kpis.enRevision++;
-      if (estadoReal === 'En producción') kpis.enProduccion++;
-      if (estadoReal === 'En empaque') kpis.enEmpaque++;
-      if (estadoReal === 'Listos para el despacho') kpis.listosDespacho++;
-      
-      if (estadoReal === 'Despachado') {
-        if (new Date(p.updatedAt) >= hoyEcuador && new Date(p.updatedAt) < mananaEcuador) {
-          kpis.despachosHoy++;
-        }
-      } else {
-        kpis.totalPendientes++;
-      }
+    const [estadosCatalogo, todosLosDetalles] = await Promise.all([
+      prisma.estadoOperacion.findMany({ where: { activo: true } }),
+      prisma.detallePedido.findMany({
+        where: whereBase,
+        include: {
+          pedido: {
+            include: {
+              institucion: { select: { id: true, nombre: true } },
+              usuario: { select: { id: true, nombre: true } }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      })
+    ]);
 
-      if (p.fechaRequerida && new Date(p.fechaRequerida) < hoyEcuador && estadoReal !== 'Despachado') {
-        kpis.atrasados++;
-      }
-    });
+    let kpis = {
+      enRevision: 0, enProduccion: 0, enEmpaque: 0,
+      listosDespacho: 0, despachosHoy: 0, totalPendientes: 0, atrasados: 0
+    };
 
-    const mapaGrupos = new Map();
+    const mapaEscuelas = new Map();
 
-    for (const ped of pedidos as any[]) {
+    todosLosDetalles.forEach((det: any) => {
+      const ped = det.pedido;
       const instId = ped.institucionId;
-      const estadoReal = ped.estado === 'En Operaciones' ? 'Pendiente en revisión' : ped.estado;
+      const estPrenda = det.estadoOperacion || 'Pendiente en revision';
+      const fConfeccion = det.fechaEstimadaConfeccion ? new Date(det.fechaEstimadaConfeccion) : null;
+      const fUpdatedAt = new Date(det.updatedAt);
+      
+      const esAtrasado = fConfeccion !== null && fConfeccion < hoy && estPrenda !== 'Despacho';
 
-      let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
+      if (estPrenda === 'Pendiente en revision') kpis.enRevision += det.cantidad;
+      if (estPrenda === 'En produccion') kpis.enProduccion += det.cantidad;
+      if (estPrenda === 'en empaque') kpis.enEmpaque += det.cantidad;
+      if (estPrenda === 'Listos para el despacho') kpis.listosDespacho += det.cantidad;
+      
+      if (estPrenda !== 'Despacho') {
+        kpis.totalPendientes += det.cantidad;
+        if (esAtrasado) kpis.atrasados += det.cantidad;
+      }
 
-      if (!mapaGrupos.has(instId)) {
-        mapaGrupos.set(instId, {
+      if (estPrenda === 'Despacho' && fUpdatedAt >= hoy && fUpdatedAt <= finHoy) {
+        kpis.despachosHoy += det.cantidad;
+      }
+
+      let cumpleFiltro = true;
+      if (estadoFiltro !== 'TODOS') {
+        if (estadoFiltro === 'PENDIENTES') cumpleFiltro = estPrenda !== 'Despacho';
+        else if (estadoFiltro === 'ATRASADOS') cumpleFiltro = esAtrasado;
+        else if (estadoFiltro === 'HOY') cumpleFiltro = (estPrenda === 'Despacho' && fUpdatedAt >= hoy && fUpdatedAt <= finHoy);
+        else cumpleFiltro = estPrenda === estadoFiltro;
+      }
+
+      if (!cumpleFiltro) return;
+
+      if (!mapaEscuelas.has(instId)) {
+        mapaEscuelas.set(instId, {
           id: instId,
-          codigoPedido: `OP-${instId.slice(0, 6).toUpperCase()}`,
+          institucionId: instId,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
+          codigoPedido: `PED-${instId.slice(0, 6).toUpperCase()}`,
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
-          fechaIngreso: ped.updatedAt,
+          fechaIngresoTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
+          // 🔥 MAGIA DE FECHA: Forzamos UTC para fechas secas 🔥
+          fechaRequeridaTexto: ped.fechaRequerida ? new Date(ped.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'No asignada',
+          esAtrasado: false,
           paquetesCantidad: 0,
-          totalPrendas: 0,
-          estadosSet: new Set(),
-          fechasRequeridas: [],
-          pedidosAsociados: []
+          estadoActual: estPrenda,
+          fechaEstimadaConfeccionGlobal: fConfeccion,
+          pedidosAsociados: new Map()
         });
       }
 
-      const grupo = mapaGrupos.get(instId);
-      const prendasEnContrato = (ped.detalles || []).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
-
-      grupo.pedidosAsociados.push({
-        id: ped.id,
-        numContrato: contratoExtraido,
-        nombreCliente: ped.nombreCliente,
-        estado: estadoReal,
-        fechaRequerida: ped.fechaRequerida,
-        motivoCambioFecha: ped.motivoCambioFecha,
-        operarioAsignado: ped.operarioAsignado,
-        totalPrendas: prendasEnContrato,
-        detalles: ped.detalles || []
-      });
-
-      grupo.paquetesCantidad += 1;
-      grupo.totalPrendas += prendasEnContrato;
-      grupo.estadosSet.add(estadoReal);
-      if (ped.fechaRequerida) grupo.fechasRequeridas.push(new Date(ped.fechaRequerida));
+      const escuela = mapaEscuelas.get(instId);
       
-      if (new Date(ped.updatedAt) > new Date(grupo.fechaIngreso)) {
-        grupo.fechaIngreso = ped.updatedAt;
+      if (esAtrasado) escuela.esAtrasado = true;
+      
+      if (fConfeccion) {
+        if (!escuela.fechaEstimadaConfeccionGlobal || fConfeccion < escuela.fechaEstimadaConfeccionGlobal) {
+          escuela.fechaEstimadaConfeccionGlobal = fConfeccion;
+        }
       }
-    }
 
-    const tabla = Array.from(mapaGrupos.values()).map(g => {
-      const arrayEstados = Array.from(g.estadosSet);
-      const estadoGlobal = arrayEstados.length === 1 ? arrayEstados[0] : 'Varios Estados';
-      
-      const fechaUrgente = g.fechasRequeridas.length > 0 
-        ? new Date(Math.min(...g.fechasRequeridas.map((d: Date) => d.getTime()))) 
-        : null;
+      const prioridadEstados = ['Pendiente en revision', 'En produccion', 'en empaque', 'Listos para el despacho', 'Despacho'];
+      if (prioridadEstados.indexOf(estPrenda) < prioridadEstados.indexOf(escuela.estadoActual)) {
+         escuela.estadoActual = estPrenda;
+      }
 
-      return {
-        ...g,
-        estadosArray: arrayEstados, // 🔥 CORRECCIÓN: Enviamos un Array real para que el filtro funcione
-        estadoActual: estadoGlobal,
-        fechaIngresoTexto: new Date(g.fechaIngreso).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
-        fechaRequeridaTexto: fechaUrgente ? fechaUrgente.toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }) : 'Sin Asignar',
-        esAtrasado: fechaUrgente ? fechaUrgente < hoyEcuador : false
-      };
+      if (!escuela.pedidosAsociados.has(ped.id)) {
+        escuela.pedidosAsociados.set(ped.id, {
+          id: ped.id,
+          numContrato: ped.numContrato || 'S/N',
+          nombreCliente: ped.nombreCliente || 'Sin Cliente',
+          estado: ped.estado,
+          fechaRequerida: ped.fechaRequerida,
+          detalles: []
+        });
+        escuela.paquetesCantidad += 1;
+      }
+
+      const contrato = escuela.pedidosAsociados.get(ped.id);
+      contrato.detalles.push({
+        ...det,
+        estadoOperacion: estPrenda,
+        // 🔥 MAGIA DE FECHA: Forzamos UTC 🔥
+        fechaEstimadaConfeccionTexto: fConfeccion ? fConfeccion.toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'Sin Asignar'
+      });
     });
 
-    // Limpiamos el Set original para evitar errores de transmisión JSON
-    tabla.forEach(g => delete (g as any).estadosSet);
+    const tablaRes = Array.from(mapaEscuelas.values()).map(e => ({
+      ...e,
+      fechaEstimadaConfeccionTexto: e.fechaEstimadaConfeccionGlobal 
+         ? e.fechaEstimadaConfeccionGlobal.toLocaleDateString('es-EC', { timeZone: 'UTC' }) 
+         : 'Sin Asignar',
+      pedidosAsociados: Array.from(e.pedidosAsociados.values())
+    }));
 
-    return NextResponse.json({ kpis, tabla, catalogos: { estados: catalogosEstados } });
+    return NextResponse.json({
+      kpis,
+      catalogos: { estados: estadosCatalogo },
+      tabla: tablaRes
+    });
+
   } catch (error) {
-    console.error("Error en Operaciones:", error);
+    console.error("Error Operaciones GET:", error);
     return NextResponse.json({ error: 'Error al consultar operaciones' }, { status: 500 });
   }
 }
@@ -162,38 +165,26 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { modo, id, institucionId, estado, fechaRequerida, motivoCambioFecha, operarioAsignado } = body;
+    const { prendaIds, nuevoEstado, fechaEstimadaConfeccion, observacionOperaciones } = body;
 
-    // 🔥 NUEVO: Aprobar todo el stock de una escuela masivamente 🔥
-    if (modo === 'aprobar_escuela') {
-      if (!institucionId) return NextResponse.json({ error: 'ID de institución requerido' }, { status: 400 });
-      
-      await prisma.pedido.updateMany({
-        where: { 
-          institucionId, 
-          estado: { in: ['Pendiente en revisión', 'En Operaciones'] } 
-        },
-        data: { estado: 'En producción' }
-      });
-      return NextResponse.json({ success: true, message: 'Escuela enviada a Producción.' });
+    if (!Array.isArray(prendaIds) || prendaIds.length === 0) {
+      return NextResponse.json({ error: 'Debe seleccionar al menos una prenda.' }, { status: 400 });
     }
 
-    if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
-
     const updateData: any = {};
-    if (estado) updateData.estado = estado;
-    if (fechaRequerida) updateData.fechaRequerida = new Date(`${fechaRequerida}T12:00:00Z`);
-    if (motivoCambioFecha !== undefined) updateData.motivoCambioFecha = motivoCambioFecha;
-    if (operarioAsignado !== undefined) updateData.operarioAsignado = operarioAsignado;
+    if (nuevoEstado) updateData.estadoOperacion = nuevoEstado;
+    // 🔥 Guardamos en el medio día UTC para blindar la fecha 🔥
+    if (fechaEstimadaConfeccion) updateData.fechaEstimadaConfeccion = new Date(`${fechaEstimadaConfeccion}T12:00:00Z`);
+    if (observacionOperaciones !== undefined) updateData.observacionOperaciones = observacionOperaciones;
 
-    const actualizado = await prisma.pedido.update({
-      where: { id },
+    await prisma.detallePedido.updateMany({
+      where: { id: { in: prendaIds } },
       data: updateData
     });
 
-    return NextResponse.json({ success: true, data: actualizado });
+    return NextResponse.json({ success: true, message: 'Estado actualizado correctamente.' });
   } catch (error) {
-    console.error("Error actualizando operación:", error);
-    return NextResponse.json({ error: 'Error interno al actualizar' }, { status: 500 });
+    console.error("Error Operaciones PUT:", error);
+    return NextResponse.json({ error: 'Error al actualizar operaciones' }, { status: 500 });
   }
 }

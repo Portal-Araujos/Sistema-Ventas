@@ -6,166 +6,183 @@ import { cookies } from 'next/headers';
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
-// 🔥 CORRECCIÓN: Ahora Taller incluye los estados futuros para que no desaparezcan de la lista, solo se bloqueen
-const ESTADOS_TALLER = [
-  'En producción', 'Planificación', 'Corte', 'Confección', 'Preparación', 
-  'En empaque', 'Listos para el despacho', 'Despachado'
-];
-
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    await jwtVerify(token, JWT_SECRET);
 
-    // AUTO-SEMBRADO
-    if (await prisma.estadoProduccion.count() === 0) {
-      await prisma.estadoProduccion.createMany({
-        data: [{ nombre: 'Planificación' }, { nombre: 'Corte' }, { nombre: 'Confección' }, { nombre: 'Preparación' }]
-      });
-      await prisma.lineaProduccion.createMany({
-        data: [{ nombre: 'Línea Deportiva' }, { nombre: 'Línea Formal' }, { nombre: 'Taller Externo 1' }]
-      });
-      await prisma.operario.createMany({
-        data: [{ nombreApellido: 'Génesis Méndez' }, { nombreApellido: 'Mónica Ruiz' }, { nombreApellido: 'Juan Costura' }]
-      });
-    }
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const currentUser = { id: payload.id, nombre: payload.nombre, rol: payload.rol };
 
     const { searchParams } = new URL(request.url);
     const fechaInicio = searchParams.get('fechaInicio');
     const fechaFin = searchParams.get('fechaFin');
 
-    const whereCondition: any = { estado: { in: ESTADOS_TALLER } };
-    if (fechaInicio && fechaFin) {
-      whereCondition.updatedAt = {
-        gte: new Date(`${fechaInicio}T00:00:00-05:00`),
-        lte: new Date(`${fechaFin}T23:59:59-05:00`)
-      };
-    }
+    const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
+    hoy.setHours(0, 0, 0, 0);
+    const finHoy = new Date(hoy);
+    finHoy.setHours(23, 59, 59, 999);
 
-    const pedidos = await prisma.pedido.findMany({
-      where: whereCondition,
-      include: { institucion: { select: { id: true, nombre: true } }, usuario: { select: { nombre: true } }, detalles: true },
-      orderBy: { updatedAt: 'desc' }
-    });
-
-    const catalogos = {
-      estados: await prisma.estadoProduccion.findMany({ where: { activo: true } }),
-      lineas: await prisma.lineaProduccion.findMany({ where: { activo: true } }),
-      operarios: await prisma.operario.findMany({ where: { activo: true } })
+    const whereBase: any = {
+      estadoOperacion: 'En produccion',
+      pedido: { estado: { not: 'Borrador' } }
     };
 
-    const hoyEcuador = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
-    hoyEcuador.setHours(0,0,0,0);
-    const mananaEcuador = new Date(hoyEcuador);
-    mananaEcuador.setDate(mananaEcuador.getDate() + 1);
-
-    // CÁLCULO DE KPIs
-    const kpis = { ordenesProceso: 0, ordenesCompletadas: 0, prendasProduccion: 0, prendasDia: 0 };
-    const estadosProceso = ['En producción', 'Planificación', 'Corte', 'Confección', 'Preparación'];
-    const estadosCompletados = ['En empaque', 'Listos para el despacho', 'Despachado']; // 🔥 Cuenta los enviados a bodega
-
-    pedidos.forEach(p => {
-      const prendasEnPedido = p.detalles.reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
-      if (estadosProceso.includes(p.estado)) {
-        kpis.ordenesProceso++;
-        kpis.prendasProduccion += prendasEnPedido;
-      } else if (estadosCompletados.includes(p.estado)) {
-        kpis.ordenesCompletadas++;
-        if (new Date(p.updatedAt) >= hoyEcuador && new Date(p.updatedAt) < mananaEcuador) {
-          kpis.prendasDia += prendasEnPedido;
-        }
-      }
-    });
-
-    const mapaGrupos = new Map();
-    for (const ped of pedidos) {
-      const instId = ped.institucionId;
-      if (!mapaGrupos.has(instId)) {
-        mapaGrupos.set(instId, {
-          id: instId,
-          codigoOP: `OP-${instId.slice(0, 6).toUpperCase()}`,
-          institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
-          paquetesCantidad: 0, totalPrendas: 0, estadosSet: new Set(), lineasSet: new Set(),
-          fechaInicio: ped.updatedAt, fechasRequeridas: [], pedidosAsociados: []
-        });
-      }
-
-      const grupo = mapaGrupos.get(instId);
-      const prendasContrato = ped.detalles.reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
-      let numContrato = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
-
-      grupo.pedidosAsociados.push({
-        id: ped.id, numPedido: `PED-${ped.id.slice(0,6).toUpperCase()}`, numContrato,
-        estado: ped.estado, operarioAsignado: ped.operarioAsignado || '', lineaProduccion: ped.lineaProduccion || '',
-        fechaRequerida: ped.fechaRequerida, detalles: ped.detalles || [], totalPrendas: prendasContrato
-      });
-
-      grupo.paquetesCantidad++;
-      grupo.totalPrendas += prendasContrato;
-      grupo.estadosSet.add(ped.estado);
-      if (ped.lineaProduccion) grupo.lineasSet.add(ped.lineaProduccion);
-      if (ped.fechaRequerida) grupo.fechasRequeridas.push(new Date(ped.fechaRequerida));
-      if (new Date(ped.updatedAt) < new Date(grupo.fechaInicio)) grupo.fechaInicio = ped.updatedAt;
+    if (fechaInicio || fechaFin) {
+      const startStr = fechaInicio ? `${fechaInicio}T00:00:00-05:00` : '1970-01-01T00:00:00-05:00';
+      const endStr = fechaFin ? `${fechaFin}T23:59:59.999-05:00` : '2099-12-31T23:59:59.999-05:00';
+      whereBase.createdAt = { gte: new Date(startStr), lte: new Date(endStr) };
     }
 
-    const tabla = Array.from(mapaGrupos.values()).map(g => {
-      const arrayEstados = Array.from(g.estadosSet);
-      const arrayLineas = Array.from(g.lineasSet);
-      const fechaUrgente = g.fechasRequeridas.length > 0 ? new Date(Math.min(...g.fechasRequeridas.map((d: Date) => d.getTime()))) : null;
+    // 🔥 1. CONSULTAS BLINDADAS (Separadas para que no colapsen entre sí) 🔥
+    let estadosCat: any[] = [];
+    try {
+      estadosCat = await prisma.estadoOperacion.findMany({ where: { activo: true } });
+    } catch (e) { console.error("Error cargando estados:", e); }
 
+    let usuariosBrutos: any[] = [];
+    try {
+      // Forzamos a traer a TODOS los usuarios sin importar si están activos o no
+      usuariosBrutos = await prisma.usuario.findMany({ include: { rol: true } });
+    } catch (e) { console.error("Error cargando usuarios:", e); }
+
+    let prendasEnTaller: any[] = [];
+    try {
+      prendasEnTaller = await prisma.detallePedido.findMany({
+        where: whereBase,
+        include: {
+          pedido: {
+            include: {
+              institucion: { select: { id: true, nombre: true } },
+              usuario: { select: { id: true, nombre: true } }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    } catch (e) { console.error("Error cargando prendas:", e); }
+
+    // 🔥 2. FILTRADO INTELIGENTE Y FLEXIBLE DE USUARIOS 🔥
+    const usuariosOperarios = usuariosBrutos.map((u: any) => {
+      // Extraemos el nombre del rol sea como sea que se llame en tu BD (nombre, name, descripcion)
+      const nombreDelRol = u.rol?.nombre || u.rol?.name || u.rol?.descripcion || String(u.rolId || 'Desconocido');
       return {
-        ...g,
-        estadosArray: arrayEstados,
-        lineasArray: arrayLineas,
-        estadoActual: arrayEstados.length === 1 ? arrayEstados[0] : 'Varios Estados',
-        lineaActual: arrayLineas.length === 1 ? arrayLineas[0] : (arrayLineas.length > 1 ? 'Varias Líneas' : 'Sin Asignar'),
-        fechaInicioTexto: new Date(g.fechaInicio).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
-        fechaCompromisoTexto: fechaUrgente ? fechaUrgente.toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }) : 'Sin Asignar'
+        id: u.id,
+        nombre: u.nombre || 'Sin Nombre',
+        rol: nombreDelRol
       };
+    }).filter((u: any) => !u.rol.toLowerCase().includes('vendedor')); // Quitamos a los vendedores
+
+    // 3. PROCESAMIENTO DE PRENDAS PARA EL FRONTEND
+    let kpis = { ordenesProceso: 0, prendasProduccion: 0, prendasDia: 0 };
+    const mapaEscuelas = new Map();
+
+    prendasEnTaller.forEach((det: any) => {
+      const ped = det.pedido;
+      const instId = ped.institucionId;
+      const estTaller = det.estadoProduccion || 'Planificacion';
+      const fUpdatedAt = new Date(det.updatedAt);
+
+      kpis.prendasProduccion += det.cantidad;
+      if ((estTaller.includes('Preparacion') || estTaller.includes('Terminad') || estTaller.includes('empaque')) && fUpdatedAt >= hoy && fUpdatedAt <= finHoy) {
+        kpis.prendasDia += det.cantidad;
+      }
+
+      if (!mapaEscuelas.has(instId)) {
+        mapaEscuelas.set(instId, {
+          id: instId,
+          institucionId: instId,
+          institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
+          codigoOP: `OP-${instId.slice(0, 6).toUpperCase()}`,
+          vendedorNombre: ped.usuario?.nombre || 'Sistema',
+          fechaInicioTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
+          fechaCompromisoTexto: det.fechaEstimadaConfeccion ? new Date(det.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'Sin Asignar',
+          paquetesCantidad: 0,
+          totalPrendas: 0,
+          estadoActual: estTaller,
+          estadosArray: new Set(),
+          pedidosAsociados: new Map()
+        });
+        kpis.ordenesProceso += 1;
+      }
+
+      const escuela = mapaEscuelas.get(instId);
+      escuela.totalPrendas += det.cantidad;
+      escuela.estadosArray.add(estTaller);
+
+      if (!escuela.pedidosAsociados.has(ped.id)) {
+        escuela.pedidosAsociados.set(ped.id, {
+          id: ped.id,
+          numContrato: ped.numContrato || 'S/N',
+          nombreCliente: ped.nombreCliente || 'Sin Cliente',
+          detalles: []
+        });
+        escuela.paquetesCantidad += 1;
+      }
+
+      const contrato = escuela.pedidosAsociados.get(ped.id);
+      contrato.detalles.push(det);
     });
 
-    tabla.forEach(g => { delete (g as any).estadosSet; delete (g as any).lineasSet; });
-    return NextResponse.json({ kpis, tabla, catalogos });
+    const tablaRes = Array.from(mapaEscuelas.values()).map(e => ({
+      ...e,
+      estadosArray: Array.from(e.estadosArray),
+      pedidosAsociados: Array.from(e.pedidosAsociados.values())
+    }));
+
+    return NextResponse.json({
+      currentUser,
+      kpis,
+      catalogos: { estados: estadosCat, operarios: usuariosOperarios },
+      tabla: tablaRes
+    });
+
   } catch (error) {
-    return NextResponse.json({ error: 'Error en Producción' }, { status: 500 });
+    console.error("Error Produccion GET:", error);
+    return NextResponse.json({ error: 'Error al consultar producción' }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { modo, id, institucionId, estado, operarioAsignado, lineaProduccion } = body;
+    const { modo, id, institucionId, prendaIds, estado, operarioAsignado } = body;
 
-    // 🔥 ENVÍO MASIVO A EMPAQUE 🔥
     if (modo === 'masivo_empaque') {
-      if (!institucionId) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
-      await prisma.pedido.updateMany({
-        where: { institucionId, estado: { in: ['En producción', 'Planificación', 'Corte', 'Confección', 'Preparación'] } },
-        data: { estado: 'En empaque' }
+      const prendasEscuela = await prisma.detallePedido.findMany({ 
+        where: { pedido: { institucionId }, estadoOperacion: 'En produccion' } 
+      });
+      await prisma.detallePedido.updateMany({
+        where: { id: { in: prendasEscuela.map((p: any) => p.id) } },
+        data: { estadoOperacion: 'en empaque', estadoProduccion: 'Terminado' }
       });
       return NextResponse.json({ success: true });
     }
 
-    // 🔥 ENVÍO INDIVIDUAL A EMPAQUE 🔥
     if (modo === 'individual_empaque') {
-      if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
-      await prisma.pedido.update({ where: { id }, data: { estado: 'En empaque' } });
+      await prisma.detallePedido.update({
+        where: { id },
+        data: { estadoOperacion: 'en empaque', estadoProduccion: 'Terminado' }
+      });
       return NextResponse.json({ success: true });
     }
 
-    // ACTUALIZACIÓN NORMAL DE TALLER
-    if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
+    if (prendaIds && prendaIds.length > 0) {
+      const updateData: any = {};
+      if (estado) updateData.estadoProduccion = estado;
+      if (operarioAsignado) updateData.operarioAsignado = operarioAsignado;
 
-    const updateData: any = {};
-    if (estado) updateData.estado = estado;
-    if (operarioAsignado !== undefined) updateData.operarioAsignado = operarioAsignado;
-    if (lineaProduccion !== undefined) updateData.lineaProduccion = lineaProduccion;
+      await prisma.detallePedido.updateMany({
+        where: { id: { in: prendaIds } },
+        data: updateData
+      });
+      return NextResponse.json({ success: true });
+    }
 
-    const actualizado = await prisma.pedido.update({ where: { id }, data: updateData });
-    return NextResponse.json({ success: true, data: actualizado });
+    return NextResponse.json({ error: 'Comando no reconocido.' }, { status: 400 });
   } catch (error) {
-    return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
+    console.error("Error Produccion PUT:", error);
+    return NextResponse.json({ error: 'Error al actualizar producción' }, { status: 500 });
   }
 }

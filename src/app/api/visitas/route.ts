@@ -79,7 +79,8 @@ export async function GET(request: Request) {
         longitud: v.longitud,
         ventasRegistradas: ventasParaEstaVisita.length,
         totalVendido: totalVendidoVisita,
-        detallesContratos: contratosTexto || ''
+        detallesContratos: contratosTexto || '',
+        edicionFechaHabilitada: v.edicionFechaHabilitada // 🔥 AQUI ENVIAMOS EL ESTADO DEL CANDADO
       };
     });
     return NextResponse.json(dataConsolidada);
@@ -100,11 +101,56 @@ export async function POST(request: Request) {
     const { 
       institucionId, tipoGestion, estadoGestion, resumenAcuerdos, latitud, longitud,
       fechaProgramada, horaProgramada, fechaProximoContacto,
-      huboVenta, ventas 
+      huboVenta, ventas,
+      institucionIds, vendedorId
     } = body;
+
+    // =========================================================================
+    // 🚀 INTERCEPTOR: LÓGICA DE ASIGNACIÓN MASIVA (DÍA ESTRICTO O RANGO LÍMITE)
+    // =========================================================================
+    if (institucionIds && Array.isArray(institucionIds) && institucionIds.length > 0) {
+      const targetVendedorId = vendedorId || userId;
+      const hoyMasivo = new Date();
+      const horaDefectoMasivo = horaProgramada || hoyMasivo.toTimeString().slice(0, 5);
+      
+      const programadaMasiva = fechaProgramada ? new Date(`${fechaProgramada}T12:00:00Z`) : hoyMasivo;
+      const proximoMasivo = fechaProximoContacto ? new Date(`${fechaProximoContacto}T12:00:00Z`) : null;
+
+      const visitasPromesas = institucionIds.map((id: string) => {
+        return prisma.visitaAgenda.create({
+          data: {
+            institucionId: id,
+            usuarioId: targetVendedorId,
+            tipoGestion: tipoGestion || 'Asignación Masiva',
+            estadoGestion: estadoGestion || 'Pendiente',
+            resumenAcuerdos: resumenAcuerdos || 'Escuela asignada desde el panel gerencial.',
+            latitud: null,
+            longitud: null,
+            fechaProgramada: programadaMasiva,
+            horaProgramada: String(horaDefectoMasivo),
+            fechaProximoContacto: proximoMasivo,
+            esVisitaLibre: false 
+          }
+        });
+      });
+
+      await Promise.all(visitasPromesas);
+
+      await prisma.institution.updateMany({
+        where: { id: { in: institucionIds } },
+        data: { vendedorId: targetVendedorId }
+      });
+
+      return NextResponse.json({ success: true, message: `Se asignaron ${institucionIds.length} escuelas correctamente.` }, { status: 201 });
+    }
+    // =========================================================================
+
+
+    // =========================================================================
+    // ⬇️ LÓGICA ORIGINAL DE REGISTRO INDIVIDUAL DE VISITAS Y VENTAS (INTACTA) ⬇️
+    // =========================================================================
     if (!institucionId) return NextResponse.json({ error: 'Falta la institución' }, { status: 400 });
 
-    // VALIDACIÓN PREVIA DE CONTRATOS DUPLICADOS
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
       const numerosContratos = ventas
         .map((v: any) => String(v.numContrato).trim())
@@ -147,7 +193,6 @@ export async function POST(request: Request) {
     });
 
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
-      // 1. REGISTRO DE VENTAS
       const transaccionesVentas = ventas.map((v: any) => {
         const valor = parseFloat(v.valorContrato) || 0;
         const abonoVal = parseFloat(v.abono) || 0;
@@ -173,7 +218,6 @@ export async function POST(request: Request) {
       });
       await Promise.all(transaccionesVentas);
 
-      // 2. REGISTRO DE PEDIDOS (AHORA CON NUMCONTRATO DIRECTO 🔥)
       const transaccionesPedidos = ventas
         .filter((v: any) => (Array.isArray(v.prendas) && v.prendas.length > 0) || v.nombreCliente)
         .map((v: any) => {
@@ -182,7 +226,7 @@ export async function POST(request: Request) {
             data: {
               institucionId,
               usuarioId: userId,
-              numContrato: numContratoLimpio || null, // 🔥 AQUÍ SE GUARDA EL NÚMERO DE CONTRATO
+              numContrato: numContratoLimpio || null, 
               nombreCliente: v.nombreCliente || `Cliente Contrato #${numContratoLimpio || 'S/N'}`,
               observacion: resumenAcuerdos || null,
               detalles: {

@@ -2,20 +2,24 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Calendar, MapPin, Eye, Search, Navigation, ChevronLeft, ChevronRight, CalendarCheck, Clock, AlertTriangle, PieChart, CheckCircle2, UserX } from 'lucide-react';
+import { Calendar, MapPin, Eye, Search, Navigation, ChevronLeft, ChevronRight, CalendarCheck, Clock, AlertTriangle, PieChart, CheckCircle2, UserX, Unlock, Edit3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import VisitaGPSForm from '@/app/features/visitas/components/VisitaGPSForm';
 
-type TabType = 'ruta' | 'visitadas' | 'proximas' | 'vencidas' | 'sinAsignar' | 'cobertura';
+// 🔥 1. Agregamos 'correcciones' a los TabTypes
+type TabType = 'ruta' | 'visitadas' | 'proximas' | 'vencidas' | 'sinAsignar' | 'cobertura' | 'correcciones';
 
 export default function AgendaPage() {
   const router = useRouter();
+  
+  // 🔥 2. Agregamos el arreglo correcciones al estado inicial
   const [dataAgenda, setDataAgenda] = useState<{
-    ruta: any[], visitadas: any[], proximas: any[], vencidas: any[], sinAsignar: any[], cobertura: { asignadas: number, visitadas: number, porcentaje: number }
-  }>({ ruta: [], visitadas: [], proximas: [], vencidas: [], sinAsignar: [], cobertura: { asignadas: 0, visitadas: 0, porcentaje: 0 } });
+    ruta: any[], visitadas: any[], proximas: any[], vencidas: any[], sinAsignar: any[], correcciones: any[], cobertura: { asignadas: number, visitadas: number, porcentaje: number }
+  }>({ ruta: [], visitadas: [], proximas: [], vencidas: [], sinAsignar: [], correcciones: [], cobertura: { asignadas: 0, visitadas: 0, porcentaje: 0 } });
   
   const [loading, setLoading] = useState(true);
   const [catalogos, setCatalogos] = useState<any>(null);
@@ -28,7 +32,6 @@ export default function AgendaPage() {
   const [selectedCanton, setSelectedCanton] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState('');
   
-  // 📅 Filtros de Rango de Calendario Universales
   const hoyStr = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" })).toISOString().split('T')[0];
   const [fechaDesde, setFechaDesde] = useState(hoyStr);
   const [fechaHasta, setFechaHasta] = useState(hoyStr);
@@ -37,6 +40,11 @@ export default function AgendaPage() {
   const itemsPerPage = 9;
   
   const [modalVisita, setModalVisita] = useState<{ open: boolean; inst: any; isLibre: boolean }>({ open: false, inst: null, isLibre: false });
+
+  // 🔥 ESTADOS PARA EL MODAL RETROACTIVO 🔥
+  const [modalRetro, setModalRetro] = useState({ open: false, visitaId: '' });
+  const [nuevaFechaRetro, setNuevaFechaRetro] = useState('');
+  const [savingRetro, setSavingRetro] = useState(false);
 
   const cargarAgenda = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -71,6 +79,30 @@ export default function AgendaPage() {
   useEffect(() => { cargarAgenda(false); }, [selectedVendedor, fechaDesde, fechaHasta]);
   useEffect(() => { setCurrentPage(1); }, [tabActiva, searchTerm, selectedProvincia, selectedCanton]);
 
+  // 🔥 FUNCIÓN PARA GUARDAR LA NUEVA FECHA DE VENTA 🔥
+  const handleGuardarRetro = async () => {
+    if (!nuevaFechaRetro) return;
+    setSavingRetro(true);
+    try {
+      const res = await fetch('/api/visitas/retroactiva', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitaId: modalRetro.visitaId, nuevaFecha: nuevaFechaRetro })
+      });
+      if (!res.ok) throw new Error();
+      setModalRetro({ open: false, visitaId: '' });
+      alert('¡Fecha de la visita y de los contratos corregida con éxito! (Candado bloqueado)');
+      
+      // Si ya no quedan correcciones, mandamos al usuario a la pestaña de Visitadas
+      if (dataAgenda.correcciones.length <= 1) setTabActiva('visitadas');
+      
+      cargarAgenda(true); // Refresca en silencio
+    } catch (e) { 
+      alert('Error al corregir la fecha.'); 
+    } finally { 
+      setSavingRetro(false); 
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const s = status?.toLowerCase() || '';
     if (s.includes('no visitada') || s.includes('sin asignar')) return '#d9d9d9';
@@ -93,14 +125,11 @@ export default function AgendaPage() {
   const itemsPaginados = listaActual.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   
   const cantonesDisponibles = selectedProvincia ? catalogos?.provincias?.find((p: any) => p.id === parseInt(selectedProvincia))?.cantones || [] : [];
-  
-  // 🔥 VARIABLE DE SEGURIDAD 🔥
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
       
-      {/* CABECERA */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2 tracking-tight">
@@ -126,6 +155,16 @@ export default function AgendaPage() {
         <button onClick={() => setTabActiva('ruta')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'ruta' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
           <MapPin size={18}/> Mi Ruta (Hoy) <Badge className="bg-primary/10 text-primary border border-primary/20">{dataAgenda.ruta.length}</Badge>
         </button>
+        
+        {/* 🔥 NUEVA PESTAÑA: CORRECCIONES (Solo aparece si hay pendientes) 🔥 */}
+        {dataAgenda.correcciones?.length > 0 && (
+          <button onClick={() => setTabActiva('correcciones')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'correcciones' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-amber-600 hover:bg-amber-50/50 rounded-t-xl'}`}>
+            <Edit3 size={18} className={tabActiva !== 'correcciones' ? 'animate-pulse text-amber-500' : ''}/> 
+            Correcciones 
+            <Badge className="bg-amber-500 text-white border border-amber-600 shadow-sm animate-pulse">{dataAgenda.correcciones.length}</Badge>
+          </button>
+        )}
+
         <button onClick={() => setTabActiva('visitadas')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'visitadas' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
           <CheckCircle2 size={18}/> Visitadas <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-200">{dataAgenda.visitadas.length}</Badge>
         </button>
@@ -135,14 +174,11 @@ export default function AgendaPage() {
         <button onClick={() => setTabActiva('vencidas')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'vencidas' ? 'border-red-500 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
           <AlertTriangle size={18}/> Vencidas <Badge className="bg-red-100 text-red-700 border border-red-200">{dataAgenda.vencidas.length}</Badge>
         </button>
-        
-        {/* 🔥 PESTAÑA OCULTA PARA VENDEDORES 🔥 */}
         {esAdmin && (
           <button onClick={() => setTabActiva('sinAsignar')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'sinAsignar' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
             <UserX size={18}/> Sin Asignar <Badge className="bg-amber-100 text-amber-800 border border-amber-200">{dataAgenda.sinAsignar.length}</Badge>
           </button>
         )}
-
         {esAdmin && (
           <button onClick={() => setTabActiva('cobertura')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'cobertura' ? 'border-purple-500 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
             <PieChart size={18}/> Cobertura Territorio
@@ -218,7 +254,7 @@ export default function AgendaPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {itemsPaginados.map((item) => (
-                <div key={item.id} className={`bg-white rounded-2xl border p-5 shadow-sm flex flex-col justify-between transition-all hover:shadow-md ${tabActiva === 'vencidas' ? 'border-red-300 bg-red-50/30' : 'border-gray-200'}`}>
+                <div key={item.id} className={`bg-white rounded-2xl border p-5 shadow-sm flex flex-col justify-between transition-all hover:shadow-md ${tabActiva === 'vencidas' ? 'border-red-300 bg-red-50/30' : tabActiva === 'correcciones' ? 'border-amber-300 bg-amber-50/20' : 'border-gray-200'}`}>
                   <div>
                     <div className="flex justify-between items-start mb-3">
                       <Badge style={{ backgroundColor: getStatusColor(item.estadoComercial), color: getStatusColor(item.estadoComercial) === '#d9d9d9' ? '#111111' : '#FFFFFF' }} className="font-bold tracking-wide">
@@ -230,13 +266,14 @@ export default function AgendaPage() {
                       <MapPin size={12} className="text-primary shrink-0" /> {item.canton} / {item.parroquia}
                     </p>
                     
-                    <div className={`p-3.5 rounded-xl border ${tabActiva === 'vencidas' ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'}`}>
+                    <div className={`p-3.5 rounded-xl border ${tabActiva === 'vencidas' ? 'bg-red-50 border-red-100' : tabActiva === 'correcciones' ? 'bg-white border-amber-200 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
                       {tabActiva === 'ruta' && (
                         <>
                           <p className="text-[10px] font-black text-gray-500 uppercase mb-1">Visita Programada</p>
                           <p className="text-xs font-bold text-primary flex items-center gap-1"><Clock size={12}/> Hoy: {item.fechaProgramada}</p>
                         </>
                       )}
+                      
                       {tabActiva === 'visitadas' && (
                         <>
                           <p className="text-[10px] font-black text-gray-500 uppercase mb-1">Resumen de Visita</p>
@@ -244,6 +281,22 @@ export default function AgendaPage() {
                           <p className="text-[10px] text-emerald-600 font-bold mt-2 border-t border-emerald-100 pt-1">Realizada el: {new Date(item.fechaVisitaReal).toLocaleDateString('es-EC')}</p>
                         </>
                       )}
+
+                      {/* 🔥 ESTILO EXCLUSIVO PARA LA PESTAÑA CORRECCIONES 🔥 */}
+                      {tabActiva === 'correcciones' && (
+                        <>
+                          <p className="text-[10px] font-black text-amber-600 uppercase mb-1 flex items-center gap-1">
+                            <Unlock size={12}/> Corrección Habilitada
+                          </p>
+                          <p className="text-xs text-gray-800 line-clamp-2 mb-2">{item.resumenAcuerdos}</p> 
+                          <p className="text-[10px] text-gray-500 font-bold border-t border-amber-100 pt-1">Fecha Original: {new Date(item.fechaVisitaReal).toLocaleDateString('es-EC')}</p>
+                          
+                          <Button size="sm" onClick={() => setModalRetro({ open: true, visitaId: item.id })} className="w-full mt-3 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black tracking-wide h-8 shadow-sm">
+                            <Edit3 size={14} className="mr-1.5"/> CORREGIR FECHA DE CONTRATOS
+                          </Button>
+                        </>
+                      )}
+
                       {tabActiva === 'proximas' && (
                         <>
                           <p className="text-[10px] font-black text-gray-500 uppercase mb-1">Último Acuerdo</p>
@@ -299,6 +352,29 @@ export default function AgendaPage() {
           )}
         </>
       )}
+
+      {/* 🔥 MODAL PARA CORRECCIÓN DE FECHA (Retroactiva) 🔥 */}
+      <Dialog open={modalRetro.open} onOpenChange={val => setModalRetro({...modalRetro, open: val})}>
+        <DialogContent className="sm:max-w-sm bg-white p-6 rounded-2xl border-t-4 border-amber-500">
+          <DialogHeader><DialogTitle className="text-lg font-black text-amber-600 flex items-center gap-2"><Calendar size={20}/> Corregir Fecha de Venta</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-xs text-gray-500 leading-relaxed bg-amber-50 p-3 rounded-lg border border-amber-100">
+              El administrador te ha habilitado para corregir la fecha de este cierre. <br/><br/>
+              Selecciona la fecha <strong>real</strong> en la que hiciste la venta. Esto actualizará todos los contratos y pedidos asociados automáticamente.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold text-gray-600 uppercase">Fecha Real de la Gestión *</Label>
+              <Input type="date" className="h-10 text-sm font-bold bg-gray-50 border-gray-300 focus:bg-white focus:border-amber-500 focus:ring-amber-500" value={nuevaFechaRetro} onChange={e => setNuevaFechaRetro(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter className="mt-6 flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setModalRetro({ open: false, visitaId: '' })}>Cancelar</Button>
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4" disabled={savingRetro} onClick={handleGuardarRetro}>
+              {savingRetro ? 'Guardando...' : 'Guardar y Bloquear 🔒'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <VisitaGPSForm 
         isOpen={modalVisita.open}

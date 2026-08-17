@@ -64,7 +64,6 @@ export default function EmpaquePage() {
   const handleOpenEmpacar = (contrato: any) => {
     setContratoSel(contrato);
     setResponsable(contrato.responsableEmpaque !== 'Sin Asignar' ? contrato.responsableEmpaque : '');
-    // Clonamos las prendas para manipularlas en el modal
     setPrendasChecklist(JSON.parse(JSON.stringify(contrato.detalles)));
     setModalEmpacarOpen(true);
   };
@@ -87,35 +86,143 @@ export default function EmpaquePage() {
       if (!res.ok) throw new Error();
       showToast('exito', 'Avance de empaque guardado.');
       setModalEmpacarOpen(false);
-      setModalDetalleOpen(false); // Refresca todo
+      setModalDetalleOpen(false);
       cargarDatos();
     } catch (e) { showToast('error', 'Error al guardar.'); } finally { setSaving(false); }
   };
 
-  // 🔥 ETIQUETA / GUÍA DE BULTO PARA PEGAR EN LA FUNDA 🔥
-  const imprimirGuiaBulto = (contrato: any, escuelaNombre: string) => {
+  // 🔥 NUEVO GENERADOR DE PDF (HORIZONTAL Y TOTALIZADO) 🔥
+  const imprimirReporteEmpaque = (grupo: any, contratoEspecifico?: any) => {
     const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    if (!printWindow) {
+      showToast('error', 'El navegador bloqueó la ventana emergente.');
+      return;
+    }
+
+    // 1. Determinar qué prendas vamos a imprimir (Toda la escuela o solo un contrato)
+    let prendasAImprimir: any[] = [];
+    let tituloReporte = '';
+
+    if (contratoEspecifico) {
+      tituloReporte = `GUÍA DE EMPAQUE Y DESPACHO - CONTRATO #${contratoEspecifico.numContrato}`;
+      prendasAImprimir = contratoEspecifico.detalles.map((d: any) => ({
+        ...d, numContrato: contratoEspecifico.numContrato, nombreCliente: contratoEspecifico.nombreCliente
+      }));
+    } else {
+      tituloReporte = `CONSOLIDADO DE EMPAQUE - ${grupo.institucionNombre}`;
+      grupo.pedidosAsociados.forEach((ped: any) => {
+        ped.detalles.forEach((d: any) => {
+          prendasAImprimir.push({...d, numContrato: ped.numContrato, nombreCliente: ped.nombreCliente});
+        });
+      });
+    }
+
+    // 2. Generar el diccionario de Totales
+    const mapaTotales: Record<string, { sku: string; prendaColorTalla: string; cantidadTotal: number }> = {};
+    
+    let htmlFilasDetalle = '';
+
+    prendasAImprimir.forEach(p => {
+      const sku = p.skuCodigo || 'S/N';
+      const prendaNombre = p.tipoRopa || 'Prenda';
+      const color = p.color || '-';
+      const talla = p.talla || '-';
+      const fCompromiso = p.fechaEstimadaConfeccion ? new Date(p.fechaEstimadaConfeccion).toLocaleDateString('es-EC', {timeZone: 'UTC'}) : 'Sin Fecha';
+      const fIngreso = p.createdAt ? new Date(p.createdAt).toLocaleDateString('es-EC') : '-';
+
+      // Acumulador de totales
+      const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
+      const key = `${sku}_${prendaColorTalla}`;
+      if (!mapaTotales[key]) mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
+      mapaTotales[key].cantidadTotal += (p.cantidad || 1);
+
+      // Fila de la tabla principal
+      htmlFilasDetalle += `
+        <tr>
+          <td>${grupo.codigoOP}</td>
+          <td>${grupo.institucionNombre}</td>
+          <td>${p.numContrato}</td>
+          <td>${p.nombreCliente}</td>
+          <td>${sku}</td>
+          <td>${prendaNombre}</td>
+          <td>${color}</td>
+          <td>${p.genero || 'UNISEX'}</td>
+          <td>${talla}</td>
+          <td style="text-align:center; font-weight:bold;">${p.cantidad}</td>
+          <td>${p.bordado || '-'}</td>
+          <td>${p.observacion || '-'}</td>
+          <td>${p.operarioAsignado || 'Sin Asignar'}</td>
+          <td>${p.estadoEmpaque || p.estadoOperacion}</td>
+          <td>${fIngreso}</td>
+          <td>${fCompromiso}</td>
+        </tr>
+      `;
+    });
+
+    let htmlFilasTotales = '';
+    Object.values(mapaTotales).forEach(item => {
+      htmlFilasTotales += `
+        <tr>
+          <td style="font-weight:bold;">${item.sku}</td>
+          <td>${item.prendaColorTalla}</td>
+          <td style="text-align:center; font-weight:bold; font-size:16px;">${item.cantidadTotal}</td>
+        </tr>
+      `;
+    });
+
+    const fechaImpresion = new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' });
+
+    // 3. Escribir el HTML forzando Landscape
     printWindow.document.write(`
       <html>
         <head>
+          <title>${tituloReporte}</title>
           <style>
-            body { font-family: 'Arial', sans-serif; padding: 20px; width: 400px; border: 2px dashed #000; margin: 20px auto; }
-            h1 { text-align: center; text-transform: uppercase; font-size: 20px; border-bottom: 2px solid #000; padding-bottom: 10px;}
-            .fila { font-size: 16px; margin: 10px 0; }
-            .grande { font-size: 24px; font-weight: black; text-align: center; margin: 15px 0;}
-            .qr-mock { text-align:center; font-size:40px; margin-top: 20px; letter-spacing: 5px; font-family: monospace;}
+            @page { size: landscape; margin: 15mm; }
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11px; color: #333; }
+            h1 { text-align: center; font-size: 20px; text-transform: uppercase; margin-bottom: 5px; }
+            p { text-align: center; margin-top: 0; color: #666; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            th, td { border: 1px solid #aaa; padding: 6px 4px; text-align: left; }
+            th { background-color: #f0f0f0; font-weight: bold; text-transform: uppercase; font-size: 10px; }
+            .tabla-totales { width: 60%; margin: 0 auto; }
+            .tabla-totales th { background-color: #333; color: #fff; }
           </style>
         </head>
         <body>
-          <h1>GUÍA DE DESPACHO</h1>
-          <div class="fila"><strong>Institución:</strong><br/> ${escuelaNombre}</div>
-          <div class="fila"><strong>Cliente:</strong><br/> ${contrato.nombreCliente}</div>
-          <div class="grande">CONTRATO #${contrato.numContrato}</div>
-          <div class="fila"><strong>Total Prendas:</strong> ${contrato.totalPrendas} unidades</div>
-          <div class="fila"><strong>Empacador:</strong> ${contrato.responsableEmpaque}</div>
-          <div class="qr-mock">||||| ||| || |||</div>
-          <p style="text-align:center; font-size:10px; margin-top:20px;">Generado por Sistema ERP</p>
+          <h1>${tituloReporte}</h1>
+          <p>Operador / Generado: ${fechaImpresion}</p>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Código OP</th><th>Institución</th><th>N° Contrato</th><th>Cliente</th>
+                <th>SKU</th><th>Prenda</th><th>Color</th><th>Sexo</th><th>Talla</th>
+                <th>Cant.</th><th>Bordado</th><th>Observación</th><th>Operario</th>
+                <th>Estado</th><th>Ingreso Taller</th><th>F. Compromiso</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${htmlFilasDetalle}
+            </tbody>
+          </table>
+
+          <div style="page-break-inside: avoid;">
+            <h2 style="text-align:center; font-size:16px; margin-bottom:10px;">RESUMEN DE EMPAQUE (TOTALES)</h2>
+            <table class="tabla-totales">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Prenda (Color y Talla)</th>
+                  <th style="text-align:center;">Cantidad Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${htmlFilasTotales}
+              </tbody>
+            </table>
+          </div>
+          
           <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
       </html>
@@ -228,7 +335,6 @@ export default function EmpaquePage() {
                     <td className="p-3.5 font-bold text-gray-900 truncate max-w-[200px]">{item.institucionNombre}</td>
                     <td className="p-3.5 text-center font-bold text-gray-800">{item.paquetesCantidad}</td>
                     
-                    {/* BARRA DE PROGRESO MATEMÁTICA */}
                     <td className="p-3.5">
                       <div className="flex items-center gap-2">
                         <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
@@ -245,9 +351,16 @@ export default function EmpaquePage() {
                       </Badge>
                     </td>
                     <td className="p-3.5 text-center">
-                      <Button size="sm" variant="outline" className="h-8 text-xs font-bold text-primary border-primary/30" onClick={() => handleOpenDetalle(item)}>
-                        <Eye size={14} className="mr-1" /> Ver OP / Armar
-                      </Button>
+                      <div className="flex items-center justify-center gap-2">
+                        {/* 🔥 BOTÓN PARA IMPRIMIR CONSOLIDADO DE TODA LA ESCUELA 🔥 */}
+                        <Button size="icon" variant="ghost" title="Imprimir Consolidado Completo" className="h-8 w-8 text-gray-700 hover:bg-gray-100" onClick={() => imprimirReporteEmpaque(item)}>
+                          <Printer size={16} />
+                        </Button>
+
+                        <Button size="sm" variant="outline" className="h-8 text-xs font-bold text-primary border-primary/30" onClick={() => handleOpenDetalle(item)}>
+                          <Eye size={14} className="mr-1" /> Ver OP / Armar
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -316,11 +429,12 @@ export default function EmpaquePage() {
                             <Button size="sm" variant={finalizado ? "outline" : "secondary"} className={`text-xs font-bold h-8 ${finalizado ? 'border-emerald-300 text-emerald-700' : 'bg-primary text-white hover:bg-primary/90'}`} onClick={() => handleOpenEmpacar(ped)}>
                               {finalizado ? 'Ver Checklist' : '📦 Empacar'}
                             </Button>
-                            {finalizado && (
-                              <Button size="icon" variant="ghost" title="Imprimir Guía / Etiqueta" className="h-8 w-8 text-slate-700 hover:bg-slate-100" onClick={() => imprimirGuiaBulto(ped, grupoDetalle.institucionNombre)}>
-                                <Printer size={16} />
-                              </Button>
-                            )}
+                            
+                            {/* 🔥 BOTÓN PARA IMPRIMIR LA GUÍA DE ESTE CONTRATO ESPECÍFICO 🔥 */}
+                            <Button size="icon" variant="ghost" title="Imprimir Reporte PDF" className="h-8 w-8 text-slate-700 hover:bg-slate-100" onClick={() => imprimirReporteEmpaque(grupoDetalle, ped)}>
+                              <Printer size={16} />
+                            </Button>
+
                           </div>
                         </td>
                       </tr>

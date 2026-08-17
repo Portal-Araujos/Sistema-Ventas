@@ -21,35 +21,65 @@ export async function GET(request: Request) {
     const fechaHasta = searchParams.get('fechaHasta');
     const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
     const targetUserId = (esAdmin && vendedorId) ? vendedorId : (!esAdmin ? userIdSession : null);
+    
     const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
     hoy.setHours(0,0,0,0);
     const manana = new Date(hoy);
     manana.setDate(manana.getDate() + 1);
+    
     const start = fechaDesde ? new Date(`${fechaDesde}T00:00:00-05:00`) : hoy;
     const end = fechaHasta ? new Date(`${fechaHasta}T23:59:59-05:00`) : new Date(manana.getTime() - 1);
     const baseWhereVisita: any = {};
     if (targetUserId) baseWhereVisita.usuarioId = targetUserId;
 
-    // 1. MI RUTA 
-    const rutaHoy = await prisma.visitaAgenda.findMany({
-      where: { ...baseWhereVisita, estadoGestion: 'No Visitada', fechaProgramada: { gte: hoy, lt: manana } },
+    // 🔥 LA CLAVE DE LA CORRECCIÓN: Le enseñamos al sistema los estados "vírgenes"
+    const estadosPendientes = ['Pendiente', 'No Visitada', 'No visitada'];
+
+    // 1. MI RUTA (Ahora verifica correctamente que esté en estado Pendiente)
+    const rutaAsignadaHoy = await prisma.visitaAgenda.findMany({
+      where: { 
+        ...baseWhereVisita, 
+        estadoGestion: { in: estadosPendientes }, 
+        fechaProgramada: { gte: hoy, lt: manana } 
+      },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
       orderBy: { horaProgramada: 'asc' }
     });
 
-    // 2. VISITADAS
+    // Filtro de seguridad: Vemos cuáles YA visitó hoy realmente para restarlas de la ruta
+    const visitadasHoy = await prisma.visitaAgenda.findMany({
+      where: { 
+        ...baseWhereVisita, 
+        estadoGestion: { notIn: estadosPendientes }, 
+        createdAt: { gte: hoy, lt: manana } 
+      },
+      select: { institucionId: true }
+    });
+    const visitadasHoyIds = new Set(visitadasHoy.map(v => v.institucionId));
+    
+    // Dejamos en la ruta solo las que NO ha visitado hoy
+    const rutaHoy = rutaAsignadaHoy.filter(v => !visitadasHoyIds.has(v.institucionId));
+
+    // 2. VISITADAS REALES (Cualquier estado que no sea Pendiente)
     const visitadas = await prisma.visitaAgenda.findMany({
-      where: { ...baseWhereVisita, estadoGestion: { not: 'No Visitada' }, createdAt: { gte: start, lte: end } },
+      where: { 
+        ...baseWhereVisita, 
+        estadoGestion: { notIn: estadosPendientes }, 
+        createdAt: { gte: start, lte: end } 
+      },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
       orderBy: { createdAt: 'desc' }
     });
 
     // 3. PRÓXIMAS 
-    const proximas = await prisma.visitaAgenda.findMany({
+    const proximasRaw = await prisma.visitaAgenda.findMany({
       where: { ...baseWhereVisita, fechaProximoContacto: { gte: manana } },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
       orderBy: { fechaProximoContacto: 'asc' }
     });
+    const proximasMap = new Map();
+    proximasRaw.forEach(v => { if(!proximasMap.has(v.institucionId)) proximasMap.set(v.institucionId, v); });
+    const proximas = Array.from(proximasMap.values());
 
     // 4. VENCIDAS 
     const vencidasRaw = await prisma.visitaAgenda.findMany({
@@ -60,12 +90,19 @@ export async function GET(request: Request) {
     const vencidasMap = new Map();
     vencidasRaw.forEach(v => { if(!vencidasMap.has(v.institucionId)) vencidasMap.set(v.institucionId, v); });
     const vencidas = Array.from(vencidasMap.values());
-    //  5. SIN ASIGNAR (LÍMITE REMOVIDO) 
+    
+    // 5. SIN ASIGNAR 
     const sinAsignarEscuelas = await prisma.institution.findMany({
       where: { OR: [ { vendedorId: null }, { vendedorId: '' }, { visitas: { none: {} } } ] },
       include: { parroquia: { include: { canton: { include: { provincia: true } } } } },
-      // take: 100 <- Esto fue eliminado para que traiga todas las 1046
       orderBy: { nombre: 'asc' }
+    });
+
+    // 6. CORRECCIONES DE CONTRATO (Candado Abierto)
+    const correcciones = await prisma.visitaAgenda.findMany({
+      where: { ...baseWhereVisita, edicionFechaHabilitada: true },
+      include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
+      orderBy: { createdAt: 'desc' }
     });
 
     const instWhere = targetUserId 
@@ -73,8 +110,10 @@ export async function GET(request: Request) {
       : { vendedorId: { not: null }, NOT: { vendedorId: '' } };
 
     const totalAsignadas = await prisma.institution.count({ where: instWhere });
+    
+    // Cobertura: Solo cuenta las escuelas que ya tienen una gestión REAL (No pendiente)
     const visitadasCount = await prisma.institution.count({
-      where: { ...instWhere, visitas: { some: { estadoGestion: { not: 'No Visitada' } } } }
+      where: { ...instWhere, visitas: { some: { estadoGestion: { notIn: estadosPendientes } } } }
     });
     const porcentaje = totalAsignadas === 0 ? 0 : Math.round((visitadasCount / totalAsignadas) * 100);
 
@@ -86,15 +125,17 @@ export async function GET(request: Request) {
       }
       return d.toLocaleDateString("es-EC", { timeZone: "America/Guayaquil" });
     };
+
     const mapVisita = (v: any) => ({
       id: v.id, institucionId: v.institucionId, nombreInstitucion: v.institucion?.nombre || 'Desconocida',
       provinciaId: v.institucion?.parroquia?.canton?.provincia?.id, cantonId: v.institucion?.parroquia?.canton?.id,
       canton: v.institucion?.parroquia?.canton?.nombre, parroquia: v.institucion?.parroquia?.nombre,
       estadoComercial: v.estadoGestion, 
-      fechaProgramada: formatearFechaExacta(v.fechaProgramada), // <- Ahora usa la función mágica
+      fechaProgramada: formatearFechaExacta(v.fechaProgramada),
       fechaVisitaReal: v.createdAt, 
-      fechaProximoContacto: formatearFechaExacta(v.fechaProximoContacto), // <- También corregido aquí
-      resumenAcuerdos: v.resumenAcuerdos || 'Sin registros', tipoGestion: v.tipoGestion
+      fechaProximoContacto: formatearFechaExacta(v.fechaProximoContacto),
+      resumenAcuerdos: v.resumenAcuerdos || 'Sin registros', tipoGestion: v.tipoGestion,
+      edicionFechaHabilitada: v.edicionFechaHabilitada
     });
 
     const mapSinAsignar = (inst: any) => ({
@@ -103,12 +144,17 @@ export async function GET(request: Request) {
       canton: inst.parroquia?.canton?.nombre, parroquia: inst.parroquia?.nombre,
       estadoComercial: inst.estadoComercial || 'Sin Asignar', fechaProgramada: '',
       fechaVisitaReal: inst.createdAt, fechaProximoContacto: null,
-      resumenAcuerdos: 'Escuela libre / Sin vendedor ni visitas previas', tipoGestion: 'Prospección'
+      resumenAcuerdos: 'Escuela libre / Sin vendedor ni visitas previas', tipoGestion: 'Prospección',
+      edicionFechaHabilitada: false
     });
 
     return NextResponse.json({
-      ruta: rutaHoy.map(mapVisita), visitadas: visitadas.map(mapVisita), proximas: proximas.map(mapVisita),
-      vencidas: vencidas.map(mapVisita), sinAsignar: sinAsignarEscuelas.map(mapSinAsignar),
+      ruta: rutaHoy.map(mapVisita), 
+      visitadas: visitadas.map(mapVisita), 
+      proximas: proximas.map(mapVisita),
+      vencidas: vencidas.map(mapVisita), 
+      sinAsignar: sinAsignarEscuelas.map(mapSinAsignar),
+      correcciones: correcciones.map(mapVisita),
       cobertura: { asignadas: totalAsignadas, visitadas: visitadasCount, porcentaje }
     });
     
