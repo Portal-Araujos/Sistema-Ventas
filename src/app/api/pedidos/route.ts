@@ -64,7 +64,6 @@ export async function GET(request: Request) {
     });
 
     const mapaGrupos = new Map();
-    // 🔥 ORDEN DE PRIORIDAD DE LA FÁBRICA 🔥
     const prioridadEstados = ['Pendiente en revision', 'En produccion', 'en empaque', 'Listos para el despacho', 'Despacho'];
 
     for (const ped of pedidos as any[]) {
@@ -76,7 +75,6 @@ export async function GET(request: Request) {
 
       if (!contratoExtraido) contratoExtraido = 'S/N';
 
-      // 🔥 LÓGICA DE SINCRONIZACIÓN DE ESTADO DESDE OPERACIONES 🔥
       let estadoRealPedido = ped.estado;
       if (ped.estado !== 'Borrador') {
         const estPrendas = (ped.detalles || []).map((d:any) => d.estadoOperacion || 'Pendiente en revision');
@@ -91,36 +89,43 @@ export async function GET(request: Request) {
         }
       }
 
+      // 🔥 SANITIZADOR DE FECHAS DE DB 🔥
+      let fechaValida = ped.fechaRequerida;
+      if (fechaValida && new Date(fechaValida).getFullYear() < 2000) {
+        fechaValida = null;
+      }
+
       if (!mapaGrupos.has(instId)) {
         mapaGrupos.set(instId, {
           id: instId, codigoPedido: `PED-${instId.slice(0, 6).toUpperCase()}`,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
-          fechaCreacion: ped.createdAt, fechaRequerida: ped.fechaRequerida || null,
+          fechaCreacion: ped.createdAt, fechaRequerida: fechaValida,
           contratosTotal: 0, paquetesCantidad: 0, totalPrendas: 0,
           estado: estadoRealPedido, updatedAt: ped.updatedAt, pedidosAsociados: []
         });
       } else {
          const grupo = mapaGrupos.get(instId);
-         // Mantener el estado más retrasado para todo el grupo
          if (grupo.estado !== 'Borrador' && estadoRealPedido !== 'Borrador') {
             if (prioridadEstados.indexOf(estadoRealPedido) < prioridadEstados.indexOf(grupo.estado)) {
                 grupo.estado = estadoRealPedido;
             }
          }
+         if (fechaValida && (!grupo.fechaRequerida || new Date(fechaValida) > new Date(grupo.fechaRequerida))) {
+             grupo.fechaRequerida = fechaValida;
+         }
       }
 
       const grupo = mapaGrupos.get(instId);
       const unidadesEnEstePedido = (ped.detalles || []).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
-      if (ped.fechaRequerida && !grupo.fechaRequerida) grupo.fechaRequerida = ped.fechaRequerida;
 
       grupo.pedidosAsociados.push({
         id: ped.id, numContrato: contratoExtraido,
         nombreCliente: ped.nombreCliente || `Cliente Contrato #${contratoExtraido}`,
         tipoPedido: ped.tipoPedido || 'Pedido', observacion: ped.observacion || '',
-        fechaRequerida: ped.fechaRequerida || null, detalles: ped.detalles || [],
+        fechaRequerida: fechaValida, detalles: ped.detalles || [],
         totalUnidadesContrato: unidadesEnEstePedido,
-        estadoActualizadoOperaciones: estadoRealPedido, // <- Estado visible para vendedor
+        estadoActualizadoOperaciones: estadoRealPedido,
         valorContrato: ventaAsociada?.valorContrato || '',
         abono: ventaAsociada?.abono || '',
         meses: ventaAsociada?.meses || 12,
@@ -140,7 +145,6 @@ export async function GET(request: Request) {
     const resultado = Array.from(mapaGrupos.values()).map(g => ({
       ...g,
       fechaCreacionTexto: new Date(g.fechaCreacion).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
-      // 🔥 Forzamos UTC aquí para que no salte al día anterior 🔥
       fechaRequeridaTexto: g.fechaRequerida ? new Date(g.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'No asignada',
       updatedAt: new Date(g.updatedAt).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })
     }));
@@ -152,15 +156,17 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  // IGUAL QUE ANTES (No cambia la actualización)
   try {
     const body = await request.json();
     const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId } = body;
 
+    // 🔥 EVITAR GUARDAR FECHAS NULAS COMO 1970 🔥
+    const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
+
     if (modo === 'masivo') {
       await prisma.pedido.updateMany({
         where: { institucionId, estado: 'Borrador' },
-        data: { estado: 'Pendiente en revisión', fechaRequerida: new Date(`${fechaRequerida}T12:00:00Z`) }
+        data: { estado: 'Pendiente en revisión', fechaRequerida: fechaParseada }
       });
       return NextResponse.json({ success: true });
     } else {
@@ -168,7 +174,7 @@ export async function PUT(request: Request) {
       const updateData: any = {};
       if (numContrato !== undefined) updateData.numContrato = String(numContrato).trim() || null;
       if (nombreCliente !== undefined) updateData.nombreCliente = nombreCliente;
-      if (fechaRequerida !== undefined) updateData.fechaRequerida = fechaRequerida ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
+      if (fechaRequerida !== undefined) updateData.fechaRequerida = fechaParseada;
 
       if (Array.isArray(detalles) && detalles.length > 0) {
         updateData.detalles = {
@@ -191,11 +197,13 @@ export async function POST(request: Request) {
     const { payload } = await jwtVerify(token!, JWT_SECRET);
     const userId = payload.id as string;
     const body = await request.json();
+    const fechaParseada = (body.fechaRequerida && body.fechaRequerida.length > 4) ? new Date(`${body.fechaRequerida}T12:00:00Z`) : null;
+
     const nuevoPedido = await prisma.pedido.create({
       data: {
         institucionId: body.institucionId, usuarioId: userId, numContrato: body.numContrato || null,
         nombreCliente: body.nombreCliente || `Cliente`,
-        fechaRequerida: body.fechaRequerida ? new Date(`${body.fechaRequerida}T12:00:00Z`) : null,
+        fechaRequerida: fechaParseada,
         detalles: {
           create: (body.detalles || []).map((d: any) => ({
             skuCodigo: d.skuCodigo || 'S/N', tipoRopa: d.tipoRopa || 'Prenda', color: d.color || '',

@@ -139,6 +139,7 @@ model Usuario {
   ventasRealizadas               Venta[]
   metas                          MetaVendedor[]
   pedidos                        Pedido[]
+  guiasDespacho                  GuiaDespacho[]
   @@map("usuarios")
 }
 model Institution {
@@ -177,6 +178,7 @@ model Institution {
   visitas              VisitaAgenda[]
   ventas               Venta[]
   pedidos              Pedido[]
+  guiasDespacho        GuiaDespacho[]
   @@map("instituciones")
 }
 model VisitaAgenda {
@@ -313,12 +315,14 @@ model DetallePedido {
   bordado                   String?  @db.Text 
   observacion               String?  @db.Text 
   pedido                    Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-  estadoOperacion           String    @default("Revision") @map("estado_operacion") 
+  estadoOperacion           String    @default("Pendiente en revision") @map("estado_operacion") 
   fechaEstimadaConfeccion   DateTime? @map("fecha_estimada_confeccion")
   observacionOperaciones    String?   @map("observacion_operaciones")
   estadoProduccion          String    @default("Planificacion") @map("estado_produccion") 
   operarioAsignado          String?   @map("operario_asignado") // Conservamos solo al operario
   estadoEmpaque             String    @default("Pendiente") @map("estado_empaque") 
+  guiaDespachoId            String?   @map("guia_despacho_id")
+  guiaDespacho              GuiaDespacho? @relation(fields: [guiaDespachoId], references: [id], onDelete: SetNull)
   createdAt                 DateTime  @default(now()) @map("created_at")
   updated_at                DateTime @updatedAt @default(now()) 
   @@map("detalles_pedido")
@@ -338,16 +342,25 @@ model EstadoProduccion {
   @@map("estados_produccion")
 }
 
-model LineaProduccion {
-  id       Int      @id @default(autoincrement())
-  nombre   String   @unique
-  activo   Boolean  @default(true)
-  @@map("lineas_produccion")
-}
-
 model Operario {
   id             Int      @id @default(autoincrement())
   nombreApellido String   @unique @map("nombre_apellido")
   activo         Boolean  @default(true)
   @@map("operarios")
+}
+model GuiaDespacho {
+  id                String   @id @default(uuid())
+  codigoGuia        String   @map("codigo_guia") // Ej: SERVIENTREGA-9912
+  institucionId     String   @map("institucion_id")
+  vendedorId        String?  @map("vendedor_id")
+  responsable       String   @map("responsable") // Quien despachó / Bodeguero
+  
+  fechaDespacho     DateTime @default(now()) @map("fecha_despacho")
+  observacion       String?  @db.Text
+  
+  institucion       Institution   @relation(fields: [institucionId], references: [id])
+  vendedor          Usuario?      @relation(fields: [vendedorId], references: [id])
+  prendasDespachadas DetallePedido[] // Las prendas exactas que se fueron aquí
+
+  @@map("guias_despacho")
 }

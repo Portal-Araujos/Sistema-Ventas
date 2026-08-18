@@ -23,9 +23,8 @@ export default function OperacionesPage() {
   const [selectedInstFilter, setSelectedInstFilter] = useState('');
   const [selectedEstadoFilter, setSelectedEstadoFilter] = useState('TODOS');
   const hoyStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
-  const [fechaDesde, setFechaDesde] = useState(hoyStr);
-  const [fechaHasta, setFechaHasta] = useState(hoyStr);
-  
+  const [fechaDesde, setFechaDesde] = useState('');
+    const [fechaHasta, setFechaHasta] = useState('');
 
   // PAGINACIÓN (Máximo 15 por página)
   const [currentPage, setCurrentPage] = useState(1);
@@ -64,7 +63,6 @@ export default function OperacionesPage() {
         setData(jsonOps.tabla);
         setKpis(jsonOps.kpis || {});
         setEstadosCatalogo(jsonOps.catalogos?.estados || []);
-        // Autoseleccionar el primer estado en el modal si existe
         if (jsonOps.catalogos?.estados?.length > 0 && !nuevoEstadoSel) {
            setNuevoEstadoSel(jsonOps.catalogos.estados[0].nombre);
         }
@@ -86,9 +84,19 @@ export default function OperacionesPage() {
     setCurrentPage(1); 
   }, [searchTerm, selectedInstFilter]);
 
+  useEffect(() => {
+    if (grupoDetalle && data.length > 0) {
+      const grupoActualizado = data.find(g => g.id === grupoDetalle.id);
+      if (grupoActualizado) {
+        setGrupoDetalle(grupoActualizado);
+      }
+    }
+  }, [data]);
+
   const handleOpenDetalle = (grupo: any) => {
     setGrupoDetalle(grupo);
     setContratoExpandido(null);
+    setPrendasSeleccionadas([]); // Limpiamos selecciones anteriores
     setModalDetalleOpen(true);
   };
 
@@ -102,7 +110,7 @@ export default function OperacionesPage() {
 
   const abrirModalGestion = (pIds: string[]) => {
     if (pIds.length === 0) {
-      showToast('error', 'Selecciona al menos una prenda para gestionar.');
+      showToast('error', 'Seleccione al menos una prenda marcando la casilla izquierda.');
       return;
     }
     setPrendasSeleccionadas(pIds);
@@ -136,8 +144,8 @@ export default function OperacionesPage() {
       showToast('exito', '¡Actualizado con éxito!');
       setModalGestionOpen(false);
       setPrendasSeleccionadas([]);
-      setModalDetalleOpen(false);
-      cargarDatos();
+      await cargarDatos();
+
     } catch (e: any) {
       showToast('error', e.message || 'Error al guardar.');
     } finally {
@@ -145,32 +153,25 @@ export default function OperacionesPage() {
     }
   };
 
-  // COLORES DINÁMICOS SEGÚN ESTADO DEL CATÁLOGO
   const getEstadoColor = (estado: string) => {
     const e = estado?.toLowerCase() || '';
+    if (e.includes('varios')) return 'bg-indigo-100 text-indigo-800 border-indigo-300';
     if (e.includes('revision')) return 'bg-amber-100 text-amber-800 border-amber-200';
-    if (e.includes('produccion')) return 'bg-purple-100 text-purple-800 border-purple-200';
+    if (e.includes('producci')) return 'bg-purple-100 text-purple-800 border-purple-200';
     if (e.includes('empaque')) return 'bg-blue-100 text-blue-800 border-blue-200';
     if (e.includes('listos')) return 'bg-teal-100 text-teal-800 border-teal-200';
     if (e.includes('despacho')) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
     return 'bg-gray-100 text-gray-800 border-gray-200';
   };
-
-  // APLICAR FILTROS DE BÚSQUEDA
   const filteredData = data.filter(g => {
     const matchSearch = g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) || g.codigoPedido?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchInst = selectedInstFilter ? g.institucionId === selectedInstFilter : true;
     return matchSearch && matchInst;
   });
-
-  // LÓGICA DE PAGINACIÓN DE 15 EN 15
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
-      
-      {/* CABECERA */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
@@ -180,8 +181,12 @@ export default function OperacionesPage() {
         </div>
       </div>
 
-      {/* TARJETAS KPI (SELECCIÓN POR ESTADO EXACTO) */}
+      {/* TARJETAS KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <button onClick={() => setSelectedEstadoFilter('PENDIENTES')} className={`p-3 rounded-xl border text-left transition-all ${selectedEstadoFilter === 'PENDIENTES' ? 'bg-slate-800 text-white border-slate-900 shadow-md' : 'bg-white border-gray-200 hover:border-slate-300'}`}>
+          <p className={`text-[10px] font-bold uppercase ${selectedEstadoFilter === 'PENDIENTES' ? 'text-white' : 'text-gray-500'}`}>Total Pendientes</p>
+          <p className="text-2xl font-black mt-1">{kpis.totalPendientes || 0}</p>
+        </button>
         <button onClick={() => setSelectedEstadoFilter('Pendiente en revision')} className={`p-3 rounded-xl border text-left transition-all ${selectedEstadoFilter === 'Pendiente en revision' ? 'bg-amber-500 text-white border-amber-600 shadow-md' : 'bg-white border-gray-200 hover:border-amber-300'}`}>
           <p className={`text-[10px] font-bold uppercase ${selectedEstadoFilter === 'Pendiente en revision' ? 'text-white' : 'text-gray-500'}`}>En Revisión</p>
           <p className="text-2xl font-black mt-1">{kpis.enRevision || 0}</p>
@@ -202,10 +207,7 @@ export default function OperacionesPage() {
           <p className={`text-[10px] font-bold uppercase ${selectedEstadoFilter === 'HOY' ? 'text-white' : 'text-gray-500'}`}>Despachos Hoy</p>
           <p className="text-2xl font-black mt-1">{kpis.despachosHoy || 0}</p>
         </button>
-        <button onClick={() => setSelectedEstadoFilter('PENDIENTES')} className={`p-3 rounded-xl border text-left transition-all ${selectedEstadoFilter === 'PENDIENTES' ? 'bg-slate-800 text-white border-slate-900 shadow-md' : 'bg-white border-gray-200 hover:border-slate-300'}`}>
-          <p className={`text-[10px] font-bold uppercase ${selectedEstadoFilter === 'PENDIENTES' ? 'text-white' : 'text-gray-500'}`}>Total Pendientes</p>
-          <p className="text-2xl font-black mt-1">{kpis.totalPendientes || 0}</p>
-        </button>
+        
         <button onClick={() => setSelectedEstadoFilter('ATRASADOS')} className={`p-3 rounded-xl border text-left transition-all ${selectedEstadoFilter === 'ATRASADOS' ? 'bg-red-600 text-white border-red-700 shadow-md' : 'bg-red-50 border-red-200 hover:border-red-300'}`}>
           <p className={`text-[10px] font-bold uppercase ${selectedEstadoFilter === 'ATRASADOS' ? 'text-white' : 'text-red-600'}`}>Atrasados</p>
           <p className="text-2xl font-black text-red-700 mt-1">{kpis.atrasados || 0}</p>
@@ -244,7 +246,7 @@ export default function OperacionesPage() {
         </div>
       </div>
 
-      {/* TABLA PRINCIPAL EXACTA COMO LA SOLICITASTE */}
+      {/* TABLA PRINCIPAL */}
       {loading ? (
         <div className="p-12 text-center text-gray-500 font-bold animate-pulse">Cargando operaciones...</div>
       ) : paginatedData.length === 0 ? (
@@ -270,36 +272,40 @@ export default function OperacionesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {paginatedData.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="p-3.5 font-mono font-black text-blue-600">{item.codigoPedido}</td>
-                    <td className="p-3.5 font-bold text-gray-900 truncate max-w-150px">{item.institucionNombre}</td>
-                    <td className="p-3.5 text-gray-600 font-semibold">{item.vendedorNombre}</td>
-                    <td className="p-3.5 text-gray-500">{item.fechaIngresoTexto}</td>
-                    <td className="p-3.5 text-center font-bold text-gray-800">{item.paquetesCantidad}</td>
-                    <td className="p-3.5 text-center">
-                      <Badge className={getEstadoColor(item.estadoActual)}>{item.estadoActual}</Badge>
-                    </td>
-                    <td className="p-3.5 text-center">
-                      <span className={`font-bold px-2 py-1 rounded border ${item.esAtrasado ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
-                        {item.fechaRequeridaTexto}
-                      </span>
-                    </td>
-                    <td className="p-3.5 text-center font-bold text-gray-700">
-                      {item.fechaEstimadaConfeccionTexto}
-                    </td>
-                    <td className="p-3.5 text-center">
-                      <Button size="icon" variant="ghost" title="Gestionar Prendas" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => handleOpenDetalle(item)}>
-                        <Eye size={16} />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {paginatedData.map((item) => {
+                  const isFantasma = item.fechaRequeridaTexto?.includes('1969') || item.fechaRequeridaTexto?.includes('1970');
+                  const fechaReqCorregida = isFantasma ? 'No asignada' : item.fechaRequeridaTexto;
+
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
+                      <td className="p-3.5 font-mono font-black text-blue-600">{item.codigoPedido}</td>
+                      <td className="p-3.5 font-bold text-gray-900 truncate max-w-150px">{item.institucionNombre}</td>
+                      <td className="p-3.5 text-gray-600 font-semibold">{item.vendedorNombre}</td>
+                      <td className="p-3.5 text-gray-500">{item.fechaIngresoTexto}</td>
+                      <td className="p-3.5 text-center font-bold text-gray-800">{item.paquetesCantidad}</td>
+                      <td className="p-3.5 text-center">
+                        <Badge className={getEstadoColor(item.estadoActual)}>{item.estadoActual}</Badge>
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <span className={`font-bold px-2 py-1 rounded border ${item.esAtrasado ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                          {fechaReqCorregida}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-center font-bold text-gray-700">
+                        {item.fechaEstimadaConfeccionTexto}
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <Button size="icon" variant="ghost" title="Gestionar Prendas" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => handleOpenDetalle(item)}>
+                          <Eye size={16} />
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
           
-          {/* PAGINACIÓN A 15 */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50/50">
               <span className="text-xs text-gray-500 font-medium">
@@ -327,14 +333,11 @@ export default function OperacionesPage() {
               <Badge className="bg-primary text-white text-xs">{grupoDetalle?.codigoPedido}</Badge>
             </DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 mt-2">
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">Desglose por Contrato y Prendas:</p>
-            
             <div className="space-y-3">
               {grupoDetalle?.pedidosAsociados?.map((ped: any) => {
                 const isExpanded = contratoExpandido === ped.id;
-                
                 return (
                   <div key={ped.id} className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs">
                     <div className="p-3.5 flex justify-between items-center bg-gray-50/80">
@@ -343,12 +346,14 @@ export default function OperacionesPage() {
                           Contrato #{ped.numContrato}
                         </Badge>
                         <span className="text-xs font-bold text-gray-800">{ped.nombreCliente}</span>
+                        <Badge className={`ml-2 text-[10px] ${getEstadoColor(ped.estadoGlobalContrato)}`}>
+                          {ped.estadoGlobalContrato}
+                        </Badge>
                       </div>
                       <Button size="sm" variant="ghost" className="text-xs font-bold text-primary flex items-center gap-1" onClick={() => setContratoExpandido(isExpanded ? null : ped.id)}>
                         <Eye size={14} /> {isExpanded ? 'Ocultar' : 'Ver Prendas'}
                       </Button>
                     </div>
-
                     {isExpanded && (
                       <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto space-y-3">
                         <table className="w-full text-left text-xs border-collapse min-w-650px">
@@ -358,6 +363,8 @@ export default function OperacionesPage() {
                               <th className="p-2">Prenda</th>
                               <th className="p-2">Color / Talla</th>
                               <th className="p-2 text-center">Cant.</th>
+                              <th className="p-2">Bordado</th>
+                              <th className="p-2">Observación</th>
                               <th className="p-2 text-center">Estado Operación</th>
                               <th className="p-2 text-center">Fecha Confección</th>
                             </tr>
@@ -376,6 +383,17 @@ export default function OperacionesPage() {
                                 <td className="p-2 font-bold text-gray-800">{p.tipoRopa}</td>
                                 <td className="p-2 text-gray-600">{p.color} ({p.talla})</td>
                                 <td className="p-2 text-center font-black">{p.cantidad}</td>
+                                {/* 🔥 MOSTRAR BORDADO O "SIN BORDADO" 🔥 */}
+                                <td className="p-2 text-[11px]">
+                                  {p.bordado ? <span className="font-bold text-purple-700">{p.bordado}</span> : <span className="text-gray-400 italic">Sin bordado</span>}
+                                </td>
+                                <td className="p-2 text-[11px]">
+                                  {(p.observacion || p.observacionOperaciones) ? (
+                                    <span className="text-gray-800 font-medium">{p.observacion || p.observacionOperaciones}</span>
+                                  ) : (
+                                    <span className="text-gray-400 italic">Sin observaciones</span>
+                                  )}
+                                </td>
                                 <td className="p-2 text-center">
                                   <Badge variant="outline" className={`font-bold text-[10px] ${getEstadoColor(p.estadoOperacion)}`}>
                                     {p.estadoOperacion}
@@ -386,9 +404,15 @@ export default function OperacionesPage() {
                             ))}
                           </tbody>
                         </table>
-
                         <div className="flex justify-end pt-2">
-                          <Button size="sm" onClick={() => abrirModalGestion(ped.detalles.map((p: any) => p.id))} className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs h-8">
+                          <Button size="sm" onClick={() => {
+                            const seleccionadasDeEsteContrato = prendasSeleccionadas.filter(id => ped.detalles.some((p: any) => p.id === id));
+                            if (seleccionadasDeEsteContrato.length === 0) {
+                              showToast('error', 'Seleccione al menos una prenda marcando las casillas de la izquierda.');
+                              return;
+                            }
+                            abrirModalGestion(seleccionadasDeEsteContrato);
+                          }} className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs h-8">
                             Actualizar Seleccionadas
                           </Button>
                         </div>
@@ -400,7 +424,7 @@ export default function OperacionesPage() {
             </div>
           </div>
           <DialogFooter className="mt-4">
-            <Button variant="outline" size="sm" onClick={() => setModalDetalleOpen(false)}>Cerrar</Button>
+            <Button variant="outline" size="sm" onClick={() => setModalDetalleOpen(false)}>Cerrar Panel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -448,7 +472,7 @@ export default function OperacionesPage() {
 
       {/* TOAST GLOBAL */}
       {toast && (
-        <div className={`fixed bottom-6 right-6 z-[9999] px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 text-white ${toast.tipo === 'exito' ? 'bg-emerald-600' : 'bg-red-600'}`}>
+        <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 text-white ${toast.tipo === 'exito' ? 'bg-emerald-600' : 'bg-red-600'}`}>
           {toast.tipo === 'exito' ? <CheckCircle2 size={20}/> : <AlertCircle size={20}/>}
           <span className="font-bold text-sm">{toast.texto}</span>
         </div>

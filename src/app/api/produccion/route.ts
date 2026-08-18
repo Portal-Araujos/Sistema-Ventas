@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     finHoy.setHours(23, 59, 59, 999);
 
     const whereBase: any = {
-      estadoOperacion: 'En produccion',
+      estadoOperacion: { contains: 'producci', mode: 'insensitive' },
       pedido: { estado: { not: 'Borrador' } }
     };
 
@@ -35,17 +35,20 @@ export async function GET(request: Request) {
       whereBase.createdAt = { gte: new Date(startStr), lte: new Date(endStr) };
     }
 
-    // 🔥 1. CONSULTAS BLINDADAS (Separadas para que no colapsen entre sí) 🔥
+    // 🔥 1. LLAMADA A LA TABLA EstadoProduccion 🔥
     let estadosCat: any[] = [];
     try {
-      estadosCat = await prisma.estadoOperacion.findMany({ where: { activo: true } });
-    } catch (e) { console.error("Error cargando estados:", e); }
+      estadosCat = await prisma.estadoProduccion.findMany({ where: { activo: true } });
+    } catch (e) { 
+      console.error("Error cargando estados de producción:", e); 
+    }
 
     let usuariosBrutos: any[] = [];
     try {
-      // Forzamos a traer a TODOS los usuarios sin importar si están activos o no
       usuariosBrutos = await prisma.usuario.findMany({ include: { rol: true } });
-    } catch (e) { console.error("Error cargando usuarios:", e); }
+    } catch (e) { 
+      console.error("Error cargando usuarios:", e); 
+    }
 
     let prendasEnTaller: any[] = [];
     try {
@@ -61,21 +64,16 @@ export async function GET(request: Request) {
         },
         orderBy: { createdAt: 'desc' }
       });
-    } catch (e) { console.error("Error cargando prendas:", e); }
+    } catch (e) { 
+      console.error("Error cargando prendas:", e); 
+    }
 
-    // 🔥 2. FILTRADO INTELIGENTE Y FLEXIBLE DE USUARIOS 🔥
     const usuariosOperarios = usuariosBrutos.map((u: any) => {
-      // Extraemos el nombre del rol sea como sea que se llame en tu BD (nombre, name, descripcion)
       const nombreDelRol = u.rol?.nombre || u.rol?.name || u.rol?.descripcion || String(u.rolId || 'Desconocido');
-      return {
-        id: u.id,
-        nombre: u.nombre || 'Sin Nombre',
-        rol: nombreDelRol
-      };
-    }).filter((u: any) => !u.rol.toLowerCase().includes('vendedor')); // Quitamos a los vendedores
+      return { id: u.id, nombre: u.nombre || 'Sin Nombre', rol: nombreDelRol };
+    }).filter((u: any) => !u.rol.toLowerCase().includes('vendedor'));
 
-    // 3. PROCESAMIENTO DE PRENDAS PARA EL FRONTEND
-    let kpis = { ordenesProceso: 0, prendasProduccion: 0, prendasDia: 0 };
+    let kpis = { ordenesProceso: 0, prendasProduccion: 0, prendasDia: 0, vencidos: 0 };
     const mapaEscuelas = new Map();
 
     prendasEnTaller.forEach((det: any) => {
@@ -83,8 +81,14 @@ export async function GET(request: Request) {
       const instId = ped.institucionId;
       const estTaller = det.estadoProduccion || 'Planificacion';
       const fUpdatedAt = new Date(det.updatedAt);
+      const fConfeccion = det.fechaEstimadaConfeccion ? new Date(det.fechaEstimadaConfeccion) : null;
+
+      // Evaluar vencimiento de confección
+      const esVencido = fConfeccion !== null && fConfeccion < hoy && !estTaller.toLowerCase().includes('terminad');
 
       kpis.prendasProduccion += det.cantidad;
+      if (esVencido) kpis.vencidos += det.cantidad;
+
       if ((estTaller.includes('Preparacion') || estTaller.includes('Terminad') || estTaller.includes('empaque')) && fUpdatedAt >= hoy && fUpdatedAt <= finHoy) {
         kpis.prendasDia += det.cantidad;
       }
@@ -97,7 +101,8 @@ export async function GET(request: Request) {
           codigoOP: `OP-${instId.slice(0, 6).toUpperCase()}`,
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaInicioTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
-          fechaCompromisoTexto: det.fechaEstimadaConfeccion ? new Date(det.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'Sin Asignar',
+          fechaCompromisoTexto: fConfeccion ? fConfeccion.toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'Sin Asignar',
+          esAtrasado: esVencido,
           paquetesCantidad: 0,
           totalPrendas: 0,
           estadoActual: estTaller,
@@ -110,6 +115,7 @@ export async function GET(request: Request) {
       const escuela = mapaEscuelas.get(instId);
       escuela.totalPrendas += det.cantidad;
       escuela.estadosArray.add(estTaller);
+      if (esVencido) escuela.esAtrasado = true;
 
       if (!escuela.pedidosAsociados.has(ped.id)) {
         escuela.pedidosAsociados.set(ped.id, {
@@ -151,7 +157,7 @@ export async function PUT(request: Request) {
 
     if (modo === 'masivo_empaque') {
       const prendasEscuela = await prisma.detallePedido.findMany({ 
-        where: { pedido: { institucionId }, estadoOperacion: 'En produccion' } 
+        where: { pedido: { institucionId }, estadoOperacion: { contains: 'producci', mode: 'insensitive' } } 
       });
       await prisma.detallePedido.updateMany({
         where: { id: { in: prendasEscuela.map((p: any) => p.id) } },

@@ -19,15 +19,10 @@ export async function GET(request: Request) {
     const fechaInicio = searchParams.get('fechaInicio');
     const fechaFin = searchParams.get('fechaFin');
 
-    // 🔥 BUSCAMOS PEDIDOS QUE TENGAN PRENDAS EN FASE DE EMPAQUE / BODEGA / DESPACHO 🔥
     const whereCondition: any = {
       estado: { not: 'Borrador' },
       detalles: {
-        some: {
-          estadoOperacion: {
-            in: ['en empaque', 'En empaque', 'Listos para el despacho', 'Despacho']
-          }
-        }
+        some: { estadoOperacion: { in: ['en empaque', 'En empaque', 'Listos para el despacho', 'Despacho'] } }
       }
     };
 
@@ -54,78 +49,67 @@ export async function GET(request: Request) {
       const instId = ped.institucionId;
       let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
 
-      // Filtramos solo las prendas de este pedido que corresponden a empaque o fases posteriores
-      const prendasEmpaque = ped.detalles.filter((d: any) => {
-        const est = (d.estadoOperacion || '').toLowerCase();
-        return est.includes('empaque') || est.includes('despacho') || est.includes('listos');
-      });
-
-      if (prendasEmpaque.length === 0) continue;
-
       if (!mapaGrupos.has(instId)) {
         mapaGrupos.set(instId, {
           id: instId,
           codigoOP: `OP-${instId.slice(0, 6).toUpperCase()}`,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Vendedor',
-          paquetesCantidad: 0,
-          totalPrendas: 0,
-          prendasPreparadas: 0,
+          paquetesCantidad: 0, 
+          totalPrendasEscuela: 0,
+          despachadasHistoricasEscuela: 0,
+          saldoPendienteEscuela: 0,
+          preparadasSinDespacharEscuela: 0,
           pedidosAsociados: []
         });
       }
 
       const grupo = mapaGrupos.get(instId);
       
-      const prendasEnContrato = prendasEmpaque.reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
-      const prendasListasContrato = prendasEmpaque
-        .filter((d: any) => d.estadoEmpaque === 'Preparado' || d.estadoOperacion === 'Listos para el despacho' || d.estadoOperacion === 'Despacho')
-        .reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
+      const totalContratoReal = ped.detalles.reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
+      const despachadasHistoricas = ped.detalles.filter((d:any) => d.guiaDespachoId !== null).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
+      const preparadasSinDespachar = ped.detalles.filter((d:any) => d.estadoEmpaque === 'Preparado' && d.guiaDespachoId === null).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
+      
+      grupo.totalPrendasEscuela += totalContratoReal;
+      grupo.despachadasHistoricasEscuela += despachadasHistoricas;
+      grupo.saldoPendienteEscuela += (totalContratoReal - despachadasHistoricas);
+      grupo.preparadasSinDespacharEscuela += preparadasSinDespachar;
 
       grupo.pedidosAsociados.push({
-        id: ped.id,
+        id: ped.id, 
         numContrato: contratoExtraido,
         nombreCliente: ped.nombreCliente || 'Sin Cliente',
-        estado: ped.estado,
+        estado: ped.estado, 
         responsableEmpaque: ped.responsableEmpaque || 'Sin Asignar',
-        fechaInicioEmpaque: ped.fechaInicioEmpaque,
+        fechaInicioEmpaque: ped.fechaInicioEmpaque, 
         fechaFinEmpaque: ped.fechaFinEmpaque,
-        totalPrendas: prendasEnContrato,
-        prendasPreparadas: prendasListasContrato,
-        avance: prendasEnContrato > 0 ? Math.round((prendasListasContrato / prendasEnContrato) * 100) : 0,
-        detalles: prendasEmpaque
+        totalPrendasContrato: totalContratoReal,
+        despachadasHistoricasContrato: despachadasHistoricas,
+        saldoPendienteContrato: totalContratoReal - despachadasHistoricas,
+        preparadasSinDespacharContrato: preparadasSinDespachar,
+        detalles: ped.detalles,
+        detallesCompletos: ped.detalles // 🔥 ESTA ES LA VARIABLE QUE FALTABA 🔥
       });
 
       grupo.paquetesCantidad += 1;
-      grupo.totalPrendas += prendasEnContrato;
-      grupo.prendasPreparadas += prendasListasContrato;
     }
 
     const kpis = { pendientes: 0, enPreparacion: 0, completados: 0 };
 
     const tabla = Array.from(mapaGrupos.values()).map(g => {
-      const avanceGlobal = g.totalPrendas > 0 ? Math.round((g.prendasPreparadas / g.totalPrendas) * 100) : 0;
+      const procesadasTotal = g.preparadasSinDespacharEscuela + g.despachadasHistoricasEscuela;
+      const avanceGlobal = g.totalPrendasEscuela > 0 ? Math.round((procesadasTotal / g.totalPrendasEscuela) * 100) : 0;
       
       let estadoGlobal = 'Pendiente';
-      if (avanceGlobal === 0) { 
-        estadoGlobal = 'Pendiente'; 
-        kpis.pendientes++; 
-      } else if (avanceGlobal > 0 && avanceGlobal < 100) { 
-        estadoGlobal = 'En Preparación'; 
-        kpis.enPreparacion++; 
-      } else if (avanceGlobal === 100) { 
-        estadoGlobal = 'Completado'; 
-        kpis.completados++; 
-      }
+      if (avanceGlobal === 0) { estadoGlobal = 'Pendiente'; kpis.pendientes++; } 
+      else if (avanceGlobal > 0 && avanceGlobal < 100) { estadoGlobal = 'En Preparación'; kpis.enPreparacion++; } 
+      else if (avanceGlobal === 100) { estadoGlobal = 'Completado'; kpis.completados++; }
 
       return { ...g, avanceGlobal, estadoGlobal };
     });
 
     return NextResponse.json({ currentUser, kpis, tabla });
-  } catch (error) {
-    console.error("Error en Empaque GET:", error);
-    return NextResponse.json({ error: 'Error al consultar empaque' }, { status: 500 });
-  }
+  } catch (error) { return NextResponse.json({ error: 'Error' }, { status: 500 }); }
 }
 
 export async function PUT(request: Request) {
@@ -134,46 +118,67 @@ export async function PUT(request: Request) {
     const token = cookieStore.get('session_token')?.value;
     let responsableDefecto = 'Bodega';
     if (token) {
-      try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
-        responsableDefecto = payload.nombre as string || 'Bodega';
-      } catch (e) {}
+      try { const { payload } = await jwtVerify(token, JWT_SECRET); responsableDefecto = payload.nombre as string || 'Bodega'; } catch (e) {}
     }
 
     const body = await request.json();
-    const { pedidoId, responsableEmpaque, detallesUpdates } = body;
+    const { modo, pedidoId, responsableEmpaque, detallesUpdates, institucionId, codigoGuia, prendasIds } = body;
 
-    if (!pedidoId || !detallesUpdates) return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
+    // 🔥 GENERACIÓN DE GUÍA GLOBAL DE DESPACHO 🔥
+    if (modo === 'generar_guia') {
+      const nuevaGuia = await prisma.guiaDespacho.create({
+        data: {
+          codigoGuia: codigoGuia,
+          institucionId: institucionId,
+          responsable: responsableDefecto
+        }
+      });
+      
+      await prisma.detallePedido.updateMany({
+        where: { id: { in: prendasIds } },
+        data: {
+          estadoOperacion: 'Despacho',
+          estadoEmpaque: 'Despachado',
+          estadoProduccion: 'Terminado',
+          guiaDespachoId: nuevaGuia.id
+        }
+      });
 
-    // 1. Actualizar el checklist de cada prenda individual
+      const pedidosInvolucrados = await prisma.detallePedido.findMany({
+         where: { id: { in: prendasIds } }, select: { pedidoId: true }, distinct: ['pedidoId']
+      });
+      for (const ped of pedidosInvolucrados) {
+         const p = await prisma.pedido.findUnique({ where: { id: ped.pedidoId }, include: { detalles: true } });
+         const tot = p?.detalles.length || 0;
+         const desp = p?.detalles.filter(d => d.guiaDespachoId !== null).length || 0;
+         if (tot === desp && tot > 0) {
+             await prisma.pedido.update({ where: { id: ped.pedidoId }, data: { estado: 'Despachado', fechaFinEmpaque: new Date() } });
+         }
+      }
+      return NextResponse.json({ success: true, guia: nuevaGuia });
+    }
+
+    // CHECKLIST INDIVIDUAL NORMAL
     const promesasDetalles = detallesUpdates.map((d: any) => 
       prisma.detallePedido.update({
         where: { id: d.id },
         data: { 
           estadoEmpaque: d.estadoEmpaque,
-          // Si el checklist se marca como Preparado, actualizamos estadoOperacion a 'Listos para el despacho'
           estadoOperacion: d.estadoEmpaque === 'Preparado' ? 'Listos para el despacho' : 'en empaque'
         }
       })
     );
     await Promise.all(promesasDetalles);
 
-    // 2. Verificar el contrato completo
-    const pedidoActualizado = await prisma.pedido.findUnique({
-      where: { id: pedidoId },
-      include: { detalles: true }
-    });
-
+    const pedidoActualizado = await prisma.pedido.findUnique({ where: { id: pedidoId }, include: { detalles: true } });
     const totalDetalles = pedidoActualizado?.detalles.length || 0;
-    const completados = pedidoActualizado?.detalles.filter(d => d.estadoEmpaque === 'Preparado').length || 0;
+    const completados = pedidoActualizado?.detalles.filter(d => d.estadoEmpaque === 'Preparado' || d.guiaDespachoId !== null).length || 0;
 
     let nuevoEstado = pedidoActualizado?.estado;
-    let fechaInicio = pedidoActualizado?.fechaInicioEmpaque || new Date();
     let fechaFin = pedidoActualizado?.fechaFinEmpaque;
 
     if (completados === totalDetalles && totalDetalles > 0) {
       nuevoEstado = 'Listos para el despacho';
-      fechaFin = new Date(); 
     } else {
       nuevoEstado = 'En empaque';
       fechaFin = null;
@@ -181,17 +186,9 @@ export async function PUT(request: Request) {
 
     const resultadoFinal = await prisma.pedido.update({
       where: { id: pedidoId },
-      data: {
-        estado: nuevoEstado,
-        responsableEmpaque: responsableEmpaque || responsableDefecto,
-        fechaInicioEmpaque: fechaInicio,
-        fechaFinEmpaque: fechaFin
-      }
+      data: { estado: nuevoEstado, responsableEmpaque: responsableEmpaque || responsableDefecto, fechaFinEmpaque: fechaFin }
     });
 
     return NextResponse.json({ success: true, data: resultadoFinal });
-  } catch (error) {
-    console.error("Error actualizando empaque:", error);
-    return NextResponse.json({ error: 'Error interno al actualizar empaque' }, { status: 500 });
-  }
+  } catch (error) { return NextResponse.json({ error: 'Error interno' }, { status: 500 }); }
 }

@@ -7,24 +7,26 @@ const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
 // ==========================================
-// 🔥 TU FUNCIÓN GET (INTACTA Y FUNCIONAL) 🔥
+// 🔥 FUNCIÓN GET (BÚSQUEDA Y LISTADO) 🔥
 // ==========================================
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q') || '';
-    const whereClause: any = { activo: true };
+    const whereClause: any = { }; // Traemos activos e inactivos para la tabla de config
+    
     if (q.trim().length > 0) {
       whereClause.OR = [
         { codigo: { contains: q, mode: 'insensitive' } },
         { tipoRopa: { contains: q, mode: 'insensitive' } }
       ];
     }
+    
     const catalogos = await prisma.catalogoSKU.findMany({
       where: whereClause,
-      take: 20, //
       orderBy: { codigo: 'asc' }
     });
+    
     return NextResponse.json({
       success: true,
       raw: catalogos
@@ -36,7 +38,7 @@ export async function GET(request: Request) {
 }
 
 // ==========================================
-// 🔥 LO QUE FALTABA: LA FUNCIÓN POST 🔥
+// 🔥 FUNCIÓN POST (CREAR / ACTUALIZAR MASIVO) 🔥
 // ==========================================
 export async function POST(request: Request) {
   try {
@@ -46,42 +48,83 @@ export async function POST(request: Request) {
     await jwtVerify(token, JWT_SECRET);
 
     const body = await request.json();
-    
-    // Si envías { skus: [...] } o directamente el array [...]
     const datosExcel = Array.isArray(body) ? body : body.skus;
 
     if (!datosExcel || !Array.isArray(datosExcel)) {
       return NextResponse.json({ error: 'Formato de datos incorrecto' }, { status: 400 });
     }
 
-    // 1. Limpiar espacios y preparar la data (Evita errores del Excel)
+    // 1. Limpieza Extrema (Evita guardar la palabra "undefined")
     const dataLimpia = datosExcel.map((item: any) => ({
-      codigo: String(item.codigo || item.Codigo || item.SKU || '').trim(),
-      tipoRopa: String(item.tipoRopa || item.Prenda || item.Articulo || '').trim(),
-      color: String(item.color || item.Color || '').trim(),
-      genero: String(item.genero || item.Sexo || 'UNISEX').trim().toUpperCase(),
-      talla: String(item.talla || item.Talla || 'N/A').trim().toUpperCase(),
-      activo: true
-    })).filter(item => item.codigo && item.tipoRopa); // Filtramos filas vacías
+      codigo: item.codigo ? String(item.codigo).trim().toUpperCase() : '',
+      tipoRopa: item.tipoRopa ? String(item.tipoRopa).trim().toUpperCase() : '',
+      color: item.color ? String(item.color).trim().toUpperCase() : '',
+      genero: item.genero ? String(item.genero).trim().toUpperCase() : 'UNISEX',
+      talla: item.talla ? String(item.talla).trim().toUpperCase() : 'N/A',
+      activo: item.activo !== undefined ? item.activo : true
+    })).filter(item => item.codigo !== '' && item.tipoRopa !== ''); // Borra filas en blanco
 
     if (dataLimpia.length === 0) {
-      return NextResponse.json({ error: 'El archivo Excel parece estar vacío o sin las columnas correctas.' }, { status: 400 });
+      return NextResponse.json({ error: 'El archivo está vacío o los datos son inválidos.' }, { status: 400 });
     }
 
-    // 2. Inserción Masiva Ultrarrápida (Salta los códigos que ya existen)
-    const insertados = await prisma.catalogoSKU.createMany({
-      data: dataLimpia,
-      skipDuplicates: true, // Si suben el mismo Excel dos veces, no se rompe la base de datos
-    });
+    // 2. LA MAGIA DEL "UPSERT": Si el código existe lo actualiza, si no, lo crea.
+    const operaciones = dataLimpia.map((sku) => 
+      prisma.catalogoSKU.upsert({
+        where: { codigo: sku.codigo },
+        update: {
+          tipoRopa: sku.tipoRopa,
+          color: sku.color,
+          genero: sku.genero,
+          talla: sku.talla,
+          activo: sku.activo
+        },
+        create: {
+          codigo: sku.codigo,
+          tipoRopa: sku.tipoRopa,
+          color: sku.color,
+          genero: sku.genero,
+          talla: sku.talla,
+          activo: sku.activo
+        }
+      })
+    );
+
+    // Ejecutamos todo de golpe (Transacción)
+    await prisma.$transaction(operaciones);
 
     return NextResponse.json({ 
       success: true, 
-      message: `¡Subida exitosa! Se registraron ${insertados.count} SKUs nuevos.`,
-      registros: insertados.count
+      message: `¡Subida exitosa! Se procesaron ${dataLimpia.length} SKUs (Nuevos y Actualizados).`,
+      creados: dataLimpia.length
     });
 
   } catch (error) {
     console.error("Error subiendo SKUs:", error);
     return NextResponse.json({ error: 'Error al procesar el archivo masivo' }, { status: 500 });
+  }
+}
+
+// ==========================================
+// 🔥 FUNCIÓN PUT (ACTIVAR / DESACTIVAR) 🔥
+// ==========================================
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, activo } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID es requerido' }, { status: 400 });
+    }
+
+    const skuActualizado = await prisma.catalogoSKU.update({
+      where: { id },
+      data: { activo }
+    });
+
+    return NextResponse.json({ success: true, data: skuActualizado });
+  } catch (error) {
+    console.error("Error al actualizar SKU:", error);
+    return NextResponse.json({ error: 'Error interno al actualizar el estado del SKU' }, { status: 500 });
   }
 }

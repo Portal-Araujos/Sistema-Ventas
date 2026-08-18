@@ -174,11 +174,11 @@ export default function VisitasPage() {
           <TableHeader className="bg-muted/50">
             <TableRow>
               {/* 🔥 CABECERA EDICIÓN PARA ADMIN 🔥 */}
-              {catalogos?.userRol !== 'vendedor' && <TableHead className="font-semibold text-center w-[80px]">Edición</TableHead>}
-              <TableHead className="font-semibold w-[150px]">Fecha y Hora</TableHead>
-              <TableHead className="font-semibold w-[220px]">Gestión en Campo</TableHead>
-              <TableHead className="font-semibold min-w-[250px]">Resultado</TableHead>
-              <TableHead className="font-semibold text-center bg-emerald-50/50 w-[180px]">Venta Cerrada</TableHead>
+              {catalogos?.userRol !== 'vendedor' && <TableHead className="font-semibold text-center w-80px">Edición</TableHead>}
+              <TableHead className="font-semibold w-150px">Fecha y Hora</TableHead>
+              <TableHead className="font-semibold w-220px">Gestión en Campo</TableHead>
+              <TableHead className="font-semibold min-w-250px">Resultado</TableHead>
+              <TableHead className="font-semibold text-center bg-emerald-50/50 w-180px">Venta Cerrada</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

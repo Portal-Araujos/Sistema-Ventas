@@ -96,30 +96,26 @@ export async function GET(request: Request) {
           codigoPedido: `PED-${instId.slice(0, 6).toUpperCase()}`,
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaIngresoTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
-          // 🔥 MAGIA DE FECHA: Forzamos UTC para fechas secas 🔥
+          // 🔥 LECTURA DE FECHA ESTRICTAMENTE EN UTC PARA EVITAR RETROCESO DE DÍAS 🔥
           fechaRequeridaTexto: ped.fechaRequerida ? new Date(ped.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'No asignada',
           esAtrasado: false,
           paquetesCantidad: 0,
-          estadoActual: estPrenda,
+          totalPrendas: 0,
+          estadosUnicosEscuela: new Set(), // Recolector de Estados Globales
           fechaEstimadaConfeccionGlobal: fConfeccion,
           pedidosAsociados: new Map()
         });
       }
 
       const escuela = mapaEscuelas.get(instId);
-      
       if (esAtrasado) escuela.esAtrasado = true;
-      
       if (fConfeccion) {
         if (!escuela.fechaEstimadaConfeccionGlobal || fConfeccion < escuela.fechaEstimadaConfeccionGlobal) {
           escuela.fechaEstimadaConfeccionGlobal = fConfeccion;
         }
       }
-
-      const prioridadEstados = ['Pendiente en revision', 'En produccion', 'en empaque', 'Listos para el despacho', 'Despacho'];
-      if (prioridadEstados.indexOf(estPrenda) < prioridadEstados.indexOf(escuela.estadoActual)) {
-         escuela.estadoActual = estPrenda;
-      }
+      
+      escuela.estadosUnicosEscuela.add(estPrenda);
 
       if (!escuela.pedidosAsociados.has(ped.id)) {
         escuela.pedidosAsociados.set(ped.id, {
@@ -128,26 +124,34 @@ export async function GET(request: Request) {
           nombreCliente: ped.nombreCliente || 'Sin Cliente',
           estado: ped.estado,
           fechaRequerida: ped.fechaRequerida,
+          estadosUnicosContrato: new Set(), // Recolector de Estados por Contrato
           detalles: []
         });
         escuela.paquetesCantidad += 1;
       }
 
       const contrato = escuela.pedidosAsociados.get(ped.id);
+      contrato.estadosUnicosContrato.add(estPrenda);
+      
       contrato.detalles.push({
         ...det,
         estadoOperacion: estPrenda,
-        // 🔥 MAGIA DE FECHA: Forzamos UTC 🔥
+        // 🔥 LECTURA EN UTC 🔥
         fechaEstimadaConfeccionTexto: fConfeccion ? fConfeccion.toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'Sin Asignar'
       });
     });
 
     const tablaRes = Array.from(mapaEscuelas.values()).map(e => ({
       ...e,
+      // 🔥 LÓGICA: Si hay más de un estado, se llama "Varios Estados" 🔥
+      estadoActual: e.estadosUnicosEscuela.size > 1 ? 'Varios Estados' : Array.from(e.estadosUnicosEscuela)[0],
       fechaEstimadaConfeccionTexto: e.fechaEstimadaConfeccionGlobal 
          ? e.fechaEstimadaConfeccionGlobal.toLocaleDateString('es-EC', { timeZone: 'UTC' }) 
          : 'Sin Asignar',
-      pedidosAsociados: Array.from(e.pedidosAsociados.values())
+      pedidosAsociados: Array.from(e.pedidosAsociados.values()).map((c: any) => ({
+        ...c,
+        estadoGlobalContrato: c.estadosUnicosContrato.size > 1 ? 'Varios Estados' : Array.from(c.estadosUnicosContrato)[0]
+      }))
     }));
 
     return NextResponse.json({
@@ -173,8 +177,12 @@ export async function PUT(request: Request) {
 
     const updateData: any = {};
     if (nuevoEstado) updateData.estadoOperacion = nuevoEstado;
-    // 🔥 Guardamos en el medio día UTC para blindar la fecha 🔥
-    if (fechaEstimadaConfeccion) updateData.fechaEstimadaConfeccion = new Date(`${fechaEstimadaConfeccion}T12:00:00Z`);
+    
+    // 🔥 SANITIZACIÓN: Cortamos la hora que envía el navegador y le forzamos mediodía UTC 🔥
+    if (fechaEstimadaConfeccion) {
+      const fechaLimpia = fechaEstimadaConfeccion.split('T')[0];
+      updateData.fechaEstimadaConfeccion = new Date(`${fechaLimpia}T12:00:00Z`);
+    }
     if (observacionOperaciones !== undefined) updateData.observacionOperaciones = observacionOperaciones;
 
     await prisma.detallePedido.updateMany({

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { 
   Home, Building2, CalendarDays, MapPin, BarChart2, User, Settings, 
   ChevronLeft, ChevronRight, LogOut, DollarSign, Shield, Menu, X, 
-  Factory, Barcode, Briefcase, Package, Scissors, Truck, ChevronDown, ChevronUp 
+  Factory, Barcode, Briefcase, Package, Scissors, Truck, ChevronDown, ChevronUp, FileUser
 } from 'lucide-react';
 
 // 🔥 ESTRUCTURA DEL MENÚ (Agrupado por Departamentos) 🔥
@@ -39,7 +39,8 @@ const menuStructure = [
       { icon: Package, label: 'Pedidos', href: '/pedidos', permiso: 'pedidos:ver' },
       { icon: Settings, label: 'Operaciones', href: '/operaciones', permiso: 'operaciones:ver' },
       { icon: Scissors, label: 'Producción', href: '/produccion', permiso: 'produccion:ver' },
-      { icon: Truck, label: 'Despacho', href: '/empaque', permiso: 'empaque:ver' }
+      { icon: Truck, label: 'Despacho', href: '/empaque', permiso: 'empaque:ver' },
+      { icon: FileUser, label: 'Historial Guias', href: '/historial-despachos', permiso: 'historial-despachos:ver' }
     ]
   },
   {
@@ -126,7 +127,7 @@ export function Sidebar() {
             {!isCollapsed && (
               <div className="flex flex-col overflow-hidden">
                 <span className="font-bold text-base text-foreground tracking-wide truncate">ARAUJOS</span>
-                <span className="text-[10px] text-muted-foreground truncate font-semibold">SISTEMA ERP</span>
+                <span className="text-[10px] text-muted-foreground truncate font-semibold">SISTEMA VENTAS</span>
               </div>
             )}
           </div>
