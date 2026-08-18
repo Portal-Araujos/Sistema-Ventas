@@ -39,7 +39,9 @@ const MODULOS_PERMISOS = [
       { id: 'pedidos:ver', label: 'Ver Pedidos y Enviar a Operaciones' },
       { id: 'operaciones:ver', label: 'Gestionar Operaciones (Aprobar Stock)' },
       { id: 'produccion:ver', label: 'Taller de Producción (Corte/Costura)' },
-      { id: 'empaque:ver', label: 'Bodega, Empaque y Despachos' }
+      { id: 'empaque:ver', label: 'Bodega, Empaque y Despachos' },
+      { id: 'historial-despachos:ver', label: 'Guias de Pedidos Enviados' }
+
     ]
   },
   { 

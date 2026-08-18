@@ -142,23 +142,52 @@ export default function PedidosPage() {
 
   const handleEnviarMasivo = async (institucionId: string) => {
     if (!confirm('¿Seguro que quieres enviar TODOS los contratos de esta escuela a Producción?')) return;
-    
+
     const grupoAEnviar = grupos.find(g => g.id === institucionId);
-    if (grupoAEnviar && !grupoAEnviar.fechaRequerida && !grupoAEnviar.pedidosAsociados.some((p:any) => p.fechaRequerida)) {
-      showToast('error', `Debes asignar la Fecha Global de Entrega antes de enviar a Operaciones.`);
+
+    if (!grupoAEnviar) {
+      showToast('error', 'No se encontró la institución.');
       return;
     }
 
+    // Validamos que exista una fecha real
+    if (!grupoAEnviar.fechaRequerida) {
+      showToast(
+        'error',
+        'Debes asignar la Fecha Global de Entrega antes de enviar a Operaciones.'
+      );
+      return;
+    }
+
+    // Ejemplo:
+    // 2026-08-18T12:00:00.000Z
+    // se convierte en:
+    // 2026-08-18
+    const fechaLimpia = grupoAEnviar.fechaRequerida.split('T')[0];
+
     try {
       const res = await fetch('/api/pedidos', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modo: 'masivo', institucionId, fechaRequerida: '2099-01-01' })
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modo: 'masivo',
+          institucionId,
+          fechaRequerida: fechaLimpia
+        })
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+
+      if (!res.ok) {
+        throw new Error(data.error);
+      }
+
       showToast('exito', '¡Escuela enviada a Producción!');
       cargarDatos();
-    } catch (e: any) { showToast('error', e.message); }
+
+    } catch (e: any) {
+      showToast('error', e.message || 'Error al enviar a Operaciones.');
+    }
   };
 
   const handleGuardarContrato = async () => {

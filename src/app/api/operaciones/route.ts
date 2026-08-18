@@ -96,7 +96,6 @@ export async function GET(request: Request) {
           codigoPedido: `PED-${instId.slice(0, 6).toUpperCase()}`,
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaIngresoTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
-          // 🔥 LECTURA DE FECHA ESTRICTAMENTE EN UTC PARA EVITAR RETROCESO DE DÍAS 🔥
           fechaRequeridaTexto: ped.fechaRequerida ? new Date(ped.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'No asignada',
           esAtrasado: false,
           paquetesCantidad: 0,

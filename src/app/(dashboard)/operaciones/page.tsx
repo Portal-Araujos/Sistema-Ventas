@@ -324,7 +324,6 @@ export default function OperacionesPage() {
         </div>
       )}
 
-      {/* 👁️ MODAL: VER DETALLES DE PRENDAS */}
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
         <DialogContent className="sm:max-w-4xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
           <DialogHeader>

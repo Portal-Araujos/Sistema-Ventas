@@ -160,15 +160,46 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId } = body;
 
-    // 🔥 EVITAR GUARDAR FECHAS NULAS COMO 1970 🔥
-    const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
+    const fechaParseada = (fechaRequerida && fechaRequerida.length > 4)
+      ? new Date(`${fechaRequerida}T12:00:00Z`)
+      : null;
 
     if (modo === 'masivo') {
+
+      if (!fechaRequerida) {
+        return NextResponse.json(
+          { error: 'La fecha requerida es obligatoria.' },
+          { status: 400 }
+        );
+      }
+
+      const fechaLimpia = fechaRequerida.split('T')[0];
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaLimpia)) {
+        return NextResponse.json(
+          { error: 'Formato de fecha inválido.' },
+          { status: 400 }
+        );
+      }
+
+      const fechaParseada = new Date(
+        `${fechaLimpia}T12:00:00Z`
+      );
+
       await prisma.pedido.updateMany({
-        where: { institucionId, estado: 'Borrador' },
-        data: { estado: 'Pendiente en revisión', fechaRequerida: fechaParseada }
+        where: {
+          institucionId,
+          estado: 'Borrador'
+        },
+        data: {
+          estado: 'Pendiente en revisión',
+          fechaRequerida: fechaParseada
+        }
       });
-      return NextResponse.json({ success: true });
+
+      return NextResponse.json({
+        success: true
+      });
     } else {
       await prisma.detallePedido.deleteMany({ where: { pedidoId: id } });
       const updateData: any = {};
