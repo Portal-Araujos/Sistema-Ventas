@@ -38,6 +38,10 @@ export async function middleware(request: NextRequest) {
       '/agenda': 'agenda:ver',
       '/visitas': 'visitas:ver',
       '/seguimientos': 'seguimientos:ver',
+      '/operaciones': 'operaciones:ver',
+      '/produccion': 'produccion:ver',
+      '/empaque': 'empaque:ver',
+      '/hiatorial-despachos': 'historial-despachos:ver',
       '/indicadores': 'indicadores:ver',
       '/configuracion': 'configuracion:ver',
       '/usuarios': 'usuarios:gestionar',
@@ -50,9 +54,6 @@ export async function middleware(request: NextRequest) {
     for (const ruta of rutasOrdenadas) {
       if (pathname.startsWith(ruta)) {
         
-        // 🔥 LA SOLUCIÓN: EXCEPCIÓN PARA LA FICHA TÉCNICA 🔥
-        // Si entra a /instituciones/[id], lo dejamos pasar.
-        // Pero seguimos bloqueando la tabla (/instituciones) y el botón de crear (/instituciones/nueva)
         if (ruta === '/instituciones' && pathname !== '/instituciones' && !pathname.startsWith('/instituciones/nueva')) {
             return NextResponse.next(); // Lo dejamos pasar
         }
@@ -62,11 +63,9 @@ export async function middleware(request: NextRequest) {
         if (permisoRequerido === 'super_admin_only' && rol !== 'super_admin') {
           return NextResponse.redirect(new URL('/agenda', request.url));
         }
-        
         if (permisoRequerido !== 'super_admin_only' && !permisos.includes(permisoRequerido)) {
           return NextResponse.redirect(new URL('/agenda', request.url)); 
         }
-        
         break; // Si ya validó su ruta, salimos del ciclo
       }
     }
@@ -75,7 +74,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 }
-
 export const config = {
   matcher: [
     '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',

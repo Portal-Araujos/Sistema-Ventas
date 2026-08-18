@@ -16,6 +16,50 @@ export default function LoginPage() {
   
   const [showPassword, setShowPassword] = useState(false); 
 
+  // 🔥 MAGIA ULTRA-INTELIGENTE: BÚSQUEDA POR PALABRAS CLAVE 🔥
+  const getRedirectUrl = (rol: string, permisos: any[]) => {
+    const rolLower = rol.toLowerCase();
+    
+    // 1. Si es Admin o Super Admin, van a su panel central siempre
+    if (rolLower.includes('admin') || rolLower === 'super_admin') return '/inicio';
+
+    // 2. Extraemos los permisos y los pasamos a minúsculas
+    const modulosStr = Array.isArray(permisos)
+      ? permisos.map(p => (typeof p === 'string' ? p.toLowerCase() : (p.modulo || p.nombre || '').toLowerCase()))
+      : [];
+
+    if (modulosStr.length === 0) return '/login?error=SinPermisos';
+
+    // 3. Función auxiliar para buscar si el usuario tiene alguna palabra clave en sus permisos
+    // Así evitamos el problema de "skus:ver" o "facturacion:editar"
+    const tienePermiso = (palabras: string[]) => {
+      return modulosStr.some(permiso => palabras.some(palabra => permiso.includes(palabra)));
+    };
+
+    // 4. Diccionario de Enrutamiento (Busca palabras clave y manda a la ruta exacta)
+    if (tienePermiso(['inicio', 'dashboard'])) return '/inicio';
+    if (tienePermiso(['agenda'])) return '/agenda';
+    if (tienePermiso(['operaciones'])) return '/operaciones';
+    if (tienePermiso(['produccion', 'taller'])) return '/produccion';
+    if (tienePermiso(['empaque', 'bodega'])) return '/empaque';
+    if (tienePermiso(['despacho', 'historial'])) return '/historial-despachos';
+    if (tienePermiso(['cobranzas', 'facturacion', 'cartera'])) return '/cobranzas';
+    if (tienePermiso(['tickets'])) return '/tickets';
+    if (tienePermiso(['ventas', 'pedidos'])) return '/pedidos';
+    if (tienePermiso(['sku', 'catalogo', 'codigo'])) return '/configuraciones/skus';
+    if (tienePermiso(['configuracion'])) return '/configuraciones';
+
+    // 5. Si de verdad tiene un permiso rarísimo que no cubrimos arriba, 
+    // le quitamos el ":ver" (ej. "novedades:ver" -> "novedades") y lo intentamos rutear
+    if (modulosStr[0]) {
+      let moduloBase = modulosStr[0].split(':')[0].trim(); // Extrae solo la palabra antes de los dos puntos
+      moduloBase = moduloBase.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '-');
+      return `/${moduloBase}`;
+    }
+
+    return '/inicio'; 
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -28,20 +72,22 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
+      
       if (!res.ok) {
         throw new Error(data.error || 'Error al iniciar sesión');
       }
-      if (data.rol === 'super_admin' || data.rol === 'administrador') {
-        router.push('/inicio');
-      } else {
-        router.push('/agenda'); 
-      } 
+
+      // 🚀 Usamos el Smart Redirect con los permisos extraídos
+      const rutaDestino = getRedirectUrl(data.rol, data.permisos || []);
+      router.push(rutaDestino);
+
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
