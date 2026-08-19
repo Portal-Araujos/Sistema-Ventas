@@ -29,17 +29,42 @@ export async function GET(request: Request) {
       whereCondition.estado = { not: 'Borrador' };
     }
 
+    // 🔥 SOLUCIÓN DE URGENCIA: VISIBILIDAD CRUZADA ADMIN-VENDEDOR 🔥
     if (userRol === 'vendedor') {
-      whereCondition.usuarioId = userId;
+      // 1. Buscamos todas las escuelas que le pertenecen a este vendedor
+      const vendedorInfo = await prisma.usuario.findUnique({
+        where: { id: userId },
+        include: { institucionesAsignadas: { select: { id: true } } }
+      });
+      
+      const misEscuelas = vendedorInfo?.institucionesAsignadas.map((i: any) => i.id) || [];
+
+      // 2. Le permitimos ver los pedidos que él creó O los que pertenecen a sus escuelas
+      whereCondition.OR = [
+        { usuarioId: userId },
+        { institucionId: { in: misEscuelas } }
+      ];
     }
+    
+    // Si la búsqueda es de una institución específica, respetamos ese filtro
     if (institucionIdParam) {
-      whereCondition.institucionId = institucionIdParam;
+      // Si ya existía un OR, lo combinamos usando AND para no romper la seguridad
+      if (whereCondition.OR) {
+        whereCondition.AND = [{ institucionId: institucionIdParam }];
+      } else {
+        whereCondition.institucionId = institucionIdParam;
+      }
     }
 
     if (fechaInicio || fechaFin) {
       const startStr = fechaInicio ? `${fechaInicio}T00:00:00-05:00` : '1970-01-01T00:00:00-05:00';
       const endStr = fechaFin ? `${fechaFin}T23:59:59.999-05:00` : '2099-12-31T23:59:59.999-05:00';
-      whereCondition.createdAt = { gte: new Date(startStr), lte: new Date(endStr) };
+      
+      if (whereCondition.AND) {
+         whereCondition.AND.push({ createdAt: { gte: new Date(startStr), lte: new Date(endStr) } });
+      } else {
+         whereCondition.createdAt = { gte: new Date(startStr), lte: new Date(endStr) };
+      }
     }
 
     const pedidos = await prisma.pedido.findMany({
@@ -89,7 +114,6 @@ export async function GET(request: Request) {
         }
       }
 
-      // 🔥 SANITIZADOR DE FECHAS DE DB 🔥
       let fechaValida = ped.fechaRequerida;
       if (fechaValida && new Date(fechaValida).getFullYear() < 2000) {
         fechaValida = null;
@@ -160,46 +184,14 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId } = body;
 
-    const fechaParseada = (fechaRequerida && fechaRequerida.length > 4)
-      ? new Date(`${fechaRequerida}T12:00:00Z`)
-      : null;
+    const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
 
     if (modo === 'masivo') {
-
-      if (!fechaRequerida) {
-        return NextResponse.json(
-          { error: 'La fecha requerida es obligatoria.' },
-          { status: 400 }
-        );
-      }
-
-      const fechaLimpia = fechaRequerida.split('T')[0];
-
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaLimpia)) {
-        return NextResponse.json(
-          { error: 'Formato de fecha inválido.' },
-          { status: 400 }
-        );
-      }
-
-      const fechaParseada = new Date(
-        `${fechaLimpia}T12:00:00Z`
-      );
-
       await prisma.pedido.updateMany({
-        where: {
-          institucionId,
-          estado: 'Borrador'
-        },
-        data: {
-          estado: 'Pendiente en revisión',
-          fechaRequerida: fechaParseada
-        }
+        where: { institucionId, estado: 'Borrador' },
+        data: { estado: 'Pendiente en revisión', fechaRequerida: fechaParseada }
       });
-
-      return NextResponse.json({
-        success: true
-      });
+      return NextResponse.json({ success: true });
     } else {
       await prisma.detallePedido.deleteMany({ where: { pedidoId: id } });
       const updateData: any = {};
