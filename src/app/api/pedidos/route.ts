@@ -6,6 +6,21 @@ import { cookies } from 'next/headers';
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
+// ==========================================
+// 🔥 FUNCIONES AUXILIARES (TRADUCTORES) 🔥
+// ==========================================
+const parseId = (val: any) => {
+  if (!val) return null;
+  const num = parseInt(val);
+  return isNaN(num) ? null : num;
+};
+
+const parseMoney = (val: any) => {
+  if (val === null || val === undefined || val === '') return 0;
+  const num = parseFloat(String(val).replace(/[^0-9.-]+/g, ""));
+  return isNaN(num) ? 0 : num;
+};
+
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -29,26 +44,20 @@ export async function GET(request: Request) {
       whereCondition.estado = { not: 'Borrador' };
     }
 
-    // 🔥 SOLUCIÓN DE URGENCIA: VISIBILIDAD CRUZADA ADMIN-VENDEDOR 🔥
     if (userRol === 'vendedor') {
-      // 1. Buscamos todas las escuelas que le pertenecen a este vendedor
       const vendedorInfo = await prisma.usuario.findUnique({
         where: { id: userId },
         include: { institucionesAsignadas: { select: { id: true } } }
       });
-      
       const misEscuelas = vendedorInfo?.institucionesAsignadas.map((i: any) => i.id) || [];
 
-      // 2. Le permitimos ver los pedidos que él creó O los que pertenecen a sus escuelas
       whereCondition.OR = [
         { usuarioId: userId },
         { institucionId: { in: misEscuelas } }
       ];
     }
     
-    // Si la búsqueda es de una institución específica, respetamos ese filtro
     if (institucionIdParam) {
-      // Si ya existía un OR, lo combinamos usando AND para no romper la seguridad
       if (whereCondition.OR) {
         whereCondition.AND = [{ institucionId: institucionIdParam }];
       } else {
@@ -81,9 +90,10 @@ export async function GET(request: Request) {
     const ventasGuardadas = await prisma.venta.findMany({
       where: { institucionId: { in: institucionIds } },
       select: { 
-        numContrato: true, institucionId: true, vendedorId: true, 
+        id: true, numContrato: true, institucionId: true, vendedorId: true, 
         valorContrato: true, abono: true, meses: true, mesCobro: true,
-        tipoCobroId: true, estadoClienteId: true, estadoContratoId: true 
+        tipoCobroId: true, estadoClienteId: true, estadoContratoId: true,
+        cuotaMensual: true
       },
       orderBy: { fechaVenta: 'desc' }
     });
@@ -93,12 +103,12 @@ export async function GET(request: Request) {
 
     for (const ped of pedidos as any[]) {
       const instId = ped.institucionId;
-      let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : '';
+      let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
       
-      const ventaAsociada = ventasGuardadas.find(v => v.numContrato === contratoExtraido && v.institucionId === instId);
-      if (!contratoExtraido && ventaAsociada) contratoExtraido = ventaAsociada.numContrato;
-
-      if (!contratoExtraido) contratoExtraido = 'S/N';
+      const ventaAsociada = ventasGuardadas.find(v => {
+        const vNum = v.numContrato ? String(v.numContrato).trim() : 'S/N';
+        return vNum === contratoExtraido && v.institucionId === instId;
+      });
 
       let estadoRealPedido = ped.estado;
       if (ped.estado !== 'Borrador') {
@@ -115,9 +125,7 @@ export async function GET(request: Request) {
       }
 
       let fechaValida = ped.fechaRequerida;
-      if (fechaValida && new Date(fechaValida).getFullYear() < 2000) {
-        fechaValida = null;
-      }
+      if (fechaValida && new Date(fechaValida).getFullYear() < 2000) fechaValida = null;
 
       if (!mapaGrupos.has(instId)) {
         mapaGrupos.set(instId, {
@@ -131,9 +139,7 @@ export async function GET(request: Request) {
       } else {
          const grupo = mapaGrupos.get(instId);
          if (grupo.estado !== 'Borrador' && estadoRealPedido !== 'Borrador') {
-            if (prioridadEstados.indexOf(estadoRealPedido) < prioridadEstados.indexOf(grupo.estado)) {
-                grupo.estado = estadoRealPedido;
-            }
+            if (prioridadEstados.indexOf(estadoRealPedido) < prioridadEstados.indexOf(grupo.estado)) grupo.estado = estadoRealPedido;
          }
          if (fechaValida && (!grupo.fechaRequerida || new Date(fechaValida) > new Date(grupo.fechaRequerida))) {
              grupo.fechaRequerida = fechaValida;
@@ -147,11 +153,14 @@ export async function GET(request: Request) {
         id: ped.id, numContrato: contratoExtraido,
         nombreCliente: ped.nombreCliente || `Cliente Contrato #${contratoExtraido}`,
         tipoPedido: ped.tipoPedido || 'Pedido', observacion: ped.observacion || '',
-        fechaRequerida: fechaValida, detalles: ped.detalles || [],
+        fechaRequerida: fechaValida, 
+        detalles: ped.detalles || [],
         totalUnidadesContrato: unidadesEnEstePedido,
         estadoActualizadoOperaciones: estadoRealPedido,
-        valorContrato: ventaAsociada?.valorContrato || '',
-        abono: ventaAsociada?.abono || '',
+        
+        valorContrato: ventaAsociada?.valorContrato || 0,
+        abono: ventaAsociada?.abono || 0,
+        cuotaMensual: ventaAsociada?.cuotaMensual || 0,
         meses: ventaAsociada?.meses || 12,
         mesCobro: ventaAsociada?.mesCobro || 'Enero',
         tipoCobroId: ventaAsociada?.tipoCobroId || '',
@@ -174,15 +183,24 @@ export async function GET(request: Request) {
     }));
 
     return NextResponse.json(resultado);
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al consultar pedidos' }, { status: 500 });
+  } catch (error: any) {
+    console.error("🔥 ERROR EN GET PEDIDOS:", error);
+    return NextResponse.json({ error: error.message || 'Error al consultar pedidos' }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('session_token')?.value;
+    let userIdFallback = '';
+    if (token) {
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      userIdFallback = payload.id as string;
+    }
+
     const body = await request.json();
-    const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId } = body;
+    const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, cuotaMensual, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId } = body;
 
     const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
 
@@ -193,24 +211,93 @@ export async function PUT(request: Request) {
       });
       return NextResponse.json({ success: true });
     } else {
-      await prisma.detallePedido.deleteMany({ where: { pedidoId: id } });
-      const updateData: any = {};
-      if (numContrato !== undefined) updateData.numContrato = String(numContrato).trim() || null;
-      if (nombreCliente !== undefined) updateData.nombreCliente = nombreCliente;
-      if (fechaRequerida !== undefined) updateData.fechaRequerida = fechaParseada;
+      
+      const pedidoAntiguo = await prisma.pedido.findUnique({ where: { id } });
+      const oldNumContrato = pedidoAntiguo?.numContrato ? String(pedidoAntiguo.numContrato).trim() : 'S/N';
+      const numContratoLimpio = numContrato !== undefined ? String(numContrato).trim() : oldNumContrato;
+      const idEscuelaReal = pedidoAntiguo ? pedidoAntiguo.institucionId : institucionId;
 
-      if (Array.isArray(detalles) && detalles.length > 0) {
-        updateData.detalles = {
-          create: detalles.map((d: any) => ({
-            skuCodigo: d.skuCodigo || 'S/N', tipoRopa: d.tipoRopa || 'Prenda', color: d.color || '',
-            genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1, bordado: d.bordado || null, observacion: d.observacion || null
-          }))
-        };
+      // 🔥 MAGIA: BUSCADOR DEL DUEÑO DE LA ESCUELA 🔥
+      // Buscamos quién es el usuario que tiene esta institución asignada
+      let vendedorFinalId = pedidoAntiguo?.usuarioId || userIdFallback;
+      const dueñoEscuela = await prisma.usuario.findFirst({
+        where: { institucionesAsignadas: { some: { id: idEscuelaReal } } },
+        select: { id: true }
+      });
+      
+      if (dueñoEscuela) {
+        vendedorFinalId = dueñoEscuela.id;
       }
-      const pedidoActualizado = await prisma.pedido.update({ where: { id }, data: updateData });
-      return NextResponse.json(pedidoActualizado);
+
+      if (detalles) {
+        await prisma.detallePedido.deleteMany({ where: { pedidoId: id } });
+        const updateData: any = {};
+        if (numContrato !== undefined) updateData.numContrato = numContratoLimpio || null;
+        if (nombreCliente !== undefined) updateData.nombreCliente = nombreCliente;
+        if (fechaRequerida !== undefined) updateData.fechaRequerida = fechaParseada;
+        
+        // Asignamos la propiedad del pedido al dueño de la escuela
+        updateData.usuarioId = vendedorFinalId; 
+
+        if (Array.isArray(detalles) && detalles.length > 0) {
+          updateData.detalles = {
+            create: detalles.map((d: any) => ({
+              skuCodigo: d.skuCodigo || 'S/N', tipoRopa: d.tipoRopa || 'Prenda', color: d.color || '',
+              genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1, bordado: d.bordado || null, observacion: d.observacion || null
+            }))
+          };
+        }
+        await prisma.pedido.update({ where: { id }, data: updateData });
+      }
+
+      // 🔥 SINCRONIZACIÓN FINANCIERA 🔥
+      if (pedidoAntiguo) {
+        const ventaExistente = await prisma.venta.findFirst({
+          where: { institucionId: idEscuelaReal, numContrato: oldNumContrato }
+        });
+
+        const ventaData: any = {};
+        if (numContrato !== undefined) ventaData.numContrato = numContratoLimpio;
+        if (valorContrato !== undefined) ventaData.valorContrato = parseMoney(valorContrato);
+        if (abono !== undefined) ventaData.abono = parseMoney(abono);
+        if (cuotaMensual !== undefined) ventaData.cuotaMensual = parseMoney(cuotaMensual);
+        if (meses !== undefined) ventaData.meses = parseInt(meses) || 12;
+        if (mesCobro !== undefined) ventaData.mesCobro = String(mesCobro);
+        if (tipoCobroId) ventaData.tipoCobroId = parseId(tipoCobroId);
+        if (estadoClienteId) ventaData.estadoClienteId = parseId(estadoClienteId);
+        if (estadoContratoId) ventaData.estadoContratoId = parseId(estadoContratoId);
+        
+        // Asignamos el dinero al dueño de la escuela
+        ventaData.vendedorId = vendedorFinalId; 
+
+        if (ventaExistente) {
+          await prisma.venta.update({ where: { id: ventaExistente.id }, data: ventaData });
+        } else {
+          await prisma.venta.create({
+            data: {
+              institucionId: idEscuelaReal,
+              vendedorId: vendedorFinalId,
+              fechaVenta: new Date(),
+              numContrato: numContratoLimpio,
+              valorContrato: parseMoney(valorContrato),
+              abono: parseMoney(abono),
+              cuotaMensual: parseMoney(cuotaMensual), 
+              meses: parseInt(meses) || 12,
+              mesCobro: mesCobro ? String(mesCobro) : 'Enero',
+              tipoCobroId: parseId(tipoCobroId),
+              estadoClienteId: parseId(estadoClienteId),
+              estadoContratoId: parseId(estadoContratoId),
+            }
+          });
+        }
+      }
+
+      return NextResponse.json({ success: true });
     }
-  } catch (error) { return NextResponse.json({ error: 'Error' }, { status: 500 }); }
+  } catch (error: any) { 
+    console.error("🔥 ERROR EN PUT PEDIDOS:", error);
+    return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 }); 
+  }
 }
 
 export async function POST(request: Request) {
@@ -219,22 +306,58 @@ export async function POST(request: Request) {
     const token = cookieStore.get('session_token')?.value;
     const { payload } = await jwtVerify(token!, JWT_SECRET);
     const userId = payload.id as string;
+    
     const body = await request.json();
     const fechaParseada = (body.fechaRequerida && body.fechaRequerida.length > 4) ? new Date(`${body.fechaRequerida}T12:00:00Z`) : null;
+    const numContratoLimpio = body.numContrato ? String(body.numContrato).trim() : 'S/N';
+
+    // 🔥 MAGIA: BUSCADOR DEL DUEÑO DE LA ESCUELA 🔥
+    let vendedorFinalId = userId;
+    const dueñoEscuela = await prisma.usuario.findFirst({
+      where: { institucionesAsignadas: { some: { id: body.institucionId } } },
+      select: { id: true }
+    });
+    
+    if (dueñoEscuela) {
+      vendedorFinalId = dueñoEscuela.id;
+    }
 
     const nuevoPedido = await prisma.pedido.create({
       data: {
-        institucionId: body.institucionId, usuarioId: userId, numContrato: body.numContrato || null,
+        institucionId: body.institucionId, 
+        usuarioId: vendedorFinalId, // Asignamos el creador correcto
+        numContrato: body.numContrato || null,
         nombreCliente: body.nombreCliente || `Cliente`,
         fechaRequerida: fechaParseada,
         detalles: {
           create: (body.detalles || []).map((d: any) => ({
             skuCodigo: d.skuCodigo || 'S/N', tipoRopa: d.tipoRopa || 'Prenda', color: d.color || '',
-            genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1
+            genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1, bordado: d.bordado || null, observacion: d.observacion || null
           }))
         }
       }
     });
+
+    await prisma.venta.create({
+      data: {
+        institucionId: body.institucionId,
+        vendedorId: vendedorFinalId, // Asignamos el dinero al dueño correcto
+        numContrato: numContratoLimpio,
+        fechaVenta: new Date(), 
+        valorContrato: parseMoney(body.valorContrato),
+        abono: parseMoney(body.abono),
+        cuotaMensual: parseMoney(body.cuotaMensual),
+        meses: parseInt(body.meses) || 12,
+        mesCobro: body.mesCobro ? String(body.mesCobro) : 'Enero',
+        tipoCobroId: parseId(body.tipoCobroId),
+        estadoClienteId: parseId(body.estadoClienteId),
+        estadoContratoId: parseId(body.estadoContratoId),
+      }
+    });
+
     return NextResponse.json(nuevoPedido);
-  } catch (error) { return NextResponse.json({ error: 'Error' }, { status: 500 }); }
+  } catch (error: any) { 
+    console.error("🔥 ERROR EN POST PEDIDOS:", error);
+    return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 }); 
+  }
 }

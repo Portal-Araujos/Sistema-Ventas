@@ -99,15 +99,16 @@ export default function PedidosPage() {
   const seleccionarContratoParaEditar = (pedido: any) => {
     setPedidoEditSelId(pedido.id);
     
-    // Mandamos la info al Componente Universal
+    // Mandamos la info completa y sin fallos al Componente Universal
     setContratoData({
       numContrato: pedido.numContrato !== 'S/N' ? pedido.numContrato : '',
       nombreCliente: pedido.nombreCliente || '',
       valorContrato: pedido.valorContrato || '',
       abono: pedido.abono || '',
+      cuotaMensual: pedido.cuotaMensual || '', // 🔥 AHORA SÍ PASAMOS LA CUOTA 🔥
       meses: pedido.meses?.toString() || '12',
       mesCobro: pedido.mesCobro || 'Enero',
-      prendas: pedido.detalles || [],
+      prendas: pedido.detalles || [], // 🔥 Las prendas intactas para que el form aplique alertas 🔥
       tipoPedido: pedido.tipoPedido || 'Pedido',
       observacion: pedido.observacion || '',
       tipoCobroId: pedido.tipoCobroId || '',
@@ -115,7 +116,6 @@ export default function PedidosPage() {
       estadoContratoId: pedido.estadoContratoId || ''
     });
     
-    // 🔥 SI EXISTE: COLAPSAMOS LOS DATOS ADMINISTRATIVOS 🔥
     setMostrarFormContrato(false); 
   };
 
