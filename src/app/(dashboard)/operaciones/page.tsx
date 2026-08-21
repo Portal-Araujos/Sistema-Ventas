@@ -325,7 +325,7 @@ export default function OperacionesPage() {
       )}
 
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
-        <DialogContent className="sm:max-w-4xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
+        <DialogContent className="sm:max-w-6xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[88vh]">
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-gray-900 border-b pb-3 flex items-center justify-between">
               <span>Control Operativo - {grupoDetalle?.institucionNombre}</span>
@@ -359,6 +359,7 @@ export default function OperacionesPage() {
                           <thead>
                             <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase text-[10px]">
                               <th className="p-2 text-center w-8">Sel.</th>
+                              <th className="p-2">Código</th>
                               <th className="p-2">Prenda</th>
                               <th className="p-2">Color / Talla</th>
                               <th className="p-2 text-center">Cant.</th>
@@ -379,6 +380,7 @@ export default function OperacionesPage() {
                                     onChange={() => toggleSeleccionPrenda(p.id)}
                                   />
                                 </td>
+                                <td className="p-2 font-mono font-bold text-blue-600">{p.skuCodigo || 'S/N'}</td>
                                 <td className="p-2 font-bold text-gray-800">{p.tipoRopa}</td>
                                 <td className="p-2 text-gray-600">{p.color} ({p.talla})</td>
                                 <td className="p-2 text-center font-black">{p.cantidad}</td>

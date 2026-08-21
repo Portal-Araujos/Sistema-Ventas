@@ -6,9 +6,6 @@ import { cookies } from 'next/headers';
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
-// ==========================================
-// 🔥 FUNCIONES AUXILIARES (TRADUCTORES) 🔥
-// ==========================================
 const parseId = (val: any) => {
   if (!val) return null;
   const num = parseInt(val);
@@ -30,14 +27,13 @@ export async function GET(request: Request) {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userRol = payload.rol as string;
     const userId = payload.id as string;
-
     const { searchParams } = new URL(request.url);
     const estadoParam = searchParams.get('estado') || 'Borrador';
     const fechaInicio = searchParams.get('fechaInicio');
     const fechaFin = searchParams.get('fechaFin');
     const institucionIdParam = searchParams.get('institucionId');
-
     const whereCondition: any = {};
+    
     if (estadoParam === 'Borrador') {
       whereCondition.estado = 'Borrador';
     } else {
@@ -64,7 +60,7 @@ export async function GET(request: Request) {
         whereCondition.institucionId = institucionIdParam;
       }
     }
-
+    
     if (fechaInicio || fechaFin) {
       const startStr = fechaInicio ? `${fechaInicio}T00:00:00-05:00` : '1970-01-01T00:00:00-05:00';
       const endStr = fechaFin ? `${fechaFin}T23:59:59.999-05:00` : '2099-12-31T23:59:59.999-05:00';
@@ -81,6 +77,7 @@ export async function GET(request: Request) {
       include: {
         institucion: { select: { id: true, nombre: true } },
         usuario: { select: { id: true, nombre: true } },
+        operarioAsignado: { select: { id: true, nombre: true } }, // 🔥 TRAEMOS AL OPERARIO ASIGNADO
         detalles: true
       },
       orderBy: { createdAt: 'desc' }
@@ -100,7 +97,7 @@ export async function GET(request: Request) {
 
     const mapaGrupos = new Map();
     const prioridadEstados = ['Pendiente en revision', 'En produccion', 'en empaque', 'Listos para el despacho', 'Despacho'];
-
+    
     for (const ped of pedidos as any[]) {
       const instId = ped.institucionId;
       let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
@@ -109,7 +106,7 @@ export async function GET(request: Request) {
         const vNum = v.numContrato ? String(v.numContrato).trim() : 'S/N';
         return vNum === contratoExtraido && v.institucionId === instId;
       });
-
+      
       let estadoRealPedido = ped.estado;
       if (ped.estado !== 'Borrador') {
         const estPrendas = (ped.detalles || []).map((d:any) => d.estadoOperacion || 'Pendiente en revision');
@@ -123,10 +120,10 @@ export async function GET(request: Request) {
           estadoRealPedido = estadoMasRetrasado;
         }
       }
-
+      
       let fechaValida = ped.fechaRequerida;
       if (fechaValida && new Date(fechaValida).getFullYear() < 2000) fechaValida = null;
-
+      
       if (!mapaGrupos.has(instId)) {
         mapaGrupos.set(instId, {
           id: instId, codigoPedido: `PED-${instId.slice(0, 6).toUpperCase()}`,
@@ -145,19 +142,20 @@ export async function GET(request: Request) {
              grupo.fechaRequerida = fechaValida;
          }
       }
-
+      
       const grupo = mapaGrupos.get(instId);
       const unidadesEnEstePedido = (ped.detalles || []).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
-
+      
       grupo.pedidosAsociados.push({
         id: ped.id, numContrato: contratoExtraido,
         nombreCliente: ped.nombreCliente || `Cliente Contrato #${contratoExtraido}`,
         tipoPedido: ped.tipoPedido || 'Pedido', observacion: ped.observacion || '',
         fechaRequerida: fechaValida, 
+        operarioAsignadoId: ped.operarioAsignadoId || '', // 🔥 ENVIAMOS AL FRONTEND
+        operarioAsignadoNombre: ped.operarioAsignado?.nombre || 'Auto-asignado', 
         detalles: ped.detalles || [],
         totalUnidadesContrato: unidadesEnEstePedido,
         estadoActualizadoOperaciones: estadoRealPedido,
-        
         valorContrato: ventaAsociada?.valorContrato || 0,
         abono: ventaAsociada?.abono || 0,
         cuotaMensual: ventaAsociada?.cuotaMensual || 0,
@@ -184,7 +182,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(resultado);
   } catch (error: any) {
-    console.error("🔥 ERROR EN GET PEDIDOS:", error);
+    console.error(" ERROR EN GET PEDIDOS:", error);
     return NextResponse.json({ error: error.message || 'Error al consultar pedidos' }, { status: 500 });
   }
 }
@@ -194,14 +192,16 @@ export async function PUT(request: Request) {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     let userIdFallback = '';
+    let userRol = '';
+    
     if (token) {
       const { payload } = await jwtVerify(token, JWT_SECRET);
       userIdFallback = payload.id as string;
+      userRol = payload.rol as string; // 🔥 CAPTURAMOS SU ROL
     }
 
     const body = await request.json();
     const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, cuotaMensual, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId } = body;
-
     const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
 
     if (modo === 'masivo') {
@@ -216,18 +216,13 @@ export async function PUT(request: Request) {
       const oldNumContrato = pedidoAntiguo?.numContrato ? String(pedidoAntiguo.numContrato).trim() : 'S/N';
       const numContratoLimpio = numContrato !== undefined ? String(numContrato).trim() : oldNumContrato;
       const idEscuelaReal = pedidoAntiguo ? pedidoAntiguo.institucionId : institucionId;
-
-      // 🔥 MAGIA: BUSCADOR DEL DUEÑO DE LA ESCUELA 🔥
-      // Buscamos quién es el usuario que tiene esta institución asignada
+      
       let vendedorFinalId = pedidoAntiguo?.usuarioId || userIdFallback;
       const dueñoEscuela = await prisma.usuario.findFirst({
         where: { institucionesAsignadas: { some: { id: idEscuelaReal } } },
         select: { id: true }
       });
-      
-      if (dueñoEscuela) {
-        vendedorFinalId = dueñoEscuela.id;
-      }
+      if (dueñoEscuela) vendedorFinalId = dueñoEscuela.id;
 
       if (detalles) {
         await prisma.detallePedido.deleteMany({ where: { pedidoId: id } });
@@ -236,8 +231,12 @@ export async function PUT(request: Request) {
         if (nombreCliente !== undefined) updateData.nombreCliente = nombreCliente;
         if (fechaRequerida !== undefined) updateData.fechaRequerida = fechaParseada;
         
-        // Asignamos la propiedad del pedido al dueño de la escuela
         updateData.usuarioId = vendedorFinalId; 
+
+        // 🔥 LÓGICA DE ASIGNACIÓN: Solo el Super Admin puede reasignar a otra persona
+        if (userRol === 'super_admin' && body.operarioAsignadoId !== undefined) {
+           updateData.operarioAsignadoId = body.operarioAsignadoId || null;
+        }
 
         if (Array.isArray(detalles) && detalles.length > 0) {
           updateData.detalles = {
@@ -249,8 +248,6 @@ export async function PUT(request: Request) {
         }
         await prisma.pedido.update({ where: { id }, data: updateData });
       }
-
-      // 🔥 SINCRONIZACIÓN FINANCIERA 🔥
       if (pedidoAntiguo) {
         const ventaExistente = await prisma.venta.findFirst({
           where: { institucionId: idEscuelaReal, numContrato: oldNumContrato }
@@ -266,8 +263,6 @@ export async function PUT(request: Request) {
         if (tipoCobroId) ventaData.tipoCobroId = parseId(tipoCobroId);
         if (estadoClienteId) ventaData.estadoClienteId = parseId(estadoClienteId);
         if (estadoContratoId) ventaData.estadoContratoId = parseId(estadoContratoId);
-        
-        // Asignamos el dinero al dueño de la escuela
         ventaData.vendedorId = vendedorFinalId; 
 
         if (ventaExistente) {
@@ -275,27 +270,18 @@ export async function PUT(request: Request) {
         } else {
           await prisma.venta.create({
             data: {
-              institucionId: idEscuelaReal,
-              vendedorId: vendedorFinalId,
-              fechaVenta: new Date(),
-              numContrato: numContratoLimpio,
-              valorContrato: parseMoney(valorContrato),
-              abono: parseMoney(abono),
-              cuotaMensual: parseMoney(cuotaMensual), 
-              meses: parseInt(meses) || 12,
-              mesCobro: mesCobro ? String(mesCobro) : 'Enero',
-              tipoCobroId: parseId(tipoCobroId),
-              estadoClienteId: parseId(estadoClienteId),
-              estadoContratoId: parseId(estadoContratoId),
+              institucionId: idEscuelaReal, vendedorId: vendedorFinalId, fechaVenta: new Date(),
+              numContrato: numContratoLimpio, valorContrato: parseMoney(valorContrato), abono: parseMoney(abono),
+              cuotaMensual: parseMoney(cuotaMensual), meses: parseInt(meses) || 12, mesCobro: mesCobro ? String(mesCobro) : 'Enero',
+              tipoCobroId: parseId(tipoCobroId), estadoClienteId: parseId(estadoClienteId), estadoContratoId: parseId(estadoContratoId),
             }
           });
         }
       }
-
       return NextResponse.json({ success: true });
     }
   } catch (error: any) { 
-    console.error("🔥 ERROR EN PUT PEDIDOS:", error);
+    console.error(" ERROR EN PUT PEDIDOS:", error);
     return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 }); 
   }
 }
@@ -306,12 +292,12 @@ export async function POST(request: Request) {
     const token = cookieStore.get('session_token')?.value;
     const { payload } = await jwtVerify(token!, JWT_SECRET);
     const userId = payload.id as string;
-    
+    const userRol = payload.rol as string;
+
     const body = await request.json();
     const fechaParseada = (body.fechaRequerida && body.fechaRequerida.length > 4) ? new Date(`${body.fechaRequerida}T12:00:00Z`) : null;
     const numContratoLimpio = body.numContrato ? String(body.numContrato).trim() : 'S/N';
-
-    // 🔥 MAGIA: BUSCADOR DEL DUEÑO DE LA ESCUELA 🔥
+    
     let vendedorFinalId = userId;
     const dueñoEscuela = await prisma.usuario.findFirst({
       where: { institucionesAsignadas: { some: { id: body.institucionId } } },
@@ -322,10 +308,14 @@ export async function POST(request: Request) {
       vendedorFinalId = dueñoEscuela.id;
     }
 
+    // 🔥 MAGIA: Si es Admin, toma el ID que haya seleccionado. Si es mortal, se asigna su propio ID solito.
+    const operarioDefinitivo = userRol === 'super_admin' ? (body.operarioAsignadoId || userId) : userId;
+
     const nuevoPedido = await prisma.pedido.create({
       data: {
         institucionId: body.institucionId, 
-        usuarioId: vendedorFinalId, // Asignamos el creador correcto
+        usuarioId: vendedorFinalId, 
+        operarioAsignadoId: operarioDefinitivo, // 🔥 ASIGNACIÓN CUMPLIDA
         numContrato: body.numContrato || null,
         nombreCliente: body.nombreCliente || `Cliente`,
         fechaRequerida: fechaParseada,
@@ -341,7 +331,7 @@ export async function POST(request: Request) {
     await prisma.venta.create({
       data: {
         institucionId: body.institucionId,
-        vendedorId: vendedorFinalId, // Asignamos el dinero al dueño correcto
+        vendedorId: vendedorFinalId,
         numContrato: numContratoLimpio,
         fechaVenta: new Date(), 
         valorContrato: parseMoney(body.valorContrato),
@@ -357,7 +347,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(nuevoPedido);
   } catch (error: any) { 
-    console.error("🔥 ERROR EN POST PEDIDOS:", error);
+    console.error(" ERROR EN POST PEDIDOS:", error);
     return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 }); 
   }
 }

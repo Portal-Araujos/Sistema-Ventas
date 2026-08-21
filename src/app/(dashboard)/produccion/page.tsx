@@ -29,7 +29,7 @@ export default function ProduccionPage() {
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
 
-  // PAGINACIÓN STRICTA DE 15 FILAS
+  // PAGINACIÓN
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
@@ -40,7 +40,9 @@ export default function ProduccionPage() {
 
   const [modalEstado, setModalEstado] = useState(false);
   const [prendasSeleccionadas, setPrendasSeleccionadas] = useState<string[]>([]);
-  const [formEstado, setFormEstado] = useState({ estado: '', operarioAsignado: '' });
+  
+  // 🔥 CORREGIDO PARA GUARDAR EL ID 🔥
+  const [formEstado, setFormEstado] = useState({ estado: '', operarioAsignadoId: '' });
   const [saving, setSaving] = useState(false);
 
   const [toast, setToast] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
@@ -77,21 +79,13 @@ export default function ProduccionPage() {
     }
   };
 
-  useEffect(() => { 
-    cargarDatos(); 
-  }, [fechaDesde, fechaHasta, selectedEstadoFilter]);
+  useEffect(() => { cargarDatos(); }, [fechaDesde, fechaHasta, selectedEstadoFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, selectedInstFilter, selectedEstadoFilter, kpiFilter]);
 
-  useEffect(() => { 
-    setCurrentPage(1); 
-  }, [searchTerm, selectedInstFilter, selectedEstadoFilter, kpiFilter]);
-
-  // 🔥 EFECTO ESPEJO: Actualiza el modal abierto cuando cambian los datos en vivo sin cerrarlo 🔥
   useEffect(() => {
     if (grupoDetalle && data.length > 0) {
       const grupoActualizado = data.find(g => g.id === grupoDetalle.id);
-      if (grupoActualizado) {
-        setGrupoDetalle(grupoActualizado);
-      }
+      if (grupoActualizado) setGrupoDetalle(grupoActualizado);
     }
   }, [data]);
 
@@ -116,20 +110,12 @@ export default function ProduccionPage() {
       return;
     }
     setPrendasSeleccionadas(pIds);
-    const esAdmin = currentUser?.rol === 'admin' || currentUser?.rol === 'superadmin';
-    setFormEstado({ 
-      estado: '', 
-      operarioAsignado: esAdmin ? '' : (currentUser?.nombre || '') 
-    });
+    setFormEstado({ estado: '', operarioAsignadoId: '' }); // Vacío por defecto
     setModalEstado(true);
   };
 
   const handleGuardarEstado = async () => {
-    if (!formEstado.estado) { 
-      showToast('error', 'Seleccione un estado de taller.'); 
-      return; 
-    }
-    
+    if (!formEstado.estado) return showToast('error', 'Seleccione un estado de taller.'); 
     setSaving(true);
     try {
       const res = await fetch('/api/produccion', {
@@ -139,11 +125,9 @@ export default function ProduccionPage() {
       });
       if (!res.ok) throw new Error();
       showToast('exito', 'Producción actualizada con éxito.');
-      
-      // 🔥 NO CERRAMOS EL MODAL GRANDE, SOLO EL MODAL PEQUEÑO 🔥
       setModalEstado(false); 
       setPrendasSeleccionadas([]);
-      await cargarDatos(); // Dispara la actualización en tiempo real dentro del modal abierto
+      await cargarDatos(); 
     } catch (e) { 
       showToast('error', 'Error al guardar los cambios.'); 
     } finally { 
@@ -161,9 +145,7 @@ export default function ProduccionPage() {
       });
       showToast('exito', '¡Escuela enviada a Bodega!');
       cargarDatos();
-    } catch (e) { 
-      showToast('error', 'Error al enviar la escuela.'); 
-    }
+    } catch (e) { showToast('error', 'Error al enviar la escuela.'); }
   };
 
   const handleMandarEmpaqueIndividual = async (id: string) => {
@@ -176,48 +158,27 @@ export default function ProduccionPage() {
       });
       showToast('exito', '¡Prenda enviada a Bodega!');
       cargarDatos();
-    } catch (e) { 
-      showToast('error', 'Error al enviar prenda.'); 
-    }
+    } catch (e) { showToast('error', 'Error al enviar prenda.'); }
   };
 
-  // 🔥 GENERADOR DE EXCEL DE PRODUCCIÓN (NO SE TOPA) 🔥
+  // 🔥 GENERADOR EXCEL CORREGIDO 🔥
   const generarExcelConResumen = (prendasAExportar: any[], tituloArchivo: string, tituloHoja: string) => {
-    if (prendasAExportar.length === 0) {
-      showToast('error', 'No hay datos para exportar.'); 
-      return;
-    }
-
+    if (prendasAExportar.length === 0) return showToast('error', 'No hay datos para exportar.');
+    
     const wsData: any[][] = [];
     wsData.push([tituloHoja]);
     wsData.push([]);
-
-    wsData.push([
-      "Código OP", "Institución", "N° Contrato", "Cliente", 
-      "SKU", "Prenda", "Color", "Sexo", "Talla", "Cantidad", 
-      "Bordado", "Obervacion", "Operario", "Estado", "Ingreso Taller", "Fecha Compromiso"
-    ]);
+    wsData.push(["Código OP", "Institución", "N° Contrato", "Cliente", "SKU", "Prenda", "Color", "Sexo", "Talla", "Cantidad", "Bordado", "Obervacion", "Operario", "Estado", "Ingreso Taller", "Fecha Compromiso"]);
 
     const mapaTotales: Record<string, { sku: string; prendaColorTalla: string; cantidadTotal: number }> = {};
 
     prendasAExportar.forEach(p => {
       wsData.push([
-        p.codigoOP || '',
-        p.institucionNombre || '',
-        p.numContrato || 'S/N',
-        p.nombreCliente || '',
-        p.skuCodigo || 'S/N',
-        p.tipoRopa || '',
-        p.color || '-',
-        p.genero || 'UNISEX',
-        p.talla || '-',
-        p.cantidad || 1,
-        p.bordado || 'Sin bordado',
-        p.observacion || p.observacionOperaciones || 'Sin observaciones',
-        p.operarioAsignado || 'Sin Asignar',
-        p.estadoProduccion || p.estadoOperacion || 'Planificacion',
-        p.ingresoTaller || '',
-        p.fechaCompromiso || ''
+        p.codigoOP || '', p.institucionNombre || '', p.numContrato || 'S/N', p.nombreCliente || '',
+        p.skuCodigo || 'S/N', p.tipoRopa || '', p.color || '-', p.genero || 'UNISEX', p.talla || '-',
+        p.cantidad || 1, p.bordado || 'Sin bordado', p.observacion || p.observacionOperaciones || 'Sin observaciones',
+        p.operarioAsignado?.nombre || 'Sin Asignar', // 🔥 AQUÍ LEE EL OBJETO
+        p.estadoProduccion || p.estadoOperacion || 'Planificacion', p.ingresoTaller || '', p.fechaCompromiso || ''
       ]);
 
       const sku = p.skuCodigo || 'S/N';
@@ -227,27 +188,19 @@ export default function ProduccionPage() {
       const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
 
       const key = `${sku}_${prendaColorTalla}`;
-      if (!mapaTotales[key]) {
-        mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
-      }
+      if (!mapaTotales[key]) mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
       mapaTotales[key].cantidadTotal += (p.cantidad || 1);
     });
 
-    wsData.push([]);
-    wsData.push(["========================================="]);
+    wsData.push([]); wsData.push(["========================================="]);
     wsData.push(["TOTALES Y RESUMEN DE CORTE DE PRENDAS"]);
     wsData.push(["SKU", "Prenda(color y talla)", "Cantidad Total"]);
-
-    Object.values(mapaTotales).forEach(item => {
-      wsData.push([item.sku, item.prendaColorTalla, item.cantidadTotal]);
-    });
+    Object.values(mapaTotales).forEach(item => { wsData.push([item.sku, item.prendaColorTalla, item.cantidadTotal]); });
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Produccion");
-    
-    const fechaHoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' });
-    XLSX.writeFile(wb, `${tituloArchivo}_${fechaHoy}.xlsx`);
+    XLSX.writeFile(wb, `${tituloArchivo}_${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Guayaquil' })}.xlsx`);
   };
 
   const exportarExcelConsolidado = () => {
@@ -256,15 +209,9 @@ export default function ProduccionPage() {
       grupo.pedidosAsociados.forEach((ped: any) => {
         ped.detalles?.forEach((item: any) => {
           todasLasPrendas.push({
-            ...item,
-            codigoOP: grupo.codigoOP,
-            institucionNombre: grupo.institucionNombre,
-            numContrato: ped.numContrato,
-            nombreCliente: ped.nombreCliente,
-            ingresoTaller: grupo.fechaInicioTexto,
-            fechaCompromiso: item.fechaEstimadaConfeccion 
-              ? new Date(item.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) 
-              : grupo.fechaCompromisoTexto
+            ...item, codigoOP: grupo.codigoOP, institucionNombre: grupo.institucionNombre,
+            numContrato: ped.numContrato, nombreCliente: ped.nombreCliente, ingresoTaller: grupo.fechaInicioTexto,
+            fechaCompromiso: item.fechaEstimadaConfeccion ? new Date(item.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : grupo.fechaCompromisoTexto
           });
         });
       });
@@ -272,30 +219,19 @@ export default function ProduccionPage() {
     generarExcelConResumen(todasLasPrendas, "Consolidado_Produccion", "REPORTE CONSOLIDADO GENERAL DE PRODUCCIÓN");
   };
 
-  // 🔥 NUEVO GENERADOR DE PDF EN HORIZONTAL CON 16 COLUMNAS Y TABLA DE TOTALES 🔥
+  // 🔥 PDF CORREGIDO 🔥
   const imprimirHojaTallerPDF = (grupo: any, contratoEspecifico?: any) => {
     const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      showToast('error', 'El navegador bloqueó la ventana emergente de impresión.');
-      return;
-    }
+    if (!printWindow) return showToast('error', 'El navegador bloqueó la ventana emergente.');
 
     let prendasAImprimir: any[] = [];
-    let tituloDocumento = '';
+    let tituloDocumento = contratoEspecifico ? `ORDEN DE PRODUCCIÓN (TALLER) - CONTRATO #${contratoEspecifico.numContrato}` : `ORDEN DE PRODUCCIÓN GENERAL (TALLER) - ${grupo.institucionNombre}`;
 
     if (contratoEspecifico) {
-      tituloDocumento = `ORDEN DE PRODUCCIÓN (TALLER) - CONTRATO #${contratoEspecifico.numContrato}`;
-      prendasAImprimir = contratoEspecifico.detalles.map((d: any) => ({
-        ...d,
-        numContrato: contratoEspecifico.numContrato,
-        nombreCliente: contratoEspecifico.nombreCliente
-      }));
+      prendasAImprimir = contratoEspecifico.detalles.map((d: any) => ({ ...d, numContrato: contratoEspecifico.numContrato, nombreCliente: contratoEspecifico.nombreCliente }));
     } else {
-      tituloDocumento = `ORDEN DE PRODUCCIÓN GENERAL (TALLER) - ${grupo.institucionNombre}`;
       grupo.pedidosAsociados.forEach((ped: any) => {
-        ped.detalles.forEach((d: any) => {
-          prendasAImprimir.push({ ...d, numContrato: ped.numContrato, nombreCliente: ped.nombreCliente });
-        });
+        ped.detalles.forEach((d: any) => prendasAImprimir.push({ ...d, numContrato: ped.numContrato, nombreCliente: ped.nombreCliente }));
       });
     }
 
@@ -303,105 +239,38 @@ export default function ProduccionPage() {
     let htmlFilasDetalle = '';
 
     prendasAImprimir.forEach(p => {
-      const sku = p.skuCodigo || 'S/N';
-      const prendaNombre = p.tipoRopa || 'Prenda';
-      const color = p.color || '-';
-      const talla = p.talla || '-';
-      const bordadoText = p.bordado || 'Sin bordado';
-      const obsText = p.observacion || p.observacionOperaciones || 'Sin observaciones';
+      const sku = p.skuCodigo || 'S/N'; const prendaNombre = p.tipoRopa || 'Prenda'; const color = p.color || '-'; const talla = p.talla || '-';
+      const bordadoText = p.bordado || 'Sin bordado'; const obsText = p.observacion || p.observacionOperaciones || 'Sin observaciones';
       const fCompromiso = p.fechaEstimadaConfeccion ? new Date(p.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : grupo.fechaCompromisoTexto;
-      const fIngreso = grupo.fechaInicioTexto || '-';
-
       const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
+      
       const key = `${sku}_${prendaColorTalla}`;
       if (!mapaTotalesPDF[key]) mapaTotalesPDF[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
       mapaTotalesPDF[key].cantidadTotal += (p.cantidad || 1);
 
       htmlFilasDetalle += `
         <tr>
-          <td>${grupo.codigoOP}</td>
-          <td>${grupo.institucionNombre}</td>
-          <td>${p.numContrato}</td>
-          <td>${p.nombreCliente}</td>
-          <td>${sku}</td>
-          <td>${prendaNombre}</td>
-          <td>${color}</td>
-          <td>${p.genero || 'UNISEX'}</td>
-          <td>${talla}</td>
-          <td style="text-align:center; font-weight:bold;">${p.cantidad}</td>
-          <td>${bordadoText}</td>
-          <td>${obsText}</td>
-          <td>${p.operarioAsignado || 'Sin Asignar'}</td>
-          <td>${p.estadoProduccion || 'Planificacion'}</td>
-          <td>${fIngreso}</td>
-          <td>${fCompromiso}</td>
+          <td>${grupo.codigoOP}</td><td>${grupo.institucionNombre}</td><td>${p.numContrato}</td><td>${p.nombreCliente}</td>
+          <td>${sku}</td><td>${prendaNombre}</td><td>${color}</td><td>${p.genero || 'UNISEX'}</td><td>${talla}</td>
+          <td style="text-align:center; font-weight:bold;">${p.cantidad}</td><td>${bordadoText}</td><td>${obsText}</td>
+          <td>${p.operarioAsignado?.nombre || 'Sin Asignar'}</td> <!-- 🔥 AQUI LEE EL OBJETO -->
+          <td>${p.estadoProduccion || 'Planificacion'}</td><td>${grupo.fechaInicioTexto || '-'}</td><td>${fCompromiso}</td>
         </tr>
       `;
     });
 
     let htmlFilasTotales = '';
     Object.values(mapaTotalesPDF).forEach(item => {
-      htmlFilasTotales += `
-        <tr>
-          <td style="font-weight:bold;">${item.sku}</td>
-          <td>${item.prendaColorTalla}</td>
-          <td style="text-align:center; font-weight:bold; font-size:14px;">${item.cantidadTotal}</td>
-        </tr>
-      `;
+      htmlFilasTotales += `<tr><td style="font-weight:bold;">${item.sku}</td><td>${item.prendaColorTalla}</td><td style="text-align:center; font-weight:bold; font-size:14px;">${item.cantidadTotal}</td></tr>`;
     });
-
-    const fechaImpresion = new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' });
 
     printWindow.document.write(`
       <html>
-        <head>
-          <title>${tituloDocumento}</title>
-          <style>
-            @page { size: landscape; margin: 10mm; }
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10px; color: #222; }
-            h1 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 2px; }
-            p { text-align: center; margin-top: 0; color: #555; font-size: 11px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
-            th, td { border: 1px solid #999; padding: 5px 3px; text-align: left; }
-            th { background-color: #e5e5e5; font-weight: bold; text-transform: uppercase; font-size: 9px; }
-            .tabla-totales { width: 55%; margin: 0 auto; }
-            .tabla-totales th { background-color: #222; color: #fff; }
-          </style>
-        </head>
+        <head><title>${tituloDocumento}</title><style>@page { size: landscape; margin: 10mm; } body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10px; color: #222; } h1 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 2px; } p { text-align: center; margin-top: 0; color: #555; font-size: 11px; } table { width: 100%; border-collapse: collapse; margin-bottom: 25px; } th, td { border: 1px solid #999; padding: 5px 3px; text-align: left; } th { background-color: #e5e5e5; font-weight: bold; text-transform: uppercase; font-size: 9px; } .tabla-totales { width: 55%; margin: 0 auto; } .tabla-totales th { background-color: #222; color: #fff; }</style></head>
         <body>
-          <h1>${tituloDocumento}</h1>
-          <p>Fecha Impresión: ${fechaImpresion}</p>
-          
-          <table>
-            <thead>
-              <tr>
-                <th>Código OP</th><th>Institución</th><th>N° Contrato</th><th>Cliente</th>
-                <th>SKU</th><th>Prenda</th><th>Color</th><th>Sexo</th><th>Talla</th>
-                <th>Cant.</th><th>Bordado</th><th>Observación</th><th>Operario</th>
-                <th>Estado</th><th>Ingreso Taller</th><th>F. Compromiso</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${htmlFilasDetalle}
-            </tbody>
-          </table>
-
-          <div style="page-break-inside: avoid;">
-            <h2 style="text-align:center; font-size:14px; margin-bottom:8px;">TOTALES Y RESUMEN DE CORTE</h2>
-            <table class="tabla-totales">
-              <thead>
-                <tr>
-                  <th>SKU</th>
-                  <th>Prenda (Color y Talla)</th>
-                  <th style="text-align:center;">Cantidad Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${htmlFilasTotales}
-              </tbody>
-            </table>
-          </div>
-          
+          <h1>${tituloDocumento}</h1><p>Fecha Impresión: ${new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })}</p>
+          <table><thead><tr><th>Código OP</th><th>Institución</th><th>N° Contrato</th><th>Cliente</th><th>SKU</th><th>Prenda</th><th>Color</th><th>Sexo</th><th>Talla</th><th>Cant.</th><th>Bordado</th><th>Observación</th><th>Operario</th><th>Estado</th><th>Ingreso Taller</th><th>F. Compromiso</th></tr></thead><tbody>${htmlFilasDetalle}</tbody></table>
+          <div style="page-break-inside: avoid;"><h2 style="text-align:center; font-size:14px; margin-bottom:8px;">TOTALES Y RESUMEN DE CORTE</h2><table class="tabla-totales"><thead><tr><th>SKU</th><th>Prenda (Color y Talla)</th><th style="text-align:center;">Cantidad Total</th></tr></thead><tbody>${htmlFilasTotales}</tbody></table></div>
           <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
       </html>
@@ -425,21 +294,18 @@ export default function ProduccionPage() {
     const matchEstado = selectedEstadoFilter !== 'TODOS' ? g.estadosArray.includes(selectedEstadoFilter) : true;
     
     let matchKpi = true;
-    if (kpiFilter === 'PROCESO') {
-      matchKpi = g.estadosArray.some((e: string) => !e.toLowerCase().includes('terminad') && !e.toLowerCase().includes('empaque'));
-    } else if (kpiFilter === 'TERMINADAS') {
-      matchKpi = g.estadosArray.some((e: string) => e.toLowerCase().includes('terminad') || e.toLowerCase().includes('empaque'));
-    } else if (kpiFilter === 'VENCIDOS') {
-      matchKpi = g.esAtrasado === true;
-    }
+    if (kpiFilter === 'PROCESO') matchKpi = g.estadosArray.some((e: string) => !e.toLowerCase().includes('terminad') && !e.toLowerCase().includes('empaque'));
+    else if (kpiFilter === 'TERMINADAS') matchKpi = g.estadosArray.some((e: string) => e.toLowerCase().includes('terminad') || e.toLowerCase().includes('empaque'));
+    else if (kpiFilter === 'VENCIDOS') matchKpi = g.esAtrasado === true;
 
     return matchSearch && matchInst && matchEstado && matchKpi;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  const esModoAdmin = currentUser?.rol === 'admin' || currentUser?.rol === 'superadmin';
+  
+  // 🔥 CORRECCIÓN ADMIN ROL 🔥
+  const esModoAdmin = currentUser?.rol?.toLowerCase().includes('admin');
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
@@ -457,73 +323,38 @@ export default function ProduccionPage() {
         </Button>
       </div>
 
-      {/* 🔥 4 TARJETAS KPI INTERACTIVAS (INCLUYE LA TARJETA DE VENCIDOS) 🔥 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        
-        {/* TARJETA 1: ESCUELAS EN PROCESO */}
-        <div 
-          onClick={() => setKpiFilter(kpiFilter === 'PROCESO' ? 'TODOS' : 'PROCESO')} 
-          className={`p-4 rounded-xl border cursor-pointer transition-all ${kpiFilter === 'PROCESO' ? 'bg-amber-600 text-white shadow-md scale-102' : 'bg-white hover:border-amber-400'}`}
-        >
-          <p className={`text-[10px] font-bold uppercase flex items-center gap-1 ${kpiFilter === 'PROCESO' ? 'text-amber-100' : 'text-amber-700'}`}>
-            <Settings2 size={14}/> Escuelas en Proceso
-          </p>
+        <div onClick={() => setKpiFilter(kpiFilter === 'PROCESO' ? 'TODOS' : 'PROCESO')} className={`p-4 rounded-xl border cursor-pointer transition-all ${kpiFilter === 'PROCESO' ? 'bg-amber-600 text-white shadow-md scale-102' : 'bg-white hover:border-amber-400'}`}>
+          <p className={`text-[10px] font-bold uppercase flex items-center gap-1 ${kpiFilter === 'PROCESO' ? 'text-amber-100' : 'text-amber-700'}`}><Settings2 size={14}/> Escuelas en Proceso</p>
           <p className="text-3xl font-black mt-1">{kpis.ordenesProceso || 0}</p>
         </div>
-
-        {/* TARJETA 2: PRENDAS TOTALES EN TALLER */}
-        <div 
-          onClick={() => { setKpiFilter('TODOS'); setSelectedEstadoFilter('TODOS'); }} 
-          className="bg-white p-4 rounded-xl border shadow-sm cursor-pointer hover:border-blue-300 transition-all"
-        >
-          <p className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
-            <Boxes size={14}/> Total Prendas Taller
-          </p>
+        <div onClick={() => { setKpiFilter('TODOS'); setSelectedEstadoFilter('TODOS'); }} className="bg-white p-4 rounded-xl border shadow-sm cursor-pointer hover:border-blue-300 transition-all">
+          <p className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1"><Boxes size={14}/> Total Prendas Taller</p>
           <p className="text-3xl font-black text-blue-600 mt-1">{kpis.prendasProduccion || 0}</p>
         </div>
-
-        {/* TARJETA 3: PRENDAS TERMINADAS HOY */}
-        <div 
-          onClick={() => setKpiFilter(kpiFilter === 'TERMINADAS' ? 'TODOS' : 'TERMINADAS')} 
-          className={`p-4 rounded-xl border cursor-pointer transition-all ${kpiFilter === 'TERMINADAS' ? 'bg-teal-600 text-white shadow-md scale-102' : 'bg-white hover:border-teal-400'}`}
-        >
-          <p className={`text-[10px] font-bold uppercase flex items-center gap-1 ${kpiFilter === 'TERMINADAS' ? 'text-teal-100' : 'text-teal-700'}`}>
-            <CheckCircle2 size={14}/> Prendas Listas (Hoy)
-          </p>
+        <div onClick={() => setKpiFilter(kpiFilter === 'TERMINADAS' ? 'TODOS' : 'TERMINADAS')} className={`p-4 rounded-xl border cursor-pointer transition-all ${kpiFilter === 'TERMINADAS' ? 'bg-teal-600 text-white shadow-md scale-102' : 'bg-white hover:border-teal-400'}`}>
+          <p className={`text-[10px] font-bold uppercase flex items-center gap-1 ${kpiFilter === 'TERMINADAS' ? 'text-teal-100' : 'text-teal-700'}`}><CheckCircle2 size={14}/> Prendas Listas (Hoy)</p>
           <p className="text-3xl font-black mt-1">{kpis.prendasDia || 0}</p>
         </div>
-
-        {/* 🔥 TARJETA 4 NUEVA: ÓRDENAS/PRENDAS VENCIDAS Y ATRASADAS 🔥 */}
-        <div 
-          onClick={() => setKpiFilter(kpiFilter === 'VENCIDOS' ? 'TODOS' : 'VENCIDOS')} 
-          className={`p-4 rounded-xl border cursor-pointer transition-all ${kpiFilter === 'VENCIDOS' ? 'bg-red-600 text-white shadow-md scale-102' : 'bg-red-50/50 border-red-200 hover:border-red-400'}`}
-        >
-          <p className={`text-[10px] font-bold uppercase flex items-center gap-1 ${kpiFilter === 'VENCIDOS' ? 'text-white' : 'text-red-700'}`}>
-            <AlertTriangle size={14}/> Vencidos / Atrasados
-          </p>
+        <div onClick={() => setKpiFilter(kpiFilter === 'VENCIDOS' ? 'TODOS' : 'VENCIDOS')} className={`p-4 rounded-xl border cursor-pointer transition-all ${kpiFilter === 'VENCIDOS' ? 'bg-red-600 text-white shadow-md scale-102' : 'bg-red-50/50 border-red-200 hover:border-red-400'}`}>
+          <p className={`text-[10px] font-bold uppercase flex items-center gap-1 ${kpiFilter === 'VENCIDOS' ? 'text-white' : 'text-red-700'}`}><AlertTriangle size={14}/> Vencidos / Atrasados</p>
           <p className="text-3xl font-black text-red-700 mt-1">{kpis.vencidos || 0}</p>
         </div>
-
       </div>
 
-      {/* BARRA DE FILTROS SECUNDARIOS */}
       <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
-        
         <div className="relative">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
           <Input className="pl-9 text-xs h-10 bg-gray-50" placeholder="Buscar por OP- o Institución..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
-
         <select className="h-10 border rounded-xl px-3 text-xs font-bold bg-gray-50 outline-none" value={selectedInstFilter} onChange={e => setSelectedInstFilter(e.target.value)}>
           <option value="">🏫 Todas las Instituciones</option>
           {institucionesList.map((inst: any) => <option key={inst.id} value={inst.id}>{inst.nombre}</option>)}
         </select>
-
         <select className="h-10 border rounded-xl px-3 text-xs font-bold bg-gray-50 outline-none" value={selectedEstadoFilter} onChange={e => setSelectedEstadoFilter(e.target.value)}>
           <option value="TODOS">⚙️ Todos los Estados (Tabla EstadoProduccion)</option>
           {catalogos.estados.map((e: any) => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
         </select>
-
         <div className="flex items-center gap-2 bg-blue-50/50 p-1.5 rounded-xl border border-blue-100">
           <Calendar size={16} className="text-blue-500 ml-1 shrink-0" />
           <div className="flex items-center gap-1 w-full">
@@ -531,16 +362,12 @@ export default function ProduccionPage() {
             <span className="text-xs font-bold text-gray-400">-</span>
             <Input type="date" className="h-8 text-[11px] bg-white border-blue-200 w-full" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} />
             {(fechaDesde || fechaHasta) && (
-              <button onClick={() => { setFechaDesde(''); setFechaHasta(''); }} title="Limpiar fechas" className="text-red-500 hover:text-red-700 p-1">
-                <RefreshCw size={14}/>
-              </button>
+              <button onClick={() => { setFechaDesde(''); setFechaHasta(''); }} title="Limpiar fechas" className="text-red-500 hover:text-red-700 p-1"><RefreshCw size={14}/></button>
             )}
           </div>
         </div>
-
       </div>
 
-      {/* TABLA PRINCIPAL CON PAGINACIÓN DE 15 FILAS */}
       {loading ? (
         <div className="p-12 text-center text-gray-500 font-bold animate-pulse">Cargando taller de producción...</div>
       ) : paginatedData.length === 0 ? (
@@ -554,13 +381,9 @@ export default function ProduccionPage() {
             <table className="w-full text-left border-collapse text-xs min-w-800px">
               <thead>
                 <tr className="bg-gray-100 text-gray-600 font-black uppercase border-b border-gray-200">
-                  <th className="p-3.5">Orden OP</th>
-                  <th className="p-3.5">Institución</th>
-                  <th className="p-3.5 text-center">Paquetes</th>
-                  <th className="p-3.5 text-center">Prendas</th>
-                  <th className="p-3.5 text-center">Estado Taller</th>
-                  <th className="p-3.5">Fechas (Inicio / Comp.)</th>
-                  <th className="p-3.5 text-center">Acciones</th>
+                  <th className="p-3.5">Orden OP</th><th className="p-3.5">Institución</th><th className="p-3.5 text-center">Paquetes</th>
+                  <th className="p-3.5 text-center">Prendas</th><th className="p-3.5 text-center">Estado Taller</th>
+                  <th className="p-3.5">Fechas (Inicio / Comp.)</th><th className="p-3.5 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -575,9 +398,7 @@ export default function ProduccionPage() {
                       <td className="p-3.5 text-center"><Badge className={getEstadoColor(item.estadoActual)}>{item.estadoActual}</Badge></td>
                       <td className="p-3.5 text-gray-500 whitespace-nowrap">
                         <div className="text-[10px]">IN: <span className="font-bold">{item.fechaInicioTexto}</span></div>
-                        <div className={`text-[10px] ${item.esAtrasado ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                          MAX: <span>{item.fechaCompromisoTexto}</span>
-                        </div>
+                        <div className={`text-[10px] ${item.esAtrasado ? 'text-red-600 font-bold' : 'text-gray-600'}`}>MAX: <span>{item.fechaCompromisoTexto}</span></div>
                       </td>
                       <td className="p-3.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
@@ -600,7 +421,6 @@ export default function ProduccionPage() {
               </tbody>
             </table>
           </div>
-          
           {totalPages > 1 && (
             <div className="p-4 border-t flex justify-between items-center bg-gray-50/50">
               <span className="text-xs text-gray-500 font-medium">Página {currentPage} de {totalPages}</span>
@@ -613,9 +433,9 @@ export default function ProduccionPage() {
         </div>
       )}
 
-      {/* 👁️ MODAL: DESGLOSE DE PRENDAS Y CAMBIO DE ESTADOS (INCLUYE BORDADO Y OBSERVACIÓN) */}
+      {/* 👁️ MODAL: DESGLOSE DE PRENDAS */}
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
-        <DialogContent className="sm:max-w-5xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[88vh]">
+        <DialogContent className="sm:max-w-6xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[88vh]">
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-gray-900 border-b pb-3 flex justify-between items-center">
               <span>Desglose de Producción</span>
@@ -644,7 +464,6 @@ export default function ProduccionPage() {
                         <span className="text-xs font-bold text-gray-800">{ped.nombreCliente}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* Imprimir PDF de este contrato específico */}
                         <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold text-gray-700" onClick={() => imprimirHojaTallerPDF(grupoDetalle, ped)}>
                           <Printer size={12} className="mr-1"/> PDF Contrato
                         </Button>
@@ -656,19 +475,14 @@ export default function ProduccionPage() {
 
                     {isExpanded && (
                       <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse min-w-850px">
+                        <table className="w-full text-left text-xs border-collapse min-w-900px">
                           <thead>
                             <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase text-[10px]">
                               <th className="p-2 text-center w-8">Sel.</th>
-                              <th className="p-2">SKU</th>
-                              <th className="p-2">Prenda</th>
-                              <th className="p-2">Talla/Color</th>
-                              <th className="p-2 text-center">Cant.</th>
-                              <th className="p-2">Bordado</th>
-                              <th className="p-2">Observación</th>
+                              <th className="p-2">SKU</th><th className="p-2">Prenda</th><th className="p-2">Talla/Color</th>
+                              <th className="p-2 text-center">Cant.</th><th className="p-2">Bordado</th><th className="p-2">Observación</th>
                               <th className="p-2 text-center">Operario</th>
-                              <th className="p-2 text-center">Estado Taller</th>
-                              <th className="p-2 text-center">Acción</th>
+                              <th className="p-2 text-center">Estado Taller</th><th className="p-2 text-center">Acción</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
@@ -681,22 +495,12 @@ export default function ProduccionPage() {
                                 <td className="p-2 font-bold text-gray-800">{p.tipoRopa}</td>
                                 <td className="p-2 text-gray-600">{p.talla} ({p.color || '-'})</td>
                                 <td className="p-2 text-center font-black">{p.cantidad}</td>
+                                <td className="p-2 text-[11px]">{p.bordado ? <span className="font-bold text-purple-700">{p.bordado}</span> : <span className="text-gray-400 italic">Sin bordado</span>}</td>
+                                <td className="p-2 text-[11px]">{(p.observacion || p.observacionOperaciones) ? <span className="text-gray-800 font-medium">{p.observacion || p.observacionOperaciones}</span> : <span className="text-gray-400 italic">Sin observaciones</span>}</td>
                                 
-                                {/* 🔥 MOSTRAR BORDADO O "SIN BORDADO" 🔥 */}
-                                <td className="p-2 text-[11px]">
-                                  {p.bordado ? <span className="font-bold text-purple-700">{p.bordado}</span> : <span className="text-gray-400 italic">Sin bordado</span>}
-                                </td>
-
-                                {/* 🔥 MOSTRAR OBSERVACIÓN O "SIN OBSERVACIONES" 🔥 */}
-                                <td className="p-2 text-[11px]">
-                                  {(p.observacion || p.observacionOperaciones) ? (
-                                    <span className="text-gray-800 font-medium">{p.observacion || p.observacionOperaciones}</span>
-                                  ) : (
-                                    <span className="text-gray-400 italic">Sin observaciones</span>
-                                  )}
-                                </td>
-
-                                <td className="p-2 text-center font-bold text-blue-700">{p.operarioAsignado || 'Sin Asignar'}</td>
+                                {/* 🔥 AQUI ESTÁ LA CORRECCIÓN VISUAL: LEE DEL OBJETO operarioAsignado 🔥 */}
+                                <td className="p-2 text-center font-bold text-blue-700">{p.operarioAsignado?.nombre || 'Sin Asignar'}</td>
+                                
                                 <td className="p-2 text-center"><Badge variant="outline" className={getEstadoColor(p.estadoProduccion)}>{p.estadoProduccion}</Badge></td>
                                 <td className="p-2 text-center">
                                   <Button size="sm" className="h-7 text-[10px] bg-purple-600 hover:bg-purple-700 text-white font-bold" onClick={() => handleMandarEmpaqueIndividual(p.id)}>
@@ -724,7 +528,7 @@ export default function ProduccionPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ⚙️ MODAL HÍBRIDO: CAMBIAR ESTADO (LLAMA A EstadoProduccion) Y ASIGNAR */}
+      {/* ⚙️ MODAL HÍBRIDO: CAMBIAR ESTADO Y ASIGNAR */}
       <Dialog open={modalEstado} onOpenChange={setModalEstado}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
           <DialogHeader><DialogTitle className="text-lg font-black text-gray-900 border-b pb-2 flex items-center gap-2"><Settings2 className="text-amber-600"/> Gestión de Taller</DialogTitle></DialogHeader>
@@ -733,12 +537,13 @@ export default function ProduccionPage() {
               Asignando estado a <strong>{prendasSeleccionadas.length}</strong> prenda(s).
             </p>
             
+            {/* 🔥 EL ADMIN VE LA LISTA Y GUARDA EL ID 🔥 */}
             {esModoAdmin ? (
               <div>
                 <Label className="text-xs font-bold text-gray-500">Operario Asignado (Administración)</Label>
-                <select className="w-full h-10 border rounded-xl px-3 text-sm font-bold bg-white mt-1 outline-none" value={formEstado.operarioAsignado} onChange={e => setFormEstado({...formEstado, operarioAsignado: e.target.value})}>
+                <select className="w-full h-10 border rounded-xl px-3 text-sm font-bold bg-white mt-1 outline-none" value={formEstado.operarioAsignadoId} onChange={e => setFormEstado({...formEstado, operarioAsignadoId: e.target.value})}>
                   <option value="">-- Dejar igual / Sin Asignar --</option>
-                  {catalogos.operarios.map((c: any) => <option key={c.id} value={c.nombre}>{c.nombre} ({c.rol})</option>)}
+                  {catalogos.operarios.map((c: any) => <option key={c.id} value={c.id}>{c.nombre} ({c.rol})</option>)}
                 </select>
               </div>
             ) : (
@@ -768,7 +573,6 @@ export default function ProduccionPage() {
         </DialogContent>
       </Dialog>
 
-      {/* TOAST GLOBAL */}
       {toast && (
         <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 text-white ${toast.tipo === 'exito' ? 'bg-emerald-600' : 'bg-red-600'}`}>
           {toast.tipo === 'exito' ? <CheckCircle2 size={20}/> : <AlertCircle size={20}/>}

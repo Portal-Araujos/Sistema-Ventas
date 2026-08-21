@@ -35,20 +35,15 @@ export async function GET(request: Request) {
       whereBase.createdAt = { gte: new Date(startStr), lte: new Date(endStr) };
     }
 
-    // 🔥 1. LLAMADA A LA TABLA EstadoProduccion 🔥
     let estadosCat: any[] = [];
     try {
       estadosCat = await prisma.estadoProduccion.findMany({ where: { activo: true } });
-    } catch (e) { 
-      console.error("Error cargando estados de producción:", e); 
-    }
+    } catch (e) { console.error("Error cargando estados:", e); }
 
     let usuariosBrutos: any[] = [];
     try {
       usuariosBrutos = await prisma.usuario.findMany({ include: { rol: true } });
-    } catch (e) { 
-      console.error("Error cargando usuarios:", e); 
-    }
+    } catch (e) { console.error("Error cargando usuarios:", e); }
 
     let prendasEnTaller: any[] = [];
     try {
@@ -60,16 +55,15 @@ export async function GET(request: Request) {
               institucion: { select: { id: true, nombre: true } },
               usuario: { select: { id: true, nombre: true } }
             }
-          }
+          },
+          operarioAsignado: { select: { id: true, nombre: true } } // 🔥 AQUÍ ESTÁ LA MAGIA, TRAEMOS AL TRABAJADOR
         },
         orderBy: { createdAt: 'desc' }
       });
-    } catch (e) { 
-      console.error("Error cargando prendas:", e); 
-    }
+    } catch (e) { console.error("Error cargando prendas:", e); }
 
     const usuariosOperarios = usuariosBrutos.map((u: any) => {
-      const nombreDelRol = u.rol?.nombre || u.rol?.name || u.rol?.descripcion || String(u.rolId || 'Desconocido');
+      const nombreDelRol = u.rol?.nombre || u.rol?.name || String(u.rolId || 'Desconocido');
       return { id: u.id, nombre: u.nombre || 'Sin Nombre', rol: nombreDelRol };
     }).filter((u: any) => !u.rol.toLowerCase().includes('vendedor'));
 
@@ -83,7 +77,6 @@ export async function GET(request: Request) {
       const fUpdatedAt = new Date(det.updatedAt);
       const fConfeccion = det.fechaEstimadaConfeccion ? new Date(det.fechaEstimadaConfeccion) : null;
 
-      // Evaluar vencimiento de confección
       const esVencido = fConfeccion !== null && fConfeccion < hoy && !estTaller.toLowerCase().includes('terminad');
 
       kpis.prendasProduccion += det.cantidad;
@@ -152,8 +145,19 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('session_token')?.value;
+    let userId = '';
+    let userRol = '';
+
+    if (token) {
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      userId = payload.id as string;
+      userRol = (payload.rol as string).toLowerCase();
+    }
+
     const body = await request.json();
-    const { modo, id, institucionId, prendaIds, estado, operarioAsignado } = body;
+    const { modo, id, institucionId, prendaIds, estado, operarioAsignadoId } = body;
 
     if (modo === 'masivo_empaque') {
       const prendasEscuela = await prisma.detallePedido.findMany({ 
@@ -177,7 +181,20 @@ export async function PUT(request: Request) {
     if (prendaIds && prendaIds.length > 0) {
       const updateData: any = {};
       if (estado) updateData.estadoProduccion = estado;
-      if (operarioAsignado) updateData.operarioAsignado = operarioAsignado;
+
+      // 🔥 AUTO-ASIGNACIÓN INTELIGENTE 🔥
+      const esAdmin = userRol.includes('admin');
+      
+      if (esAdmin) {
+        // Si el Admin selecciona a alguien específico en el combo box, lo asignamos.
+        // Si lo deja vacío ("Dejar igual"), no tocamos la variable para no borrarlo accidentalmente.
+        if (operarioAsignadoId) {
+          updateData.operarioAsignadoId = operarioAsignadoId;
+        }
+      } else {
+        // Si es un operario normal el que está cambiando el estado de la prenda, el sistema atrapa su ID y lo hace dueño automáticamente.
+        updateData.operarioAsignadoId = userId;
+      }
 
       await prisma.detallePedido.updateMany({
         where: { id: { in: prendaIds } },

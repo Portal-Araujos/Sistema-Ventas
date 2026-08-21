@@ -12,7 +12,6 @@ export async function GET() {
     const token = cookieStore.get('session_token')?.value;
     let userRol = 'vendedor';
     let userPermisos: string[] = [];
-
     if (token) {
       try {
         const { payload } = await jwtVerify(token, JWT_SECRET);
@@ -20,12 +19,10 @@ export async function GET() {
         userPermisos = (payload.permisos as string[]) || [];
       } catch (e) {}
     }
-
     const provincias = await prisma.provincia.findMany({
       include: { cantones: { include: { parroquias: true } } },
       orderBy: { nombre: 'asc' }
     });
-
     const niveles = await prisma.nivelEducativo.findMany({ orderBy: { nombre: 'asc' } });
     const areas = await prisma.areaEducativa.findMany({ orderBy: { nombre: 'asc' } });
     const regimenes = await prisma.regimenEscolar.findMany({ orderBy: { nombre: 'asc' } });
@@ -36,38 +33,35 @@ export async function GET() {
     const jornadas = await prisma.jornada.findMany({ orderBy: { nombre: 'asc' } });
     const reglasTamano = await prisma.reglaTamano.findMany({ orderBy: { minDocentes: 'asc' } });
     const estadosComerciales = await prisma.estadoComercial.findMany({ orderBy: { id: 'asc' } });
-
-    // NUEVOS CATÁLOGOS PARA VENTAS (Si están vacíos, creamos los por defecto)
     let estadosCliente = await prisma.estadoCliente.findMany({ orderBy: { id: 'asc' } });
     if (estadosCliente.length === 0) {
-      await prisma.estadoCliente.createMany({
-        data: [{ nombre: 'Pendiente' }, { nombre: 'Entregado' }, { nombre: 'Pedido' }]
-      });
+      await prisma.estadoCliente.createMany({ data: [{ nombre: 'Pendiente' }, { nombre: 'Entregado' }, { nombre: 'Pedido' }] });
       estadosCliente = await prisma.estadoCliente.findMany({ orderBy: { id: 'asc' } });
     }
-
     let estadosContrato = await prisma.estadoContrato.findMany({ orderBy: { id: 'asc' } });
     if (estadosContrato.length === 0) {
-      await prisma.estadoContrato.createMany({
-        data: [{ nombre: 'Pendiente' }, { nombre: 'Entregado' }]
-      });
+      await prisma.estadoContrato.createMany({ data: [{ nombre: 'Pendiente' }, { nombre: 'Entregado' }] });
       estadosContrato = await prisma.estadoContrato.findMany({ orderBy: { id: 'asc' } });
     }
-
     let tiposCobro = await prisma.tipoCobro.findMany({ orderBy: { id: 'asc' } });
     if (tiposCobro.length === 0) {
-      await prisma.tipoCobro.createMany({
-        data: [{ nombre: 'Débito' }, { nombre: 'Particular' }]
-      });
+      await prisma.tipoCobro.createMany({ data: [{ nombre: 'Débito' }, { nombre: 'Particular' }] });
       tiposCobro = await prisma.tipoCobro.findMany({ orderBy: { id: 'asc' } });
     }
-
     let tiposGestion = await prisma.tipoGestion.findMany({ orderBy: { id: 'asc' } });
     if (tiposGestion.length === 0) {
-      await prisma.tipoGestion.createMany({
-        data: [{ nombre: 'Presencial' }, { nombre: 'Llamada Telefónica' }, { nombre: 'Reunión Virtual' }, { nombre: 'WhatsApp / Email' }]
-      });
+      await prisma.tipoGestion.createMany({ data: [{ nombre: 'Presencial' }, { nombre: 'Llamada Telefónica' }, { nombre: 'Reunión Virtual' }, { nombre: 'WhatsApp / Email' }] });
       tiposGestion = await prisma.tipoGestion.findMany({ orderBy: { id: 'asc' } });
+    }
+    let estadosOperacion = await prisma.estadoOperacion.findMany({ orderBy: { id: 'asc' } });
+    if (estadosOperacion.length === 0) {
+      await prisma.estadoOperacion.createMany({ data: [{ nombre: 'Pendiente en revision' }, { nombre: 'En Corte' }, { nombre: 'En Confección' }, { nombre: 'Bordado/Estampado' }, { nombre: 'Terminado' }] });
+      estadosOperacion = await prisma.estadoOperacion.findMany({ orderBy: { id: 'asc' } });
+    }
+    let estadosProduccion = await prisma.estadoProduccion.findMany({ orderBy: { id: 'asc' } });
+    if (estadosProduccion.length === 0) {
+      await prisma.estadoProduccion.createMany({ data: [{ nombre: 'Planificacion' }, { nombre: 'En Proceso' }, { nombre: 'Control de Calidad' }, { nombre: 'Finalizado' }] });
+      estadosProduccion = await prisma.estadoProduccion.findMany({ orderBy: { id: 'asc' } });
     }
 
     return NextResponse.json({
@@ -87,7 +81,9 @@ export async function GET() {
       estadosCliente,
       estadosContrato,
       tiposCobro,
-      tiposGestion
+      tiposGestion,
+      estadosOperacion,
+      estadosProduccion
     });
   } catch (error) {
     return NextResponse.json({ error: 'Error al cargar catálogos' }, { status: 500 });
@@ -104,10 +100,8 @@ export async function POST(request: Request) {
     if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
-
     const { tipo, nombre, provinciaId, cantonId } = await request.json();
     if (!nombre) return NextResponse.json({ error: 'El nombre es requerido' }, { status: 400 });
-
     switch (tipo) {
       case 'provincia': return NextResponse.json(await prisma.provincia.create({ data: { nombre } }), { status: 201 });
       case 'canton': return NextResponse.json(await prisma.canton.create({ data: { nombre, provinciaId: parseInt(provinciaId) } }), { status: 201 });
@@ -125,13 +119,14 @@ export async function POST(request: Request) {
       case 'estadoContrato': return NextResponse.json(await prisma.estadoContrato.create({ data: { nombre, activo: true } }), { status: 201 });
       case 'tipoCobro': return NextResponse.json(await prisma.tipoCobro.create({ data: { nombre, activo: true } }), { status: 201 });
       case 'tipoGestion': return NextResponse.json(await prisma.tipoGestion.create({ data: { nombre, activo: true } }), { status: 201 });
+      case 'estadoOperacion': return NextResponse.json(await prisma.estadoOperacion.create({ data: { nombre, activo: true } }), { status: 201 });
+      case 'estadoProduccion': return NextResponse.json(await prisma.estadoProduccion.create({ data: { nombre, activo: true } }), { status: 201 });
       default: return NextResponse.json({ error: 'Tipo de catálogo no válido' }, { status: 400 });
     }
   } catch (error) {
     return NextResponse.json({ error: 'Error al guardar elemento' }, { status: 500 });
   }
 }
-
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -139,15 +134,12 @@ export async function PUT(request: Request) {
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-
     const body = await request.json();
     const { id, tipo, nombre, minDocentes, maxDocentes, activo } = body;
     if (!id) return NextResponse.json({ error: 'ID es requerido' }, { status: 400 });
-
     let item;
     const numericId = parseInt(id);
 
-    // 1. REGLA DE TAMAÑO (Esta sigue teniendo su propia lógica por el recálculo masivo)
     if (tipo === 'reglaTamano') {
       const minNuevo = parseInt(minDocentes); const maxNuevo = parseInt(maxDocentes);
       const reglasActuales = await prisma.reglaTamano.findMany({ where: { id: { not: numericId } } });
@@ -160,7 +152,6 @@ export async function PUT(request: Request) {
       return NextResponse.json(item);
     }
 
-    // 2. 🔥 LÓGICA UNIVERSAL PARA TODOS LOS DEMÁS CATÁLOGOS (Nombre + Soft Delete) 🔥
     const dataUpdate: any = {};
     if (nombre) dataUpdate.nombre = nombre;
     if (typeof activo === 'boolean') dataUpdate.activo = activo;
@@ -182,6 +173,8 @@ export async function PUT(request: Request) {
       case 'estadoContrato': item = await prisma.estadoContrato.update({ where: { id: numericId }, data: dataUpdate }); break;
       case 'tipoCobro': item = await prisma.tipoCobro.update({ where: { id: numericId }, data: dataUpdate }); break;
       case 'tipoGestion': item = await prisma.tipoGestion.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'estadoOperacion': item = await prisma.estadoOperacion.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'estadoProduccion': item = await prisma.estadoProduccion.update({ where: { id: numericId }, data: dataUpdate }); break;
       default: return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 });
     }
     return NextResponse.json(item);

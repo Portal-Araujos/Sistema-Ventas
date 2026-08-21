@@ -453,12 +453,9 @@ export default function EmpaquePage() {
           <DialogFooter className="mt-4"><Button variant="outline" size="sm" onClick={() => setModalDetalleOpen(false)}>Cerrar Panel</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* 📦 MODAL NIVEL 3: EL CHECKLIST PRENDA POR PRENDA (CON CANDADOS DE ESTADO) */}
       <Dialog open={modalEmpacarOpen} onOpenChange={setModalEmpacarOpen}>
-        <DialogContent className="sm:max-w-4xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[90vh]">
+        <DialogContent className="sm:max-w-6xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[90vh]">
           <DialogHeader><DialogTitle className="text-xl font-black text-gray-900 border-b pb-2 flex items-center gap-2"><Package className="text-amber-600"/> Checklist de Empaque</DialogTitle></DialogHeader>
-          
           <div className="space-y-4 mt-3">
             <div className="flex flex-col md:flex-row justify-between gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
               <div>

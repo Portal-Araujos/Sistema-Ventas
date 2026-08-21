@@ -22,45 +22,55 @@ export async function GET(request: Request) {
     const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
     const targetUserId = (esAdmin && vendedorId) ? vendedorId : (!esAdmin ? userIdSession : null);
     
+    // Fechas en hora Ecuador
     const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
     hoy.setHours(0,0,0,0);
-    const manana = new Date(hoy);
-    manana.setDate(manana.getDate() + 1);
     
     const start = fechaDesde ? new Date(`${fechaDesde}T00:00:00-05:00`) : hoy;
-    const end = fechaHasta ? new Date(`${fechaHasta}T23:59:59-05:00`) : new Date(manana.getTime() - 1);
+    const end = fechaHasta ? new Date(`${fechaHasta}T23:59:59.999-05:00`) : new Date(hoy.getTime() + 24 * 60 * 60 * 1000 - 1);
+    
     const baseWhereVisita: any = {};
     if (targetUserId) baseWhereVisita.usuarioId = targetUserId;
 
-    // 🔥 LA CLAVE DE LA CORRECCIÓN: Le enseñamos al sistema los estados "vírgenes"
     const estadosPendientes = ['Pendiente', 'No Visitada', 'No visitada'];
 
-    // 1. MI RUTA (Ahora verifica correctamente que esté en estado Pendiente)
-    const rutaAsignadaHoy = await prisma.visitaAgenda.findMany({
+    // 🔥 MAPA DE VISITAS REALES REALIZADAS 🔥
+    const todasRealizadas = await prisma.visitaAgenda.findMany({
+      where: { ...baseWhereVisita, estadoGestion: { notIn: estadosPendientes } },
+      select: { institucionId: true, createdAt: true }
+    });
+    
+    const lastVisitMap = new Map<string, Date>();
+    todasRealizadas.forEach(v => {
+       const existing = lastVisitMap.get(v.institucionId);
+       if (!existing || v.createdAt > existing) {
+           lastVisitMap.set(v.institucionId, v.createdAt);
+       }
+    });
+
+    // Helper: Si la visita se programó antes o igual de la última gestión real, ya se cumplió y debe desaparecer de pendientes
+    const isNotFulfilled = (v: any) => {
+        const lastVisit = lastVisitMap.get(v.institucionId);
+        if (!lastVisit) return true;
+        const fechaTarget = v.fechaProximoContacto ? new Date(v.fechaProximoContacto) : new Date(v.fechaProgramada);
+        return fechaTarget > new Date(lastVisit);
+    };
+
+    // 1. RUTA (Programadas dentro del rango o Rango Abierto activo)
+    const rutaRaw = await prisma.visitaAgenda.findMany({
       where: { 
         ...baseWhereVisita, 
         estadoGestion: { in: estadosPendientes }, 
-        fechaProgramada: { gte: hoy, lt: manana } 
+        OR: [
+          { fechaProgramada: { gte: start, lte: end } },
+          { AND: [{ fechaProgramada: { lte: end } }, { fechaProximoContacto: { gte: hoy } }] }
+        ]
       },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
-      orderBy: { horaProgramada: 'asc' }
+      orderBy: { fechaProgramada: 'asc' }
     });
 
-    // Filtro de seguridad: Vemos cuáles YA visitó hoy realmente para restarlas de la ruta
-    const visitadasHoy = await prisma.visitaAgenda.findMany({
-      where: { 
-        ...baseWhereVisita, 
-        estadoGestion: { notIn: estadosPendientes }, 
-        createdAt: { gte: hoy, lt: manana } 
-      },
-      select: { institucionId: true }
-    });
-    const visitadasHoyIds = new Set(visitadasHoy.map(v => v.institucionId));
-    
-    // Dejamos en la ruta solo las que NO ha visitado hoy
-    const rutaHoy = rutaAsignadaHoy.filter(v => !visitadasHoyIds.has(v.institucionId));
-
-    // 2. VISITADAS REALES (Cualquier estado que no sea Pendiente)
+    // 2. VISITADAS REALES (Filtro por fecha de realización real)
     const visitadas = await prisma.visitaAgenda.findMany({
       where: { 
         ...baseWhereVisita, 
@@ -71,34 +81,53 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' }
     });
 
-    // 3. PRÓXIMAS 
+    // 3. PRÓXIMAS (Cualquier fecha programada o de recontacto mayor a la fecha límite filtrada)
     const proximasRaw = await prisma.visitaAgenda.findMany({
-      where: { ...baseWhereVisita, fechaProximoContacto: { gte: manana } },
+      where: { 
+        ...baseWhereVisita, 
+        estadoGestion: { in: estadosPendientes },
+        OR: [
+          { fechaProgramada: { gt: end } },
+          { fechaProximoContacto: { gt: end } }
+        ]
+      },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
-      orderBy: { fechaProximoContacto: 'asc' }
+      orderBy: { fechaProgramada: 'asc' }
     });
+
+    // 4. VENCIDAS (Pendientes anteriores a hoy y sin cumplirse)
+    const vencidasRaw = await prisma.visitaAgenda.findMany({
+      where: { 
+        ...baseWhereVisita, 
+        estadoGestion: { in: estadosPendientes },
+        OR: [
+          { AND: [{ fechaProximoContacto: null }, { fechaProgramada: { lt: hoy } }] },
+          { fechaProximoContacto: { lt: hoy } }
+        ]
+      },
+      include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
+      orderBy: { fechaProgramada: 'desc' }
+    });
+
+    // Aplicar filtro de eliminación de pendientes ya realizadas
+    const ruta = rutaRaw.filter(isNotFulfilled);
+    
     const proximasMap = new Map();
-    proximasRaw.forEach(v => { if(!proximasMap.has(v.institucionId)) proximasMap.set(v.institucionId, v); });
+    proximasRaw.filter(isNotFulfilled).forEach(v => { if(!proximasMap.has(v.institucionId)) proximasMap.set(v.institucionId, v); });
     const proximas = Array.from(proximasMap.values());
 
-    // 4. VENCIDAS 
-    const vencidasRaw = await prisma.visitaAgenda.findMany({
-      where: { ...baseWhereVisita, fechaProximoContacto: { lt: hoy } },
-      include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
-      orderBy: { fechaProximoContacto: 'desc' }
-    });
     const vencidasMap = new Map();
-    vencidasRaw.forEach(v => { if(!vencidasMap.has(v.institucionId)) vencidasMap.set(v.institucionId, v); });
+    vencidasRaw.filter(isNotFulfilled).forEach(v => { if(!vencidasMap.has(v.institucionId)) vencidasMap.set(v.institucionId, v); });
     const vencidas = Array.from(vencidasMap.values());
-    
-    // 5. SIN ASIGNAR 
+
+    // 5. SIN ASIGNAR
     const sinAsignarEscuelas = await prisma.institution.findMany({
       where: { OR: [ { vendedorId: null }, { vendedorId: '' }, { visitas: { none: {} } } ] },
       include: { parroquia: { include: { canton: { include: { provincia: true } } } } },
       orderBy: { nombre: 'asc' }
     });
 
-    // 6. CORRECCIONES DE CONTRATO (Candado Abierto)
+    // 6. CORRECCIONES
     const correcciones = await prisma.visitaAgenda.findMany({
       where: { ...baseWhereVisita, edicionFechaHabilitada: true },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
@@ -110,8 +139,6 @@ export async function GET(request: Request) {
       : { vendedorId: { not: null }, NOT: { vendedorId: '' } };
 
     const totalAsignadas = await prisma.institution.count({ where: instWhere });
-    
-    // Cobertura: Solo cuenta las escuelas que ya tienen una gestión REAL (No pendiente)
     const visitadasCount = await prisma.institution.count({
       where: { ...instWhere, visitas: { some: { estadoGestion: { notIn: estadosPendientes } } } }
     });
@@ -149,17 +176,72 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({
-      ruta: rutaHoy.map(mapVisita), 
-      visitadas: visitadas.map(mapVisita), 
-      proximas: proximas.map(mapVisita),
-      vencidas: vencidas.map(mapVisita), 
-      sinAsignar: sinAsignarEscuelas.map(mapSinAsignar),
-      correcciones: correcciones.map(mapVisita),
+      ruta: ruta.map(mapVisita), visitadas: visitadas.map(mapVisita), 
+      proximas: proximas.map(mapVisita), vencidas: vencidas.map(mapVisita), 
+      sinAsignar: sinAsignarEscuelas.map(mapSinAsignar), correcciones: correcciones.map(mapVisita),
       cobertura: { asignadas: totalAsignadas, visitadas: visitadasCount, porcentaje }
     });
     
   } catch (error) {
     console.error("Error en agenda:", error);
     return NextResponse.json({ error: 'Error al cargar agenda' }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('session_token')?.value;
+    if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+    const body = await request.json();
+    const { institucionId, usuarioId, fechaProgramada, horaProgramada, tipoGestion } = body;
+
+    const escuela = await prisma.institution.findUnique({
+      where: { id: institucionId },
+      include: { vendedor: { select: { nombre: true, id: true } } } 
+    });
+
+    if (escuela && escuela.vendedorId && escuela.vendedorId !== usuarioId) {
+       return NextResponse.json({ 
+          error: `Esta escuela le pertenece a ${escuela.vendedor?.nombre || 'otro vendedor'}. Debes reasignarla desde el Módulo de Instituciones antes de agendar a otro vendedor.` 
+        }, { status: 400 });
+    }
+
+    const visitaProblema = await prisma.visitaAgenda.findFirst({
+      where: { institucionId: institucionId, estadoGestion: { in: ['Pendiente', 'No Visitada', 'No visitada'] } },
+      include: { usuario: { select: { nombre: true } } }
+    });
+
+    if (visitaProblema) {
+      const fechaVisitaObj = new Date(visitaProblema.fechaProgramada);
+      const hoyObj = new Date();
+      hoyObj.setHours(0, 0, 0, 0); 
+      
+      const fechaFormateada = fechaVisitaObj.toLocaleDateString('es-EC', { timeZone: 'UTC' });
+      const nombreDueño = visitaProblema.usuario?.nombre || 'el vendedor actual';
+
+      if (fechaVisitaObj < hoyObj) {
+        return NextResponse.json({ error: `¡Bloqueado! ${nombreDueño} tiene una visita VENCIDA del ${fechaFormateada} en esta escuela. Dile que la reporte antes de poder agendar otra vez.` }, { status: 400 });
+      } else {
+        return NextResponse.json({ error: `¡Colisión! Esta escuela ya está agendada para ${nombreDueño} el día ${fechaFormateada}. No puedes asignarla dos veces.` }, { status: 400 });
+      }
+    }
+
+    await prisma.institution.update({ where: { id: institucionId }, data: { vendedorId: usuarioId } });
+
+    const nuevaVisita = await prisma.visitaAgenda.create({
+      data: {
+        institucionId, usuarioId,
+        fechaProgramada: new Date(`${fechaProgramada}T12:00:00Z`),
+        horaProgramada: horaProgramada || '09:00',
+        tipoGestion: tipoGestion || 'Visita Presencial',
+        estadoGestion: 'Pendiente'
+      }
+    });
+
+    return NextResponse.json(nuevaVisita);
+  } catch (error: any) {
+    return NextResponse.json({ error: 'Error interno al agendar la visita' }, { status: 500 });
   }
 }

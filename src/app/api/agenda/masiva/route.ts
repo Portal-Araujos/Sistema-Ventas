@@ -18,14 +18,53 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    
     const { institucionIds, vendedorId, fechaProgramada, horaProgramada } = body;
 
     if (!institucionIds || institucionIds.length === 0 || !vendedorId || !fechaProgramada) {
       return NextResponse.json({ error: 'Faltan datos obligatorios para armar la ruta' }, { status: 400 });
     }
 
-    const fechaISO = new Date(`${fechaProgramada}T00:00:00Z`);
+    const escuelasAfectadas = await prisma.institution.findMany({
+      where: { id: { in: institucionIds } },
+      include: {
+        vendedor: { select: { nombre: true, id: true } },
+        visitas: {
+          where: { estadoGestion: { in: ['Pendiente', 'No Visitada', 'No visitada', 'Reprogramada'] } },
+          include: { usuario: { select: { nombre: true } } }
+        }
+      }
+    });
+
+    for (const escuela of escuelasAfectadas) {
+      if (escuela.vendedorId && escuela.vendedorId !== vendedorId) {
+         return NextResponse.json({ 
+           error: `Bloqueo: La escuela "${escuela.nombre}" ya le pertenece a ${escuela.vendedor?.nombre || 'otro vendedor'}. Desmárcala de tu selección o retírala de su cartera primero.`
+         }, { status: 400 });
+      }
+
+      if (escuela.visitas.length > 0) {
+        const visitaProblema = escuela.visitas[0];
+        const fechaVisitaObj = new Date(visitaProblema.fechaProgramada);
+        const hoyObj = new Date();
+        hoyObj.setHours(0, 0, 0, 0);
+
+        const fechaFormateada = fechaVisitaObj.toLocaleDateString('es-EC', { timeZone: 'UTC' });
+        const nombreDueño = visitaProblema.usuario?.nombre || 'el vendedor actual';
+
+        if (fechaVisitaObj < hoyObj) {
+          return NextResponse.json({
+            error: `Bloqueo: "${escuela.nombre}" tiene una visita VENCIDA del ${fechaFormateada} con ${nombreDueño}. Deben reportarla antes de poder usar el asignador masivo aquí.`
+          }, { status: 400 });
+        } else {
+          return NextResponse.json({
+            error: `Colisión: "${escuela.nombre}" ya tiene una visita programada para ${nombreDueño} el ${fechaFormateada}. Quítala de tu selección masiva para poder continuar.`
+          }, { status: 400 });
+        }
+      }
+    }
+
+    // 🔥 CORRECCIÓN ZONA HORARIA: T12:00:00Z para evitar el desfase de -5 horas de Ecuador 🔥
+    const fechaISO = new Date(`${fechaProgramada}T12:00:00Z`);
 
     const nuevasVisitas = institucionIds.map((instId: string) => ({
       institucionId: instId,
@@ -33,7 +72,6 @@ export async function POST(request: Request) {
       fechaProgramada: fechaISO, 
       horaProgramada: horaProgramada || '08:30',
       tipoGestion: 'Asignación Masiva', 
-      // 🔥 LA MAGIA ESTÁ AQUÍ: Lo cambiamos a "No Visitada" para que la Ficha Técnica lo ignore automáticamente
       estadoGestion: 'No Visitada', 
       esVisitaLibre: false
     }));

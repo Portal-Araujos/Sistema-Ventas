@@ -24,7 +24,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [catalogos, setCatalogos] = useState<any>(null);
   
-  // ESTADOS DE PAGINACIÓN SERVER-SIDE
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -32,15 +31,14 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const itemsPerPage = 15;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
-  // 🔥 NUEVOS ESTADOS: SISTEMA DE CHECKBOXES Y RUTAS (CON TIPO DE ASIGNACIÓN) 🔥
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [rutaModal, setRutaModal] = useState({ open: false, isAllFiltered: false });
   const [rutaData, setRutaData] = useState({ 
     vendedorId: '', 
-    tipoAsignacion: 'dia', // 'dia' o 'rango'
+    tipoAsignacion: 'dia', 
     fecha: '', 
     hora: '08:30',
-    fechaLimite: '' // Para la opción de rango
+    fechaLimite: '' 
   });
   const [savingRuta, setSavingRuta] = useState(false);
 
@@ -59,7 +57,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   const [editCantones, setEditCantones] = useState<any[]>([]);
   const [editParroquias, setEditParroquias] = useState<any[]>([]);
 
-  // IMPORTACIÓN EXCEL
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importModal, setImportModal] = useState(false);
   const [excelData, setExcelData] = useState<any[]>([]);
@@ -118,7 +115,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   useEffect(() => { setCurrentPage(1); setSelectedIds([]); }, [filtros]);
   useEffect(() => { fetchInstituciones(true); }, [currentPage, filtros]);
 
-  // 🔥 LÓGICA DE CHECKBOXES Y ASIGNACIÓN MASIVA 🔥
   const toggleSelection = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
@@ -133,7 +129,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     }
   };
 
-  // 🔥 NUEVA FUNCIÓN PARA ARMAR RUTAS INTELIGENTES 🔥
+  // 🔥 ARMAR RUTA CONECTADA AL ESCUDO DEL BACKEND 🔥
   const handleArmarRutaGuardar = async () => {
     if (!rutaData.vendedorId) {
       showToast('alerta', 'Debes seleccionar el vendedor.'); return;
@@ -168,39 +164,36 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
         idsParaRuta = fullData.data.map((i: any) => i.id);
       }
 
-      // Preparamos el payload dependiendo del Switch que eligió el Admin
+      // Preparamos el payload 
+      // (Si elegimos rango, la fecha programada tomará la fecha límite temporalmente)
       const payload = {
         institucionIds: idsParaRuta,
         vendedorId: rutaData.vendedorId,
-        ...(rutaData.tipoAsignacion === 'dia' 
-          ? {
-              fechaProgramada: rutaData.fecha,
-              horaProgramada: rutaData.hora,
-              tipoGestion: 'Asignación Masiva (Ruta)'
-            } 
-          : {
-              fechaProximoContacto: rutaData.fechaLimite,
-              tipoGestion: 'Asignación Masiva (Rango)'
-            }
-        )
+        fechaProgramada: rutaData.tipoAsignacion === 'dia' ? rutaData.fecha : rutaData.fechaLimite,
+        horaProgramada: rutaData.tipoAsignacion === 'dia' ? rutaData.hora : '17:00'
       };
 
-      // Apuntamos al endpoint maestro de Visitas que programamos en el paso anterior
-      const res = await fetch('/api/visitas', {
+      // 🚀 LLAMAMOS A LA RUTA MASIVA DONDE PUSIMOS EL ESCUDO
+      // (Asegúrate de haber creado el archivo: src/app/api/agenda/masiva/route.ts con el código de mi mensaje anterior)
+      const res = await fetch('/api/agenda/masiva', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error();
+      const dataRes = await res.json();
+
+      if (!res.ok) {
+        throw new Error(dataRes.error || 'Error desconocido al asignar.');
+      }
       
       setRutaModal({ open: false, isAllFiltered: false });
       setSelectedIds([]); 
       showToast('exito', `¡Éxito! ${idsParaRuta.length} escuelas asignadas correctamente al vendedor.`);
       fetchInstituciones(true); 
       
-    } catch (e) {
-      showToast('error', 'Hubo un error al armar la asignación masiva.');
+    } catch (e: any) {
+      showToast('error', e.message); // 🔥 Mostrará la alerta roja del escudo
     } finally {
       setSavingRuta(false);
     }
@@ -213,8 +206,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       if (!res.ok) throw new Error();
       setAssignModal({ open: false, instId: '', instNombre: '', vendedorIdActual: '' });
       showToast('exito', 'Vendedor asignado correctamente.');
-      
-      fetchInstituciones(true); // SILENT FETCH - Cero parpadeos
+      fetchInstituciones(true); 
     } catch (e) { showToast('error', 'Error al asignar.'); } finally { setSavingAssign(false); }
   };
 
@@ -258,8 +250,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       if (!res.ok) throw new Error();
       setEditModal({ open: false, inst: null });
       showToast('exito', 'Institución actualizada con éxito.');
-      
-      fetchInstituciones(true); // SILENT FETCH
+      fetchInstituciones(true); 
     } catch (e) { showToast('error', 'Error al guardar.'); } finally { setSavingEdit(false); }
   };
 
@@ -305,7 +296,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     
     try {
       const params = new URLSearchParams();
-      params.append('limit', '99999'); // Hack para pedirle al server todas las escuelas de golpe
+      params.append('limit', '99999'); 
       if (filtros.search) params.append('search', filtros.search);
       if (filtros.provinciaId) params.append('provinciaId', filtros.provinciaId);
       if (filtros.cantonId) params.append('cantonId', filtros.cantonId);
@@ -409,7 +400,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
 
         <div className="w-full bg-card rounded-xl shadow-sm border border-border overflow-x-auto relative">
           
-          {/* Pequeño indicador visual de Silent Fetch */}
           {isRefreshing && (
             <div className="absolute top-0 left-0 w-full h-1 bg-primary/20 overflow-hidden z-10">
               <div className="h-full bg-primary animate-pulse w-1/3 rounded-full"></div>
@@ -419,9 +409,8 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           <Table className={isRefreshing ? 'opacity-70 transition-opacity duration-300' : 'transition-opacity duration-300'}>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                {/* 🔥 CABECERA CHECKBOX 🔥 */}
                 {esAdmin && (
-                  <TableHead className="w-[50px] text-center px-2">
+                  <TableHead className="w-50px text-center px-2">
                     <input 
                       type="checkbox" 
                       checked={todosSeleccionados}
@@ -442,7 +431,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
               {institutions.map((inst) => (
                 <TableRow key={inst.id} className={`hover:bg-muted/30 ${selectedIds.includes(inst.id) ? 'bg-primary/5' : ''}`}>
                   
-                  {/* 🔥 CELDA CHECKBOX 🔥 */}
                   {esAdmin && (
                     <TableCell className="text-center px-2">
                       <input 
@@ -502,7 +490,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
             </TableBody>
           </Table>
 
-          {/* PAGINACIÓN DE SERVER-SIDE */}
           {totalPages > 1 && (
             <div className="p-4 border-t border-border flex justify-between items-center bg-muted/30">
               <span className="text-xs text-muted-foreground font-medium">
@@ -520,9 +507,9 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           )}
         </div>
 
-        {/* 🔥 BARRA FLOTANTE MÁGICA DE ASIGNACIÓN (Responsive 📱💻) 🔥 */}
+        {/* 🔥 BARRA FLOTANTE MÁGICA DE ASIGNACIÓN MASIVA 🔥 */}
         {esAdmin && selectedIds.length > 0 && (
-          <div className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-full shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-6 animate-in slide-in-from-bottom-10 fade-in w-[95%] md:w-auto max-w-[400px] md:max-w-none">
+          <div className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-full shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-6 animate-in slide-in-from-bottom-10 fade-in w-[95%] md:w-auto max-w-400px md:max-w-none">
             
             <div className="flex items-center justify-between w-full md:w-auto gap-2">
               <div className="flex items-center gap-2">
@@ -552,7 +539,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           </div>
         )}
 
-        {/* 🔥 MODAL PARA ARMAR LA RUTA O RANGO LÍMITE 🔥 */}
+        {/* MODAL PARA ARMAR LA RUTA MASIVA (CONECTADO AL ESCUDO) */}
         <Dialog open={rutaModal.open} onOpenChange={val => setRutaModal({ ...rutaModal, open: val })}>
           <DialogContent className="sm:max-w-md bg-card p-6 rounded-xl border-t-4 border-t-primary overflow-y-auto max-h-[90vh]">
             <DialogHeader>
@@ -575,7 +562,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
                 </select>
               </div>
 
-              {/* TABS DE TIPO DE ASIGNACIÓN */}
               <div className="flex gap-2 p-1 bg-muted rounded-lg mt-4 mb-2 border border-border">
                 <button 
                   className={`flex-1 text-xs font-bold py-2.5 rounded-md transition-all ${rutaData.tipoAsignacion === 'dia' ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-700'}`}
@@ -591,7 +577,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
                 </button>
               </div>
 
-              {/* INPUTS CONDICIONALES */}
               {rutaData.tipoAsignacion === 'dia' ? (
                 <div className="grid grid-cols-2 gap-4 animate-in fade-in zoom-in-95 duration-200">
                   <div className="space-y-2">
@@ -607,9 +592,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
                 <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
                   <Label className="text-xs font-semibold uppercase text-muted-foreground">Fecha Límite (Día Máximo para visitar) *</Label>
                   <Input type="date" className="h-11 bg-white border-amber-300 focus:border-amber-500 focus:ring-amber-500" value={rutaData.fechaLimite} onChange={e => setRutaData({...rutaData, fechaLimite: e.target.value})} />
-                  <p className="text-[10.5px] leading-tight text-gray-500 mt-1 bg-amber-50 p-2 rounded border border-amber-100">
-                    💡 El vendedor tendrá estas escuelas en su pestaña de <strong>"Próximas"</strong> hasta esta fecha límite. Si se le olvida visitarlas, pasarán a <strong>"Vencidas"</strong>.
-                  </p>
                 </div>
               )}
 
@@ -624,13 +606,11 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           </DialogContent>
         </Dialog>
 
-        {/* RESTO DE MODALES (ASIGNAR, EDITAR, IMPORTAR, DUPLICADOS) */}
-        {/* MODAL REASIGNAR VENDEDOR */}
+        {/* OTROS MODALES (REASIGNAR, EDITAR, EXCEL, ETC) */}
         <Dialog open={assignModal.open} onOpenChange={val => setAssignModal({ ...assignModal, open: val })}>
           <DialogContent className="sm:max-w-md bg-card p-5 rounded-xl"><DialogHeader><DialogTitle className="text-base font-bold text-foreground">Asignar Vendedor</DialogTitle></DialogHeader><div className="mt-3 space-y-3"><p className="text-xs text-muted-foreground">Escuela: <strong className="text-foreground">{assignModal.instNombre}</strong></p><select className="w-full h-10 border rounded-md px-3 text-sm bg-white" value={selectedVendedor} onChange={e => setSelectedVendedor(e.target.value)}><option value="">-- Liberar (Sin Vendedor) --</option>{vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}</select></div><DialogFooter className="mt-4 flex gap-2 justify-end"><Button variant="outline" size="sm" onClick={() => setAssignModal({ ...assignModal, open: false })}>Cancelar</Button><Button size="sm" className="bg-primary text-primary-foreground" disabled={savingAssign} onClick={handleGuardarAsignacion}>{savingAssign ? 'Guardando...' : 'Guardar'}</Button></DialogFooter></DialogContent>
         </Dialog>
 
-        {/* SÚPER MODAL DE EDICIÓN CON TODOS LOS CAMPOS */}
         <Dialog open={editModal.open} onOpenChange={val => setEditModal({ ...editModal, open: val })}>
           <DialogContent className="sm:max-w-2xl bg-card p-6 rounded-xl overflow-y-auto max-h-[85vh]">
             <DialogHeader><DialogTitle className="text-lg font-bold text-foreground">Editar Institución Completa</DialogTitle></DialogHeader>
@@ -666,7 +646,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           </DialogContent>
         </Dialog>
 
-        {/* MODAL DE IMPORTACIÓN */}
         <Dialog open={importModal} onOpenChange={(val) => !(isImporting || isUpdating) && setImportModal(val)}>
           <DialogContent className="sm:max-w-2xl bg-card p-6 rounded-xl max-h-[90vh] flex flex-col">
             <DialogHeader><DialogTitle className="text-lg font-bold text-foreground">Mapear Columnas del Excel</DialogTitle></DialogHeader>
@@ -683,7 +662,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           </DialogContent>
         </Dialog>
 
-        {/* POPUP INTELIGENTE DE DUPLICADOS */}
         <Dialog open={duplicateModal.open} onOpenChange={() => {}}>
           <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl border-t-4 border-amber-500">
             <DialogHeader><DialogTitle className="text-lg font-bold text-amber-600 flex items-center gap-2"><RefreshCw size={20} /> Escuelas Existentes Detectadas</DialogTitle></DialogHeader>
@@ -695,7 +673,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       </div>
 
       {toastMsg && (
-        <div className={`fixed bottom-6 right-6 z-[9999] px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
+        <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
           {toastMsg.tipo === 'exito' ? <CheckCircle2 size={20} className="text-emerald-100" /> : <AlertCircle size={20} className="text-white/90" />}
           <span className="font-bold text-sm tracking-wide">{toastMsg.texto}</span>
         </div>

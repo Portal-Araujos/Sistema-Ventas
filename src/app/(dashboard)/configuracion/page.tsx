@@ -25,21 +25,20 @@ const MENU_OPCIONES = [
   { id: 'estadoContrato', icon: <Layers size={18} />, label: 'Estados de Contrato' },
   { id: 'tipoCobro', icon: <BookOpen size={18} />, label: 'Tipos de Cobro' },
   { id: 'tipoGestion', icon: <Navigation size={18} />, label: 'Tipos de Gestión' },
+  { id: 'estadoOperacion', icon: <Settings size={18} />, label: 'Estados de Operación' },
+  { id: 'estadoProduccion', icon: <Settings size={18} />, label: 'Estados de Producción' },
 ];
 
 export default function ConfiguracionPage() {
   const [activeTab, setActiveTab] = useState('reglaTamano');
   const [catalogos, setCatalogos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  
   const [editModal, setEditModal] = useState({ open: false, id: 0, nombre: '', tipo: '' });
   const [tamanoModal, setTamanoModal] = useState({ open: false, id: 0, nombre: '', minDocentes: 0, maxDocentes: 9999 });
   const [createModal, setCreateModal] = useState({ open: false, nombre: '', provinciaId: '', cantonId: '' });
-  
   const [saving, setSaving] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => { setToastMsg({ tipo, texto }); setTimeout(() => setToastMsg(null), 5000); };
-
   const cargarDatos = async () => {
     setLoading(true);
     try {
@@ -71,6 +70,8 @@ export default function ConfiguracionPage() {
       case 'estadoContrato': return catalogos.estadosContrato || [];
       case 'tipoCobro': return catalogos.tiposCobro || [];
       case 'tipoGestion': return catalogos.tiposGestion || [];
+      case 'estadoOperacion': return catalogos.estadosOperacion || [];
+      case 'estadoProduccion': return catalogos.estadosProduccion || [];
       default: return [];
     }
   };
@@ -106,7 +107,6 @@ export default function ConfiguracionPage() {
     const minNuevo = tamanoModal.minDocentes; const maxNuevo = tamanoModal.maxDocentes;
     if (minNuevo > maxNuevo) { showToast('alerta', 'El valor mínimo no puede ser mayor al máximo.'); return; }
     if (!tamanoModal.nombre.trim()) { showToast('alerta', 'El nombre no puede estar vacío.'); return; }
-
     const reglasActuales = catalogos.reglasTamano.filter((r: any) => r.id !== tamanoModal.id);
     const hayChoque = reglasActuales.some((regla: any) => (minNuevo <= regla.maxDocentes && maxNuevo >= regla.minDocentes));
 
@@ -237,8 +237,6 @@ export default function ConfiguracionPage() {
                           <Button variant="outline" size="sm" className="h-8 border-border text-blue-600 hover:bg-blue-50" onClick={() => setEditModal({ open: true, id: item.id, nombre: item.nombre, tipo: activeTab })}>
                             <Edit2 size={14} className="mr-1" /> Editar
                           </Button>
-                          
-                          {/* 🔥 BOTÓN UNIVERSAL DE SOFT DELETE (APAGAR/ENCENDER) 🔥 */}
                           <Button 
                             variant="outline" size="sm" 
                             className={`h-8 border-border hover:bg-gray-100 ${!item.activo ? 'text-emerald-600 hover:text-emerald-700' : 'text-red-600 hover:text-red-700'}`}
@@ -258,8 +256,6 @@ export default function ConfiguracionPage() {
           </div>
         </div>
       </div>
-
-      {/* MODAL CREAR NUEVO REGISTRO */}
       <Dialog open={createModal.open} onOpenChange={(val) => setCreateModal({ ...createModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl border-t-4 border-t-primary">
           <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Crear Nuevo Registro</DialogTitle></DialogHeader>
@@ -293,8 +289,6 @@ export default function ConfiguracionPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* MODAL EDITAR */}
       <Dialog open={editModal.open} onOpenChange={(val) => setEditModal({ ...editModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl">
           <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Editar Registro</DialogTitle></DialogHeader>
@@ -310,8 +304,6 @@ export default function ConfiguracionPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* MODAL CONFIGURAR RANGO DE TAMAÑO */}
       <Dialog open={tamanoModal.open} onOpenChange={(val) => setTamanoModal({ ...tamanoModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl">
           <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Configurar Rango</DialogTitle></DialogHeader>
@@ -337,8 +329,6 @@ export default function ConfiguracionPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* TOASTS */}
       {toastMsg && (
         <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-[#34c759] text-white' : toastMsg.tipo === 'alerta' ? 'bg-[#ff9500] text-white' : 'bg-[#ff3b30] text-white'}`}>
           {toastMsg.tipo === 'exito' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}

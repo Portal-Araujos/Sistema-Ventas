@@ -11,18 +11,20 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fa
 export async function GET() {
   try {
     const usuarios = await prisma.usuario.findMany({
-      include: { rol: true },
-      orderBy: { createdAt: 'desc' }
+      include: {
+        rol: true
+      },
+      orderBy: { nombre: 'asc' }
     });
 
     const data = usuarios.map(u => ({
       id: u.id,
       nombre: u.nombre,
       email: u.email,
-      activo: u.activo,
+      rolNombre: u.rol.nombre,
       rolId: u.rolId,
-      rolNombre: u.rol?.nombre.replace('_', ' ') || 'Sin rol',
-      fechaCreacion: new Date(u.createdAt).toLocaleDateString('es-EC')
+      activo: u.activo,
+      bloqueado: u.bloqueado // 🔥 ESTA ES LA LÍNEA MÁGICA QUE FALTABA
     }));
 
     return NextResponse.json(data);

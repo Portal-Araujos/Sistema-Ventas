@@ -2,21 +2,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Calendar, MapPin, Eye, Search, Navigation, ChevronLeft, ChevronRight, CalendarCheck, Clock, AlertTriangle, PieChart, CheckCircle2, UserX, Unlock, Edit3 } from 'lucide-react';
+import { Calendar, MapPin, Eye, Search, Navigation, ChevronLeft, AlertCircle, Plus, ChevronRight, CalendarCheck, Clock, AlertTriangle, PieChart, CheckCircle2, UserX, Unlock, Edit3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import VisitaGPSForm from '@/app/features/visitas/components/VisitaGPSForm';
 
-// 🔥 1. Agregamos 'correcciones' a los TabTypes
 type TabType = 'ruta' | 'visitadas' | 'proximas' | 'vencidas' | 'sinAsignar' | 'cobertura' | 'correcciones';
 
 export default function AgendaPage() {
   const router = useRouter();
   
-  // 🔥 2. Agregamos el arreglo correcciones al estado inicial
   const [dataAgenda, setDataAgenda] = useState<{
     ruta: any[], visitadas: any[], proximas: any[], vencidas: any[], sinAsignar: any[], correcciones: any[], cobertura: { asignadas: number, visitadas: number, porcentaje: number }
   }>({ ruta: [], visitadas: [], proximas: [], vencidas: [], sinAsignar: [], correcciones: [], cobertura: { asignadas: 0, visitadas: 0, porcentaje: 0 } });
@@ -25,26 +24,25 @@ export default function AgendaPage() {
   const [catalogos, setCatalogos] = useState<any>(null);
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [userRol, setUserRol] = useState('vendedor');
-  
   const [tabActiva, setTabActiva] = useState<TabType>('ruta');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvincia, setSelectedProvincia] = useState('');
   const [selectedCanton, setSelectedCanton] = useState('');
   const [selectedVendedor, setSelectedVendedor] = useState('');
-  
   const hoyStr = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" })).toISOString().split('T')[0];
   const [fechaDesde, setFechaDesde] = useState(hoyStr);
   const [fechaHasta, setFechaHasta] = useState(hoyStr);
-
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 9;
-  
+  const itemsPerPage = 15;
   const [modalVisita, setModalVisita] = useState<{ open: boolean; inst: any; isLibre: boolean }>({ open: false, inst: null, isLibre: false });
-
-  // 🔥 ESTADOS PARA EL MODAL RETROACTIVO 🔥
   const [modalRetro, setModalRetro] = useState({ open: false, visitaId: '' });
   const [nuevaFechaRetro, setNuevaFechaRetro] = useState('');
   const [savingRetro, setSavingRetro] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [nuevaVisita, setNuevaVisita] = useState({ institucionId: '', usuarioId: '', fechaProgramada: '', horaProgramada: '09:00', tipoGestion: 'Visita Presencial' });
+  const [toast, setToast] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
+  const showToast = (tipo: 'exito' | 'error', texto: string) => { setToast({ tipo, texto }); setTimeout(() => setToast(null), 6000); };
 
   const cargarAgenda = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -79,7 +77,36 @@ export default function AgendaPage() {
   useEffect(() => { cargarAgenda(false); }, [selectedVendedor, fechaDesde, fechaHasta]);
   useEffect(() => { setCurrentPage(1); }, [tabActiva, searchTerm, selectedProvincia, selectedCanton]);
 
-  // 🔥 FUNCIÓN PARA GUARDAR LA NUEVA FECHA DE VENTA 🔥
+  const handleAgendar = async () => {
+    if (!nuevaVisita.institucionId || !nuevaVisita.usuarioId || !nuevaVisita.fechaProgramada) {
+      showToast('error', 'Por favor llena todos los campos obligatorios.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/agenda', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nuevaVisita)
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al agendar.');
+      }
+
+      showToast('exito', '¡Visita agendada correctamente!');
+      setModalOpen(false);
+      setNuevaVisita({ institucionId: '', usuarioId: '', fechaProgramada: '', horaProgramada: '09:00', tipoGestion: 'Visita Presencial' });
+      cargarAgenda();
+    } catch (err: any) {
+      showToast('error', err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleGuardarRetro = async () => {
     if (!nuevaFechaRetro) return;
     setSavingRetro(true);
@@ -90,14 +117,12 @@ export default function AgendaPage() {
       });
       if (!res.ok) throw new Error();
       setModalRetro({ open: false, visitaId: '' });
-      alert('¡Fecha de la visita y de los contratos corregida con éxito! (Candado bloqueado)');
+      showToast('exito', '¡Fecha de la visita y contratos corregida con éxito! 🔒');
       
-      // Si ya no quedan correcciones, mandamos al usuario a la pestaña de Visitadas
       if (dataAgenda.correcciones.length <= 1) setTabActiva('visitadas');
-      
-      cargarAgenda(true); // Refresca en silencio
+      cargarAgenda(true);
     } catch (e) { 
-      alert('Error al corregir la fecha.'); 
+      showToast('error', 'Error al corregir la fecha.'); 
     } finally { 
       setSavingRetro(false); 
     }
@@ -108,7 +133,7 @@ export default function AgendaPage() {
     if (s.includes('no visitada') || s.includes('sin asignar')) return '#d9d9d9';
     if (s.includes('no interesado')) return '#ff3b30';
     if (s.includes('seguimiento')) return '#ff9500';
-    if (s.includes('visitada')) return '#34c759';
+    if (s.includes('visitada') || s.includes('realizada')) return '#34c759';
     if (s.includes('pendiente')) return '#007aff';
     return '#d9d9d9';
   };
@@ -144,19 +169,20 @@ export default function AgendaPage() {
               {vendedores.map((v: any) => <option key={v.id} value={v.id}>{v.nombre}</option>)}
             </select>
           )}
-          <Button onClick={() => setModalVisita({ open: true, inst: null, isLibre: true })} className="bg-primary hover:bg-primary/90 text-white font-bold shadow-md rounded-xl">
+          <Button onClick={() => setModalOpen(true)} variant="outline" className="h-10 font-bold shadow-sm rounded-xl">
+            <Plus size={16} className="mr-2" /> Agendar Manual
+          </Button>
+          <Button onClick={() => setModalVisita({ open: true, inst: null, isLibre: true })} className="bg-primary hover:bg-primary/90 text-white font-bold shadow-md rounded-xl h-10">
             <Navigation size={18} className="mr-2" /> Visita Libre
           </Button>
         </div>
       </div>
 
-      {/* 🚀 BARRA DE PESTAÑAS */}
       <div className="flex overflow-x-auto gap-3 border-b border-gray-200 hide-scrollbar pb-1">
         <button onClick={() => setTabActiva('ruta')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'ruta' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-900 hover:bg-gray-100/50 rounded-t-xl'}`}>
-          <MapPin size={18}/> Mi Ruta (Hoy) <Badge className="bg-primary/10 text-primary border border-primary/20">{dataAgenda.ruta.length}</Badge>
+          <MapPin size={18}/> Mi Ruta ({dataAgenda.ruta.length})
         </button>
         
-        {/* 🔥 NUEVA PESTAÑA: CORRECCIONES (Solo aparece si hay pendientes) 🔥 */}
         {dataAgenda.correcciones?.length > 0 && (
           <button onClick={() => setTabActiva('correcciones')} className={`flex items-center gap-2 pb-3 px-3 text-sm font-black transition-all border-b-[3px] whitespace-nowrap ${tabActiva === 'correcciones' ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-amber-600 hover:bg-amber-50/50 rounded-t-xl'}`}>
             <Edit3 size={18} className={tabActiva !== 'correcciones' ? 'animate-pulse text-amber-500' : ''}/> 
@@ -230,7 +256,7 @@ export default function AgendaPage() {
             <h3 className="text-gray-500 font-black uppercase tracking-wider text-sm mb-3">Escuelas Visitadas</h3>
             <p className="text-6xl font-black text-emerald-600">{dataAgenda.cobertura.visitadas}</p>
           </div>
-          <div className=" `bg-gradient-to-br`from-primary/10 to-primary/5 p-8 rounded-3xl shadow-sm border border-primary/20 text-center flex flex-col justify-center">
+          <div className="`bg-gradient-to-br` from-primary/10 to-primary/5 p-8 rounded-3xl shadow-sm border border-primary/20 text-center flex flex-col justify-center">
             <h3 className="text-primary font-black uppercase tracking-wider text-sm mb-2">Cobertura del Territorio</h3>
             <p className="text-7xl font-black text-primary drop-shadow-sm">{dataAgenda.cobertura.porcentaje}%</p>
             <div className="w-full bg-white rounded-full h-4 mt-6 overflow-hidden border border-primary/10 shadow-inner">
@@ -240,120 +266,196 @@ export default function AgendaPage() {
         </div>
       )}
 
-      {/* 📋 VISTA DE TARJETAS DE CADENA */}
+      {/* 📋 VISTA DE TABLA GERENCIAL DE ALTA DENSIDAD */}
       {tabActiva !== 'cobertura' && (
-        <>
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-16 text-center text-gray-500 font-bold animate-pulse">Sincronizando Agenda...</div>
+            <div className="p-16 text-center text-gray-500 font-bold animate-pulse">Sincronizando Tabla...</div>
           ) : itemsPaginados.length === 0 ? (
-            <div className="bg-white p-16 rounded-3xl border border-dashed border-gray-300 text-center text-gray-500 flex flex-col items-center">
+            <div className="bg-white p-16 text-center text-gray-500 flex flex-col items-center">
               <CalendarCheck size={56} className="text-gray-300 mb-4" />
               <p className="text-xl font-black text-gray-700">No hay registros en esta pestaña.</p>
               <p className="text-sm mt-1">Modifica tus filtros de búsqueda o fecha.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {itemsPaginados.map((item) => (
-                <div key={item.id} className={`bg-white rounded-2xl border p-5 shadow-sm flex flex-col justify-between transition-all hover:shadow-md ${tabActiva === 'vencidas' ? 'border-red-300 bg-red-50/30' : tabActiva === 'correcciones' ? 'border-amber-300 bg-amber-50/20' : 'border-gray-200'}`}>
-                  <div>
-                    <div className="flex justify-between items-start mb-3">
-                      <Badge style={{ backgroundColor: getStatusColor(item.estadoComercial), color: getStatusColor(item.estadoComercial) === '#d9d9d9' ? '#111111' : '#FFFFFF' }} className="font-bold tracking-wide">
-                        {item.estadoComercial}
-                      </Badge>
-                    </div>
-                    <h3 className="text-lg font-black text-gray-900 leading-tight mb-1">{item.nombreInstitucion}</h3>
-                    <p className="text-[11px] font-bold text-gray-500 flex items-center gap-1 mb-4 uppercase">
-                      <MapPin size={12} className="text-primary shrink-0" /> {item.canton} / {item.parroquia}
-                    </p>
-                    
-                    <div className={`p-3.5 rounded-xl border ${tabActiva === 'vencidas' ? 'bg-red-50 border-red-100' : tabActiva === 'correcciones' ? 'bg-white border-amber-200 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
-                      {tabActiva === 'ruta' && (
-                        <>
-                          <p className="text-[10px] font-black text-gray-500 uppercase mb-1">Visita Programada</p>
-                          <p className="text-xs font-bold text-primary flex items-center gap-1"><Clock size={12}/> Hoy: {item.fechaProgramada}</p>
-                        </>
-                      )}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-bold text-gray-600 min-w-200px">Institución</TableHead>
+                    <TableHead className="font-bold text-gray-600">Ubicación</TableHead>
+                    <TableHead className="font-bold text-gray-600 min-w-250px">Detalle de Gestión</TableHead>
+                    <TableHead className="font-bold text-gray-600 text-center">Estado</TableHead>
+                    <TableHead className="font-bold text-gray-600 text-center">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {itemsPaginados.map((item) => (
+                    <TableRow key={item.id} className={`hover:bg-slate-50/50 ${tabActiva === 'vencidas' ? 'bg-red-50/30' : tabActiva === 'correcciones' ? 'bg-amber-50/30' : ''}`}>
+                      <TableCell>
+                        <div className="font-black text-gray-900 text-sm mb-1">{item.nombreInstitucion}</div>
+                        {esAdmin && tabActiva === 'sinAsignar' && (
+                          <Badge variant="outline" className="mt-1 text-[10px] bg-gray-50 text-gray-500">Escuela Libre</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-[11px] font-bold text-gray-500 flex items-center gap-1 uppercase">
+                          <MapPin size={12} className="text-primary shrink-0" /> {item.canton} <br/> {item.parroquia}
+                        </div>
+                      </TableCell>
                       
-                      {tabActiva === 'visitadas' && (
-                        <>
-                          <p className="text-[10px] font-black text-gray-500 uppercase mb-1">Resumen de Visita</p>
-                          <p className="text-xs text-gray-800 line-clamp-2">{item.resumenAcuerdos}</p> 
-                          <p className="text-[10px] text-emerald-600 font-bold mt-2 border-t border-emerald-100 pt-1">Realizada el: {new Date(item.fechaVisitaReal).toLocaleDateString('es-EC')}</p>
-                        </>
-                      )}
+                      {/* 🔥 CELDA DINÁMICA E INTELIGENTE 🔥 */}
+                      <TableCell>
+                        {tabActiva === 'ruta' && (
+                          <>
+                            <p className="text-[10px] font-black text-gray-500 uppercase">Visita Programada / Rango Activo</p>
+                            <p className="text-xs font-bold text-primary flex items-center gap-1"><Clock size={12}/> Programada: {item.fechaProgramada}</p>
+                            {item.fechaProximoContacto && item.fechaProximoContacto !== item.fechaProgramada && (
+                              <p className="text-[10px] text-amber-600 font-bold mt-0.5">⏳ Fecha Límite Rango: {item.fechaProximoContacto}</p>
+                            )}
+                          </>
+                        )}
+                        {tabActiva === 'visitadas' && (
+                          <>
+                            <p className="text-[10px] font-black text-gray-500 uppercase">Resumen de Visita</p>
+                            <p className="text-xs text-gray-800 line-clamp-2">{item.resumenAcuerdos}</p> 
+                            <p className="text-[10px] text-emerald-600 font-bold mt-1">Realizada: {new Date(item.fechaVisitaReal).toLocaleDateString('es-EC')}</p>
+                          </>
+                        )}
+                        {tabActiva === 'correcciones' && (
+                          <>
+                            <p className="text-[10px] font-black text-amber-600 uppercase flex items-center gap-1"><Unlock size={12}/> Corrección Habilitada</p>
+                            <p className="text-xs text-gray-800 line-clamp-2">{item.resumenAcuerdos}</p> 
+                            <p className="text-[10px] text-gray-500 font-bold mt-1">Fecha Original: {new Date(item.fechaVisitaReal).toLocaleDateString('es-EC')}</p>
+                          </>
+                        )}
+                        {tabActiva === 'proximas' && (
+                          <>
+                            <p className="text-[10px] font-black text-gray-500 uppercase">Próxima Visita Futura</p>
+                            <p className="text-xs text-gray-800 line-clamp-2">{item.resumenAcuerdos || 'Acuerdo de recontacto futuro'}</p>
+                            <p className="text-[11px] text-blue-700 font-black flex items-center gap-1 mt-1">
+                              <Calendar size={12}/> Fecha Programada / Próx: {item.fechaProximoContacto || item.fechaProgramada}
+                            </p>
+                          </>
+                        )}
+                        {tabActiva === 'vencidas' && (
+                          <>
+                            <p className="text-[10px] font-black text-red-600 uppercase">⚠️ Atención Urgente</p>
+                            <p className="text-xs text-gray-800">Debiste contactar a esta escuela y no se registró la visita.</p>
+                            <p className="text-[11px] text-red-700 font-black flex items-center gap-1 mt-1">
+                              <AlertTriangle size={12}/> Vencida desde: {item.fechaProximoContacto || item.fechaProgramada}
+                            </p>
+                          </>
+                        )}
+                        {tabActiva === 'sinAsignar' && (
+                          <>
+                            <p className="text-[10px] font-black text-amber-700 uppercase">Sin Vendedor Asignado</p>
+                            <p className="text-xs text-gray-700 font-medium">Disponible para prospección o asignación masiva.</p>
+                          </>
+                        )}
+                      </TableCell>
 
-                      {/* 🔥 ESTILO EXCLUSIVO PARA LA PESTAÑA CORRECCIONES 🔥 */}
-                      {tabActiva === 'correcciones' && (
-                        <>
-                          <p className="text-[10px] font-black text-amber-600 uppercase mb-1 flex items-center gap-1">
-                            <Unlock size={12}/> Corrección Habilitada
-                          </p>
-                          <p className="text-xs text-gray-800 line-clamp-2 mb-2">{item.resumenAcuerdos}</p> 
-                          <p className="text-[10px] text-gray-500 font-bold border-t border-amber-100 pt-1">Fecha Original: {new Date(item.fechaVisitaReal).toLocaleDateString('es-EC')}</p>
-                          
-                          <Button size="sm" onClick={() => setModalRetro({ open: true, visitaId: item.id })} className="w-full mt-3 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black tracking-wide h-8 shadow-sm">
-                            <Edit3 size={14} className="mr-1.5"/> CORREGIR FECHA DE CONTRATOS
+                      <TableCell className="text-center">
+                        <Badge style={{ backgroundColor: getStatusColor(item.estadoComercial), color: getStatusColor(item.estadoComercial) === '#d9d9d9' ? '#111111' : '#FFFFFF' }} className="font-bold tracking-wide">
+                          {item.estadoComercial}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell className="text-center">
+                        <div className="flex flex-col gap-2">
+                          <Button variant="outline" size="sm" className="w-full text-xs font-bold text-gray-700 hover:bg-gray-100 h-8" onClick={() => router.push(`/instituciones/${item.institucionId}`)}>
+                            <Eye size={14} className="mr-1" /> Ficha Técnica
                           </Button>
-                        </>
-                      )}
-
-                      {tabActiva === 'proximas' && (
-                        <>
-                          <p className="text-[10px] font-black text-gray-500 uppercase mb-1">Último Acuerdo</p>
-                          <p className="text-xs text-gray-800 line-clamp-2 mb-2">{item.ultimoAcuerdo || item.resumenAcuerdos}</p>
-                          <p className="text-[11px] text-blue-700 font-black flex items-center gap-1 border-t border-blue-100 pt-1"><Calendar size={12}/> Próx. Contacto: {item.fechaProximoContacto}</p>
-                        </>
-                      )}
-                      {tabActiva === 'vencidas' && (
-                        <>
-                          <p className="text-[10px] font-black text-red-600 uppercase mb-1">⚠️ Atención Urgente</p>
-                          <p className="text-xs text-gray-800 line-clamp-2 mb-2">Debiste contactar a esta escuela y no lo hiciste.</p>
-                          <p className="text-[11px] text-red-700 font-black flex items-center gap-1 border-t border-red-200 pt-1"><AlertTriangle size={12}/> Vencida desde: {item.fechaProximoContacto}</p>
-                        </>
-                      )}
-                      {tabActiva === 'sinAsignar' && (
-                        <>
-                          <p className="text-[10px] font-black text-amber-700 uppercase mb-1">Escuela Libre</p>
-                          <p className="text-xs text-gray-700 font-medium">Disponible para asignación de ruta o prospección.</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="pt-4 mt-4 border-t border-gray-100 flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1 text-xs font-bold text-gray-700 hover:bg-gray-100" onClick={() => router.push(`/instituciones/${item.institucionId}`)}>
-                      <Eye size={14} className="mr-1" /> Ficha Técnica
-                    </Button>
-                    {(tabActiva === 'ruta' || tabActiva === 'vencidas' || tabActiva === 'proximas' || tabActiva === 'sinAsignar') && (
-                      <Button size="sm" className={`flex-1 text-xs font-bold text-white shadow-sm ${tabActiva === 'vencidas' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'}`} onClick={() => setModalVisita({ open: true, inst: item, isLibre: false })}>
-                        <Navigation size={14} className="mr-1" /> Reg. Visita
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                          {(tabActiva === 'ruta' || tabActiva === 'vencidas' || tabActiva === 'proximas' || tabActiva === 'sinAsignar') && (
+                            <Button size="sm" className={`w-full text-xs font-bold text-white shadow-sm h-8 ${tabActiva === 'vencidas' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary/90'}`} onClick={() => setModalVisita({ open: true, inst: item, isLibre: false })}>
+                              <Navigation size={14} className="mr-1" /> Reg. Visita
+                            </Button>
+                          )}
+                          {tabActiva === 'correcciones' && (
+                            <Button size="sm" onClick={() => setModalRetro({ open: true, visitaId: item.id })} className="w-full bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black tracking-wide h-8 shadow-sm">
+                              <Edit3 size={14} className="mr-1"/> CORREGIR
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
 
+          {/* 🔥 CONTROLES DE PAGINACIÓN STRICT 15 🔥 */}
           {totalPages > 1 && (
-            <div className="mt-4 p-4 border border-gray-200 bg-white rounded-2xl flex justify-between items-center shadow-sm">
-              <span className="text-xs text-gray-500 font-black uppercase tracking-wide">
-                Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, listaActual.length)} de {listaActual.length}
-              </span>
+            <div className="p-4 border-t flex justify-between items-center bg-gray-50/50">
+              <span className="text-xs text-gray-500 font-medium">Página {currentPage} de {totalPages} ({listaActual.length} en total)</span>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="h-8 text-xs font-bold rounded-lg">
-                  <ChevronLeft size={14} className="mr-1" /> Anterior
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="h-8 text-xs font-bold rounded-lg">
-                  Siguiente <ChevronRight size={14} className="ml-1" />
-                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="h-8 text-xs font-bold"><ChevronLeft size={14} className="mr-1"/> Ant.</Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="h-8 text-xs font-bold">Sig. <ChevronRight size={14} className="ml-1"/></Button>
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {/* 🔥 MODAL PARA CORRECCIÓN DE FECHA (Retroactiva) 🔥 */}
+      {/* MODAL PARA AGENDAR MANUALMENTE */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-gray-900 border-b pb-3 flex items-center gap-2">
+              <Calendar className="text-primary"/> Agendar Nueva Visita
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label className="text-xs font-bold text-gray-600">Institución / Escuela *</Label>
+              <select className="w-full h-10 border border-gray-300 rounded-lg px-3 text-sm mt-1 bg-white" value={nuevaVisita.institucionId} onChange={e => setNuevaVisita({...nuevaVisita, institucionId: e.target.value})}>
+                <option value="">Seleccione una escuela...</option>
+                {dataAgenda.sinAsignar.map((i:any) => <option key={i.id} value={i.id}>{i.nombreInstitucion}</option>)}
+              </select>
+            </div>
+            
+            <div>
+              <Label className="text-xs font-bold text-gray-600">Vendedor a Asignar *</Label>
+              <select className="w-full h-10 border border-gray-300 rounded-lg px-3 text-sm mt-1 bg-white" value={nuevaVisita.usuarioId} onChange={e => setNuevaVisita({...nuevaVisita, usuarioId: e.target.value})}>
+                <option value="">Seleccione un vendedor...</option>
+                {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-bold text-gray-600">Fecha *</Label>
+                <Input type="date" className="h-10 mt-1" value={nuevaVisita.fechaProgramada} onChange={e => setNuevaVisita({...nuevaVisita, fechaProgramada: e.target.value})} />
+              </div>
+              <div>
+                <Label className="text-xs font-bold text-gray-600">Hora *</Label>
+                <Input type="time" className="h-10 mt-1" value={nuevaVisita.horaProgramada} onChange={e => setNuevaVisita({...nuevaVisita, horaProgramada: e.target.value})} />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-bold text-gray-600">Tipo de Gestión</Label>
+              <select className="w-full h-10 border border-gray-300 rounded-lg px-3 text-sm mt-1 bg-white" value={nuevaVisita.tipoGestion} onChange={e => setNuevaVisita({...nuevaVisita, tipoGestion: e.target.value})}>
+                <option value="Visita Presencial">Visita Presencial</option>
+                <option value="Llamada Telefónica">Llamada Telefónica</option>
+                <option value="Entrega de Muestras">Entrega de Muestras</option>
+                <option value="Cierre de Contrato">Cierre de Contrato</option>
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-6 flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button size="sm" className="bg-primary hover:bg-primary/90 text-white font-bold" disabled={saving} onClick={handleAgendar}>
+              {saving ? 'Validando...' : 'Guardar Agenda'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL PARA CORRECCIÓN DE FECHA (Retroactiva) */}
       <Dialog open={modalRetro.open} onOpenChange={val => setModalRetro({...modalRetro, open: val})}>
         <DialogContent className="sm:max-w-sm bg-white p-6 rounded-2xl border-t-4 border-amber-500">
           <DialogHeader><DialogTitle className="text-lg font-black text-amber-600 flex items-center gap-2"><Calendar size={20}/> Corregir Fecha de Venta</DialogTitle></DialogHeader>
@@ -376,6 +478,7 @@ export default function AgendaPage() {
         </DialogContent>
       </Dialog>
 
+      {/* COMPONENTE VISITA GPS */}
       <VisitaGPSForm 
         isOpen={modalVisita.open}
         onOpenChange={(val) => setModalVisita({ ...modalVisita, open: val })}
@@ -387,6 +490,14 @@ export default function AgendaPage() {
         } : null}
         onSuccess={() => cargarAgenda(true)} 
       />
+
+      {/* TOAST PARA ALERTAS DEL ESCUDO */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-9999 px-5 py-4 rounded-xl shadow-2xl flex items-center gap-3 text-white max-w-md ${toast.tipo === 'exito' ? 'bg-emerald-600' : 'bg-red-600'}`}>
+          {toast.tipo === 'exito' ? <CheckCircle2 size={24} className="shrink-0"/> : <AlertCircle size={24} className="shrink-0"/>}
+          <span className="font-bold text-sm leading-tight">{toast.texto}</span>
+        </div>
+      )}
     </div>
   );
 }
