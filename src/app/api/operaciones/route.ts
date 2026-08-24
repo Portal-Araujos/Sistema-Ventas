@@ -168,6 +168,117 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
+    const { modo } = body;
+
+    // 🔥 NUEVO MÓDULO: CEREBRO DE ASIGNACIÓN INTELIGENTE DE STOCK 🔥
+    if (modo === 'asignacion_stock') {
+      const { institucionId, stockAsignado, fechaEstimadaConfeccion } = body;
+
+      // 1. Sanitizar y configurar la fecha en formato UTC (Si se envió)
+      let fechaParseada = null;
+      if (fechaEstimadaConfeccion) {
+        const fechaLimpia = fechaEstimadaConfeccion.split('T')[0];
+        fechaParseada = new Date(`${fechaLimpia}T12:00:00Z`);
+      }
+
+      // 2. Buscamos TODAS las prendas de la escuela que están "Pendientes en revisión"
+      const prendasPendientes = await prisma.detallePedido.findMany({
+        where: { pedido: { institucionId }, estadoOperacion: 'Pendiente en revision' },
+        orderBy: { pedidoId: 'asc' }
+      });
+
+      const personalizadas: any[] = [];
+      const genericasPorContrato = new Map();
+
+      for (const p of prendasPendientes) {
+        const esPersonalizado = (p.bordado && p.bordado.trim() !== '') || (p.observacion && p.observacion.trim() !== '');
+        if (esPersonalizado) {
+          personalizadas.push(p);
+        } else {
+          if (!genericasPorContrato.has(p.pedidoId)) {
+            genericasPorContrato.set(p.pedidoId, { pedidoId: p.pedidoId, totalPrendas: 0, items: [] });
+          }
+          const grupo = genericasPorContrato.get(p.pedidoId);
+          grupo.totalPrendas += p.cantidad;
+          grupo.items.push(p);
+        }
+      }
+
+      // 🎯 OBJETO DE ACTUALIZACIÓN PARA PRODUCCIÓN (Incluye la nueva fecha)
+      const dataProduccion: any = { estadoOperacion: 'En produccion', estadoProduccion: 'Planificacion' };
+      if (fechaParseada) dataProduccion.fechaEstimadaConfeccion = fechaParseada;
+
+      // 3. ENVIAR PERSONALIZADAS A PRODUCCIÓN DIRECTO
+      for (const p of personalizadas) {
+        await prisma.detallePedido.update({
+          where: { id: p.id },
+          data: dataProduccion
+        });
+      }
+
+      // 4. ORDENAR POR PRIORIDAD: Contratos con menos prendas van primero
+      const contratosOrdenados = Array.from(genericasPorContrato.values()).sort((a, b) => a.totalPrendas - b.totalPrendas);
+
+      // 5. ASIGNAR STOCK O DIVIDIR PRENDAS
+      for (const contrato of contratosOrdenados) {
+        for (const prenda of contrato.items) {
+          const key = `${prenda.skuCodigo || 'S/N'}|${prenda.tipoRopa || 'Prenda'}|${prenda.color || '-'}|${prenda.talla || '-'}`;
+          let stockDisponible = stockAsignado[key] ? parseInt(stockAsignado[key]) : 0;
+
+          if (stockDisponible >= prenda.cantidad) {
+            // ✅ Hay stock: A Despacho
+            await prisma.detallePedido.update({
+              where: { id: prenda.id },
+              data: { estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' }
+            });
+            stockAsignado[key] -= prenda.cantidad;
+
+          } else if (stockDisponible > 0 && stockDisponible < prenda.cantidad) {
+            // ✂️ MITOSIS: Partimos el requerimiento
+            const faltante = prenda.cantidad - stockDisponible;
+            
+            // A) Actualizamos la prenda actual con lo que SÍ HAY en stock (A Despacho)
+            await prisma.detallePedido.update({
+              where: { id: prenda.id },
+              data: { cantidad: stockDisponible, estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' }
+            });
+
+            // B) Creamos un registro gemelo con lo que FALTA (A Producción + Fecha)
+            const dataCreate: any = {
+              pedidoId: prenda.pedidoId,
+              skuCodigo: prenda.skuCodigo,
+              tipoRopa: prenda.tipoRopa,
+              color: prenda.color,
+              genero: prenda.genero,
+              talla: prenda.talla,
+              cantidad: faltante,
+              bordado: prenda.bordado,
+              observacion: prenda.observacion,
+              operarioAsignadoId: prenda.operarioAsignadoId,
+              estadoOperacion: 'En produccion',
+              estadoProduccion: 'Planificacion'
+            };
+            if (fechaParseada) dataCreate.fechaEstimadaConfeccion = fechaParseada;
+
+            await prisma.detallePedido.create({ data: dataCreate });
+            stockAsignado[key] = 0;
+
+          } else {
+            // ❌ No hay stock: Va a Producción (Con Fecha)
+            await prisma.detallePedido.update({
+              where: { id: prenda.id },
+              data: dataProduccion
+            });
+          }
+        }
+      }
+
+      return NextResponse.json({ success: true, message: 'Balance procesado exitosamente.' });
+    }
+
+    // =========================================================
+    // LÓGICA TRADICIONAL (Para el modal individual)
+    // =========================================================
     const { prendaIds, nuevoEstado, fechaEstimadaConfeccion, observacionOperaciones } = body;
 
     if (!Array.isArray(prendaIds) || prendaIds.length === 0) {
@@ -177,7 +288,6 @@ export async function PUT(request: Request) {
     const updateData: any = {};
     if (nuevoEstado) updateData.estadoOperacion = nuevoEstado;
     
-    // 🔥 SANITIZACIÓN: Cortamos la hora que envía el navegador y le forzamos mediodía UTC 🔥
     if (fechaEstimadaConfeccion) {
       const fechaLimpia = fechaEstimadaConfeccion.split('T')[0];
       updateData.fechaEstimadaConfeccion = new Date(`${fechaLimpia}T12:00:00Z`);

@@ -69,15 +69,11 @@ export default function EmpaquePage() {
 
   const handleOpenDetalle = (grupo: any) => { setGrupoDetalle(grupo); setModalDetalleOpen(true); };
 
-  // 🔥 SALVAVIDAS ANTI-CRASH 🔥
   const handleOpenEmpacar = (contrato: any) => {
     setContratoSel(contrato);
     setResponsable(contrato.responsableEmpaque !== 'Sin Asignar' ? contrato.responsableEmpaque : '');
-    
-    // Si detallesCompletos no viene, usamos detalles o un arreglo vacío, evitando el error de JSON
     const prendasSeguras = contrato.detallesCompletos || contrato.detalles || [];
     setPrendasChecklist(JSON.parse(JSON.stringify(prendasSeguras)));
-    
     setModalEmpacarOpen(true);
   };
 
@@ -171,9 +167,7 @@ export default function EmpaquePage() {
       const prendaNombre = p.tipoRopa || 'Prenda';
       const color = p.color || '-';
       const talla = p.talla || '-';
-      const fIngreso = p.createdAt ? new Date(p.createdAt).toLocaleDateString('es-EC') : '-';
-      const fCompromiso = p.fechaEstimadaConfeccion ? new Date(p.fechaEstimadaConfeccion).toLocaleDateString('es-EC', {timeZone: 'UTC'}) : 'Sin Fecha';
-
+      
       const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
       const key = `${sku}_${prendaColorTalla}`;
       if (!mapaTotales[key]) mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
@@ -346,7 +340,12 @@ export default function EmpaquePage() {
                   <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
                     <td className="p-3.5 font-mono font-black text-purple-700">{item.codigoOP}</td>
                     <td className="p-3.5 font-bold text-gray-900 truncate max-w-200px">{item.institucionNombre}</td>
-                    <td className="p-3.5 text-center font-bold text-gray-800">{item.paquetesCantidad}</td>
+                    <td className="p-3.5 text-center">
+                      <div className="font-bold text-gray-800 text-sm">{item.paquetesCantidad}</div>
+                      <div className="text-[10px] font-bold text-gray-500 mt-1">
+                        Tot: {item.totalPrendasEscuela} | Desp: {item.despachadasHistoricasEscuela} | <span className="text-red-500">Saldo: {item.saldoPendienteEscuela}</span> | <span className="text-blue-600">Listo: {item.preparadasSinDespacharEscuela}</span>
+                      </div>
+                    </td>
                     
                     <td className="p-3.5">
                       <div className="flex items-center gap-2">
@@ -419,7 +418,7 @@ export default function EmpaquePage() {
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1 mt-4">Lista de Contratos para Empacar (Checklist):</p>
             
             <div className="overflow-x-auto border rounded-xl">
-              <table className="w-full text-left text-xs border-collapse min-w-800px">
+              <table className="w-full text-left text-xs border-collapse min-w-[800px">
                 <thead>
                   <tr className="bg-gray-100 text-gray-600 font-bold uppercase border-b">
                     <th className="p-3">N. Paquete</th><th className="p-3">Cliente</th><th className="p-3 text-center">Saldos Contrato</th><th className="p-3">Responsable</th><th className="p-3 text-center">Acciones</th>
@@ -435,7 +434,7 @@ export default function EmpaquePage() {
                         </td>
                         <td className="p-3 font-bold text-gray-800">{ped.nombreCliente}</td>
                         <td className="p-3 text-center">
-                          <div className="text-[10px] font-bold text-gray-500">Tot: {ped.totalPrendasContrato} | Desp: {ped.despachadasHistoricasContrato} | <span className="text-red-500">Saldo: {ped.saldoPendienteContrato}</span></div>
+                          <div className="text-[10px] font-bold text-gray-500">Tot: {ped.totalPrendasContrato} | Desp: {ped.despachadasHistoricasContrato} | <span className="text-red-500">Saldo: {ped.saldoPendienteContrato}</span> | <span className="text-blue-600">Listo: {ped.preparadasSinDespacharContrato}</span></div>
                         </td>
                         <td className="p-3 text-gray-600 font-semibold">{ped.responsableEmpaque}</td>
                         <td className="p-3 text-center">
@@ -453,6 +452,7 @@ export default function EmpaquePage() {
           <DialogFooter className="mt-4"><Button variant="outline" size="sm" onClick={() => setModalDetalleOpen(false)}>Cerrar Panel</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
       <Dialog open={modalEmpacarOpen} onOpenChange={setModalEmpacarOpen}>
         <DialogContent className="sm:max-w-6xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[90vh]">
           <DialogHeader><DialogTitle className="text-xl font-black text-gray-900 border-b pb-2 flex items-center gap-2"><Package className="text-amber-600"/> Checklist de Empaque</DialogTitle></DialogHeader>

@@ -160,8 +160,6 @@ export default function ProduccionPage() {
       cargarDatos();
     } catch (e) { showToast('error', 'Error al enviar prenda.'); }
   };
-
-  // 🔥 GENERADOR EXCEL CORREGIDO 🔥
   const generarExcelConResumen = (prendasAExportar: any[], tituloArchivo: string, tituloHoja: string) => {
     if (prendasAExportar.length === 0) return showToast('error', 'No hay datos para exportar.');
     
@@ -497,14 +495,12 @@ export default function ProduccionPage() {
                                 <td className="p-2 text-center font-black">{p.cantidad}</td>
                                 <td className="p-2 text-[11px]">{p.bordado ? <span className="font-bold text-purple-700">{p.bordado}</span> : <span className="text-gray-400 italic">Sin bordado</span>}</td>
                                 <td className="p-2 text-[11px]">{(p.observacion || p.observacionOperaciones) ? <span className="text-gray-800 font-medium">{p.observacion || p.observacionOperaciones}</span> : <span className="text-gray-400 italic">Sin observaciones</span>}</td>
-                                
-                                {/* 🔥 AQUI ESTÁ LA CORRECCIÓN VISUAL: LEE DEL OBJETO operarioAsignado 🔥 */}
                                 <td className="p-2 text-center font-bold text-blue-700">{p.operarioAsignado?.nombre || 'Sin Asignar'}</td>
                                 
                                 <td className="p-2 text-center"><Badge variant="outline" className={getEstadoColor(p.estadoProduccion)}>{p.estadoProduccion}</Badge></td>
                                 <td className="p-2 text-center">
                                   <Button size="sm" className="h-7 text-[10px] bg-purple-600 hover:bg-purple-700 text-white font-bold" onClick={() => handleMandarEmpaqueIndividual(p.id)}>
-                                    A Empaque
+                                    A Despacho
                                   </Button>
                                 </td>
                               </tr>

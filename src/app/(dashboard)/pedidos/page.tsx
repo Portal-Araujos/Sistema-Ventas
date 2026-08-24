@@ -141,7 +141,7 @@ export default function PedidosPage() {
   };
 
   const handleEnviarMasivo = async (institucionId: string) => {
-    if (!confirm('¿Seguro que quieres enviar TODOS los contratos de esta escuela a Producción?')) return;
+    if (!confirm('¿Seguro que quieres enviar TODOS los contratos de esta escuela a Operaciones?')) return;
 
     const grupoAEnviar = grupos.find(g => g.id === institucionId);
 
