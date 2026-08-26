@@ -52,32 +52,40 @@ export async function GET(request: Request) {
         where: { semanaAnio: semanaAnioKey }
       })
     ]);
+    
     // 4. LÓGICA DE DOBLE MATEMÁTICA (APROBADAS VS EN TRÁNSITO)
     const reporte = vendedores.map(vend => {
       const ventasVend = ventasSemana.filter(v => v.vendedorId === vend.id);
-      // Objetos para guardar la suma por día
-      const diasReales = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0 };
-      const diasTransito = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0 };
+      // Objetos para guardar la suma por día (Agregado el Domingo)
+      const diasReales = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 };
+      const diasTransito = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 };
+      
       ventasVend.forEach(v => {
         const fechaEc = new Date(new Date(v.fechaVenta).toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
         const diaSemana = fechaEc.getDay(); // 0: Dom, 1: Lun...
+        
         // REGLA: ¿Es una venta Real (Aprobada) o En Tránsito (Bloqueada)?
         const esValida = v.verificacionFact && v.verificacionFact !== 'Sin validar';
         const targetObj = esValida ? diasReales : diasTransito;
+        
         if (diaSemana === 1) targetObj.lunes += v.valorContrato;
         else if (diaSemana === 2) targetObj.martes += v.valorContrato;
         else if (diaSemana === 3) targetObj.miercoles += v.valorContrato;
         else if (diaSemana === 4) targetObj.jueves += v.valorContrato;
         else if (diaSemana === 5) targetObj.viernes += v.valorContrato;
         else if (diaSemana === 6) targetObj.sabado += v.valorContrato;
+        else if (diaSemana === 0) targetObj.domingo += v.valorContrato; // 🔥 Lógica para sumar el Domingo (0)
       });
+      
       // Cálculos Matemáticos de la Sábana Real (La que importa para la Meta)
       const cierreSemanal = Object.values(diasReales).reduce((a, b) => a + b, 0);
       const metaObj = metas.find(m => m.vendedorId === vend.id);
       const metaMonto = metaObj ? metaObj.montoMeta : 0;
       const porcentajeCumplido = metaMonto > 0 ? parseFloat(((cierreSemanal / metaMonto) * 100).toFixed(1)) : 0;
+      
       // Cálculo del Tránsito (El Limbo)
       const transitoTotal = Object.values(diasTransito).reduce((a, b) => a + b, 0);
+      
       return {
         vendedorId: vend.id,
         vendedorNombre: vend.nombre,
@@ -89,6 +97,7 @@ export async function GET(request: Request) {
         porcentajeCumplido
       };
     });
+    
     return NextResponse.json({
       semanaFechaLunes: fechaLunesStr,
       reporte
@@ -98,6 +107,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Error al generar indicadores' }, { status: 500 });
   }
 }
+
 // POST: DEFINIR METAS SEMANALES (Intacto)
 export async function POST(request: Request) {
   try {
@@ -135,6 +145,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Error al guardar metas' }, { status: 500 });
   }
 }
+
 function getLunesActual(): string {
   const d = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
   const day = d.getDay();

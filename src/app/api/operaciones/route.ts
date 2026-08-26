@@ -169,12 +169,8 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { modo } = body;
-
-    // 🔥 NUEVO MÓDULO: CEREBRO DE ASIGNACIÓN INTELIGENTE DE STOCK 🔥
     if (modo === 'asignacion_stock') {
       const { institucionId, stockAsignado, fechaEstimadaConfeccion } = body;
-
-      // 1. Sanitizar y configurar la fecha en formato UTC (Si se envió)
       let fechaParseada = null;
       if (fechaEstimadaConfeccion) {
         const fechaLimpia = fechaEstimadaConfeccion.split('T')[0];
@@ -191,7 +187,7 @@ export async function PUT(request: Request) {
       const genericasPorContrato = new Map();
 
       for (const p of prendasPendientes) {
-        const esPersonalizado = (p.bordado && p.bordado.trim() !== '') || (p.observacion && p.observacion.trim() !== '');
+        const esPersonalizado = (p.observacion && p.observacion.trim() !== '');
         if (esPersonalizado) {
           personalizadas.push(p);
         } else {
@@ -203,23 +199,15 @@ export async function PUT(request: Request) {
           grupo.items.push(p);
         }
       }
-
-      // 🎯 OBJETO DE ACTUALIZACIÓN PARA PRODUCCIÓN (Incluye la nueva fecha)
       const dataProduccion: any = { estadoOperacion: 'En produccion', estadoProduccion: 'Planificacion' };
       if (fechaParseada) dataProduccion.fechaEstimadaConfeccion = fechaParseada;
-
-      // 3. ENVIAR PERSONALIZADAS A PRODUCCIÓN DIRECTO
       for (const p of personalizadas) {
         await prisma.detallePedido.update({
           where: { id: p.id },
           data: dataProduccion
         });
       }
-
-      // 4. ORDENAR POR PRIORIDAD: Contratos con menos prendas van primero
       const contratosOrdenados = Array.from(genericasPorContrato.values()).sort((a, b) => a.totalPrendas - b.totalPrendas);
-
-      // 5. ASIGNAR STOCK O DIVIDIR PRENDAS
       for (const contrato of contratosOrdenados) {
         for (const prenda of contrato.items) {
           const key = `${prenda.skuCodigo || 'S/N'}|${prenda.tipoRopa || 'Prenda'}|${prenda.color || '-'}|${prenda.talla || '-'}`;

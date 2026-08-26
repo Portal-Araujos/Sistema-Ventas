@@ -266,7 +266,7 @@ export default function ProduccionPage() {
       <html>
         <head><title>${tituloDocumento}</title><style>@page { size: landscape; margin: 10mm; } body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10px; color: #222; } h1 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 2px; } p { text-align: center; margin-top: 0; color: #555; font-size: 11px; } table { width: 100%; border-collapse: collapse; margin-bottom: 25px; } th, td { border: 1px solid #999; padding: 5px 3px; text-align: left; } th { background-color: #e5e5e5; font-weight: bold; text-transform: uppercase; font-size: 9px; } .tabla-totales { width: 55%; margin: 0 auto; } .tabla-totales th { background-color: #222; color: #fff; }</style></head>
         <body>
-          <h1>${tituloDocumento}</h1><p>Fecha Impresión: ${new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })}</p>
+          <h1>${tituloDocumento}</h1><p>Fecha Impresión: ${new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })} | Vendedor: ${grupo.vendedorNombre}</p>
           <table><thead><tr><th>Código OP</th><th>Institución</th><th>N° Contrato</th><th>Cliente</th><th>SKU</th><th>Prenda</th><th>Color</th><th>Sexo</th><th>Talla</th><th>Cant.</th><th>Bordado</th><th>Observación</th><th>Operario</th><th>Estado</th><th>Ingreso Taller</th><th>F. Compromiso</th></tr></thead><tbody>${htmlFilasDetalle}</tbody></table>
           <div style="page-break-inside: avoid;"><h2 style="text-align:center; font-size:14px; margin-bottom:8px;">TOTALES Y RESUMEN DE CORTE</h2><table class="tabla-totales"><thead><tr><th>SKU</th><th>Prenda (Color y Talla)</th><th style="text-align:center;">Cantidad Total</th></tr></thead><tbody>${htmlFilasTotales}</tbody></table></div>
           <script>window.onload = function() { window.print(); window.close(); }</script>
@@ -375,11 +375,14 @@ export default function ProduccionPage() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[65vh]">
             <table className="w-full text-left border-collapse text-xs min-w-800px">
               <thead>
                 <tr className="bg-gray-100 text-gray-600 font-black uppercase border-b border-gray-200">
-                  <th className="p-3.5">Orden OP</th><th className="p-3.5">Institución</th><th className="p-3.5 text-center">Paquetes</th>
+                  <th className="p-3.5">Orden OP</th>
+                  <th className="p-3.5">Institución</th>
+                  <th className="p-3.5">Vendedor</th>
+                  <th className="p-3.5 text-center">Paquetes</th>
                   <th className="p-3.5 text-center">Prendas</th><th className="p-3.5 text-center">Estado Taller</th>
                   <th className="p-3.5">Fechas (Inicio / Comp.)</th><th className="p-3.5 text-center">Acciones</th>
                 </tr>
@@ -391,6 +394,7 @@ export default function ProduccionPage() {
                     <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
                       <td className="p-3.5 font-mono font-black text-amber-600">{item.codigoOP}</td>
                       <td className="p-3.5 font-bold text-gray-900 truncate max-w-150px">{item.institucionNombre}</td>
+                      <td className="p-3.5 text-gray-600 font-semibold">{item.vendedorNombre}</td>
                       <td className="p-3.5 text-center font-bold text-gray-800">{item.paquetesCantidad}</td>
                       <td className="p-3.5 text-center font-black text-blue-600 text-sm">{item.totalPrendas}</td>
                       <td className="p-3.5 text-center"><Badge className={getEstadoColor(item.estadoActual)}>{item.estadoActual}</Badge></td>
@@ -420,7 +424,7 @@ export default function ProduccionPage() {
             </table>
           </div>
           {totalPages > 1 && (
-            <div className="p-4 border-t flex justify-between items-center bg-gray-50/50">
+            <div className="sticky bottom-0 z-20 p-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3 bg-white/95 backdrop-blur-sm shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
               <span className="text-xs text-gray-500 font-medium">Página {currentPage} de {totalPages}</span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="h-8"><ChevronLeft size={14}/></Button>
@@ -431,7 +435,6 @@ export default function ProduccionPage() {
         </div>
       )}
 
-      {/* 👁️ MODAL: DESGLOSE DE PRENDAS */}
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
         <DialogContent className="sm:max-w-6xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[88vh]">
           <DialogHeader>
@@ -443,9 +446,12 @@ export default function ProduccionPage() {
 
           <div className="space-y-4 mt-2">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-xl border text-xs">
+              <div><span className="text-gray-400 block font-bold uppercase">CÓDIGO PEDIDO</span><span className="font-mono font-black text-blue-600">{grupoDetalle?.codigoOP}</span></div>
               <div><span className="text-gray-400 block font-bold uppercase">INSTITUCIÓN</span><span className="font-extrabold text-gray-800">{grupoDetalle?.institucionNombre}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">FECHA COMPROMISO ENTREGA</span><span className="font-extrabold text-gray-700">{grupoDetalle?.fechaCompromisoTexto}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">VENDEDOR</span><span className="font-extrabold text-gray-800">{grupoDetalle?.vendedorNombre}</span></div>
               <div><span className="text-gray-400 block font-bold uppercase">PAQUETES</span><span className="font-extrabold text-gray-800">{grupoDetalle?.paquetesCantidad}</span></div>
-              <div className="col-span-2"><span className="text-gray-400 block font-bold uppercase">TOTAL PRENDAS</span><span className="font-black text-blue-600 text-sm">{grupoDetalle?.totalPrendas} prendas</span></div>
+              <div className="col-span-2"><span className="text-gray-400 block font-bold uppercase">TOTAL PRENDAS</span><span className="font-black text-emerald-600 text-sm">{grupoDetalle?.totalPrendas} prendas</span></div>
             </div>
 
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">Prendas por Contrato:</p>
@@ -477,7 +483,7 @@ export default function ProduccionPage() {
                           <thead>
                             <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase text-[10px]">
                               <th className="p-2 text-center w-8">Sel.</th>
-                              <th className="p-2">SKU</th><th className="p-2">Prenda</th><th className="p-2">Talla/Color</th>
+                              <th className="p-2">SKU</th><th className="p-2">Prenda</th><th className="p-2">Talla/Color/ Genero</th>
                               <th className="p-2 text-center">Cant.</th><th className="p-2">Bordado</th><th className="p-2">Observación</th>
                               <th className="p-2 text-center">Operario</th>
                               <th className="p-2 text-center">Estado Taller</th><th className="p-2 text-center">Acción</th>
@@ -491,7 +497,7 @@ export default function ProduccionPage() {
                                 </td>
                                 <td className="p-2 font-mono font-bold text-blue-600">{p.skuCodigo || 'S/N'}</td>
                                 <td className="p-2 font-bold text-gray-800">{p.tipoRopa}</td>
-                                <td className="p-2 text-gray-600">{p.talla} ({p.color || '-'})</td>
+                                <td className="p-2 text-gray-600">{p.talla} ({p.color || '-'}) ({p.genero})</td>
                                 <td className="p-2 text-center font-black">{p.cantidad}</td>
                                 <td className="p-2 text-[11px]">{p.bordado ? <span className="font-bold text-purple-700">{p.bordado}</span> : <span className="text-gray-400 italic">Sin bordado</span>}</td>
                                 <td className="p-2 text-[11px]">{(p.observacion || p.observacionOperaciones) ? <span className="text-gray-800 font-medium">{p.observacion || p.observacionOperaciones}</span> : <span className="text-gray-400 italic">Sin observaciones</span>}</td>

@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Map, BookOpen, Layers, Edit2, Sliders, CheckCircle2, AlertCircle, Plus, Navigation, Power, PowerOff } from 'lucide-react';
+import { Settings, Map, BookOpen, Layers, Edit2, Sliders, CheckCircle2, AlertCircle, Plus, Navigation, Power, PowerOff, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
 const MENU_OPCIONES = [
+  { id: 'bodegas', icon: <ShieldCheck size={18} />, label: 'Asignación Bodegas' }, // 🔥 NUEVO BOTÓN
   { id: 'reglaTamano', icon: <Sliders size={18} />, label: 'Rangos de Tamaño' },
   { id: 'sostenimiento', icon: <Layers size={18} />, label: 'Sostenimiento' },
   { id: 'jornada', icon: <Layers size={18} />, label: 'Jornada' },
@@ -23,6 +24,7 @@ const MENU_OPCIONES = [
   { id: 'estadoComercial', icon: <Layers size={18} />, label: 'Estados Com.(Visitas)' },
   { id: 'estadoCliente', icon: <Layers size={18} />, label: 'Estados de Cli. (Ventas)' },
   { id: 'estadoContrato', icon: <Layers size={18} />, label: 'Estados de Contrato' },
+  { id: 'tipoCliente', icon: <BookOpen size={18} />, label: 'Tipos de Cliente' },
   { id: 'tipoCobro', icon: <BookOpen size={18} />, label: 'Tipos de Cobro' },
   { id: 'tipoGestion', icon: <Navigation size={18} />, label: 'Tipos de Gestión' },
   { id: 'estadoOperacion', icon: <Settings size={18} />, label: 'Estados de Operación' },
@@ -30,21 +32,33 @@ const MENU_OPCIONES = [
 ];
 
 export default function ConfiguracionPage() {
-  const [activeTab, setActiveTab] = useState('reglaTamano');
+  const [activeTab, setActiveTab] = useState('bodegas'); // 🔥 INICIA EN LA NUEVA PESTAÑA
   const [catalogos, setCatalogos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  // 🔥 ESTADO DE BODEGAS 🔥
+  const [bodegasForm, setBodegasForm] = useState({ textilId: '', electroId: '' });
+
   const [editModal, setEditModal] = useState({ open: false, id: 0, nombre: '', tipo: '' });
   const [tamanoModal, setTamanoModal] = useState({ open: false, id: 0, nombre: '', minDocentes: 0, maxDocentes: 9999 });
   const [createModal, setCreateModal] = useState({ open: false, nombre: '', provinciaId: '', cantonId: '' });
   const [saving, setSaving] = useState(false);
+  
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => { setToastMsg({ tipo, texto }); setTimeout(() => setToastMsg(null), 5000); };
+  
   const cargarDatos = async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/catalogos');
       const data = await res.json();
       setCatalogos(data);
+      if (data.configSeguridad) {
+        setBodegasForm({
+          textilId: data.configSeguridad.encargadoBodegaTextilId || '',
+          electroId: data.configSeguridad.encargadoBodegaElectroId || ''
+        });
+      }
     } catch (error) { showToast('error', 'Error de conexión al cargar los catálogos.'); } finally { setLoading(false); }
   };
 
@@ -68,12 +82,33 @@ export default function ConfiguracionPage() {
       case 'estadoComercial': return catalogos.estadosComerciales || [];
       case 'estadoCliente': return catalogos.estadosCliente || [];
       case 'estadoContrato': return catalogos.estadosContrato || [];
+      case 'tipoCliente': return catalogos.tiposCliente || [];
       case 'tipoCobro': return catalogos.tiposCobro || [];
       case 'tipoGestion': return catalogos.tiposGestion || [];
       case 'estadoOperacion': return catalogos.estadosOperacion || [];
       case 'estadoProduccion': return catalogos.estadosProduccion || [];
       default: return [];
     }
+  };
+
+  // 🔥 GUARDAR CONFIGURACIÓN DE BODEGAS 🔥
+  const handleGuardarBodegas = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/catalogos', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'configuracionSeguridad',
+          id: 1,
+          encargadoBodegaTextilId: bodegasForm.textilId || null,
+          encargadoBodegaElectroId: bodegasForm.electroId || null
+        })
+      });
+      if (!res.ok) throw new Error('Error al actualizar');
+      showToast('exito', 'Jefes de inventario asignados correctamente.');
+      await cargarDatos();
+    } catch (error) { showToast('error', 'Error al guardar configuración.'); } finally { setSaving(false); }
   };
 
   const handleCreateSave = async () => {
@@ -172,13 +207,13 @@ export default function ConfiguracionPage() {
           </div>
         </div>
         <div className="flex-1">
-          <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+          <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden min-h-[50vh]">
             
             <div className="p-4 md:p-6 border-b border-border flex justify-between items-center">
               <h2 className="text-lg font-bold text-foreground capitalize">
-                {activeTab === 'reglaTamano' ? 'Clasificación por N° Docentes' : `Catálogo: ${MENU_OPCIONES.find(o => o.id === activeTab)?.label}`}
+                {activeTab === 'reglaTamano' ? 'Clasificación por N° Docentes' : activeTab === 'bodegas' ? 'Enrutamiento de Inventario' : `Catálogo: ${MENU_OPCIONES.find(o => o.id === activeTab)?.label}`}
               </h2>
-              {activeTab !== 'reglaTamano' && (
+              {activeTab !== 'reglaTamano' && activeTab !== 'bodegas' && (
                 <Button className="bg-primary hover:bg-primary/90 text-white shadow-sm font-bold h-9 text-xs" onClick={() => setCreateModal({ open: true, nombre: '', provinciaId: '', cantonId: '' })}>
                   <Plus size={16} className="mr-1" /> Nuevo Registro
                 </Button>
@@ -188,6 +223,33 @@ export default function ConfiguracionPage() {
             <div className="p-0">
               {loading ? (
                 <div className="p-12 text-center text-secondary">Cargando datos...</div>
+              ) : activeTab === 'bodegas' ? (
+                // 🔥 PANTALLA EXCLUSIVA DE ENRUTAMIENTO DE BODEGAS 🔥
+                <div className="p-6 bg-white animate-in fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-blue-50/50 p-5 rounded-xl border border-blue-200">
+                      <Label className="text-sm font-black text-blue-900 uppercase">Jefe de Producción Textil</Label>
+                      <p className="text-xs text-blue-700 mt-1 mb-3 font-medium">Recibirá todos los pedidos de uniformes y prendas marcados como "Pedido Textil".</p>
+                      <select className="w-full h-11 border border-blue-400 rounded-md px-3 text-sm bg-white font-bold text-gray-800 outline-none" value={bodegasForm.textilId} onChange={e => setBodegasForm({...bodegasForm, textilId: e.target.value})}>
+                        <option value="">-- Sin Asignar / Producción General --</option>
+                        {catalogos?.usuarios?.map((u: any) => <option key={u.id} value={u.id}>{u.nombre} ({u.rol?.nombre})</option>)}
+                      </select>
+                    </div>
+                    <div className="bg-purple-50/50 p-5 rounded-xl border border-purple-200">
+                      <Label className="text-sm font-black text-purple-900 uppercase">Jefe de Bodega Tecnología</Label>
+                      <p className="text-xs text-purple-700 mt-1 mb-3 font-medium">Recibirá todos los pedidos de proyectores, pizarras marcados como "Pedido Electro".</p>
+                      <select className="w-full h-11 border border-purple-400 rounded-md px-3 text-sm bg-white font-bold text-gray-800 outline-none" value={bodegasForm.electroId} onChange={e => setBodegasForm({...bodegasForm, electroId: e.target.value})}>
+                        <option value="">-- Sin Asignar / Bodega General --</option>
+                        {catalogos?.usuarios?.map((u: any) => <option key={u.id} value={u.id}>{u.nombre} ({u.rol?.nombre})</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-8 flex justify-end pt-4 border-t border-gray-100">
+                    <Button onClick={handleGuardarBodegas} disabled={saving} className="bg-gray-900 hover:bg-gray-800 text-white font-bold px-8 h-11">
+                      {saving ? 'Guardando...' : 'Aplicar Enrutamiento de Pedidos'}
+                    </Button>
+                  </div>
+                </div>
               ) : activeTab === 'reglaTamano' ? (
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -256,6 +318,8 @@ export default function ConfiguracionPage() {
           </div>
         </div>
       </div>
+      
+      {/* (EL RESTO DEL CÓDIGO DE MODALES SIGUE INTACTO AQUÍ ABAJO) */}
       <Dialog open={createModal.open} onOpenChange={(val) => setCreateModal({ ...createModal, open: val })}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-xl border-t-4 border-t-primary">
           <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Crear Nuevo Registro</DialogTitle></DialogHeader>

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  DollarSign, Plus, Upload, CheckCircle2, ShieldCheck, Edit3, Eye, AlertCircle, Pencil, Search, Download, ChevronLeft, ChevronRight
+  DollarSign, Plus, Upload, CheckCircle2, ShieldCheck, Edit3, Eye, AlertCircle, Pencil, Search, Download, ChevronLeft, ChevronRight, Ticket
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +42,20 @@ export default function VentasPage() {
   const [saving, setSaving] = useState(false);
   const [institucionesDisponibles, setInstitucionesDisponibles] = useState<any[]>([]);
 
+  // 🔥 NUEVO ESTADO: CATÁLOGO DE DEPARTAMENTOS Y TICKET MODAL 🔥
+  const [departamentos, setDepartamentos] = useState<any[]>([]);
+  const [ticketModal, setTicketModal] = useState({
+    open: false,
+    tipo: '',
+    institucionId: '',
+    asignadoAId: '',
+    prioridad: 'Media',
+    asunto: '',
+    mensajeInicial: '',
+    institucionNombre: '',
+    asignadoNombre: ''
+  });
+
   const hoyStr = new Date().toISOString().split('T')[0];
   const initialFormVenta = {
     id: '', cantonId: '', institucionId: '', fechaVenta: hoyStr, numContrato: '',
@@ -62,19 +76,23 @@ export default function VentasPage() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const [resVentas, resCat, resInst] = await Promise.all([
+      // 🔥 AHORA CARGAMOS TAMBIÉN LOS DEPARTAMENTOS PARA EL TICKET 🔥
+      const [resVentas, resCat, resInst, resDeptos] = await Promise.all([
         fetch('/api/ventas'), 
         fetch('/api/catalogos'),
-        fetch('/api/instituciones')
+        fetch('/api/instituciones'),
+        fetch('/api/departamentos')
       ]);
 
       const dataVentas = await resVentas.json();
       const dataCat = await resCat.json();
+      const dataInst = await resInst.json();
+      const dataDeptos = await resDeptos.json();
       
       setVentas(Array.isArray(dataVentas) ? dataVentas : []);
       setCatalogos(dataCat);
-      const data = await resInst.json();
-      setInstitucionesDisponibles(data.data ? data.data : data);
+      setInstitucionesDisponibles(dataInst.data ? dataInst.data : dataInst);
+      setDepartamentos(Array.isArray(dataDeptos) ? dataDeptos : []);
       
       if (dataCat.userRol) setUserRol(dataCat.userRol);
       if (dataCat.userPermisos) setUserPermisos(dataCat.userPermisos); 
@@ -185,6 +203,57 @@ export default function VentasPage() {
     } catch (e) { showToast('error', "Hubo un error al guardar la auditoría."); }
   };
 
+  // 🔥 LÓGICA DE APERTURA DE TICKET AUTOMATIZADO 🔥
+  const handleOpenTicket = (v: any) => {
+    setTicketModal({
+      open: true,
+      tipo: departamentos.length > 0 ? departamentos[0].nombre : '',
+      institucionId: v.institucionId,
+      asignadoAId: v.vendedorId, // ID auto capturado
+      prioridad: 'Alta',
+      asunto: `Revisión de Contrato N° ${v.numContrato}`, // Asunto auto-generado
+      mensajeInicial: '',
+      institucionNombre: v.institucionNombre, // Para la vista
+      asignadoNombre: v.vendedorNombre // Para la vista
+    });
+  };
+
+  const handleCrearTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ticketModal.tipo) return showToast('alerta', 'Selecciona el Área Responsable');
+    if (!ticketModal.mensajeInicial) return showToast('alerta', 'Escribe las instrucciones de la novedad');
+    
+    setSaving(true);
+    try {
+      const payload = {
+        accion: 'crearTicket',
+        tipo: ticketModal.tipo,
+        institucionId: ticketModal.institucionId,
+        asignadoAId: ticketModal.asignadoAId,
+        prioridad: ticketModal.prioridad,
+        asunto: ticketModal.asunto,
+        mensajeInicial: ticketModal.mensajeInicial
+      };
+
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setTicketModal(prev => ({ ...prev, open: false }));
+        showToast('exito', '¡Ticket generado y asignado al vendedor!');
+      } else {
+        showToast('error', 'Error al crear el ticket');
+      }
+    } catch (e) {
+      showToast('error', 'Error de conexión');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleValorOMesesChange = (valor: string, meses: string) => {
     const valNum = parseFloat(valor) || 0;
     const mesNum = parseInt(meses) || 1;
@@ -217,6 +286,7 @@ export default function VentasPage() {
   if (filtros.mesCobro) ventasFiltradas = ventasFiltradas.filter(v => v.mesCobro === filtros.mesCobro);
   const totalPages = Math.max(1, Math.ceil(ventasFiltradas.length / itemsPerPage));
   const ventasPaginadas = ventasFiltradas.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  
   const exportarExcel = () => {
     const dataToExport = ventasFiltradas.map(v => ({
       'N° Contrato': v.numContrato,
@@ -239,6 +309,7 @@ export default function VentasPage() {
     XLSX.utils.book_append_sheet(wb, ws, "Base_Ventas");
     XLSX.writeFile(wb, "Reporte_Ventas_Sistema.xlsx");
   };
+
   return (
     <>
       <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen relative">
@@ -339,7 +410,7 @@ export default function VentasPage() {
                 <TableHead className="font-semibold text-gray-700 text-center w-32">Estados</TableHead>
                 <TableHead className="font-semibold text-gray-700 text-center w-28">Verificación</TableHead>
                 <TableHead className="font-semibold text-gray-700 w-48">Observaciones</TableHead>
-                <TableHead className="font-semibold text-gray-700 text-center w-28">Acción</TableHead>
+                <TableHead className="font-semibold text-gray-700 text-center w-32">Acción</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -380,11 +451,18 @@ export default function VentasPage() {
                       {v.observacionesFact}
                     </div>
                   </TableCell>
-                  <TableCell className="text-center w-28">
+                  <TableCell className="text-center w-32">
                     <div className="flex justify-center gap-1">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 text-blue-600 hover:bg-blue-50 p-0" onClick={() => handleOpenEdit(v)} title="Editar / Ver Notas">
+                      
+                      {/* 🔥 BOTÓN DE CREAR TICKET 🔥 */}
+                      <Button variant="outline" size="sm" className="h-8 w-8 text-amber-600 border-amber-200 hover:bg-amber-50 p-0" onClick={() => handleOpenTicket(v)} title="Crear Ticket de Novedad">
+                        <Ticket size={14} />
+                      </Button>
+
+                      <Button variant="ghost" size="sm" className="h-8 w-8 text-blue-600 hover:bg-blue-50 p-0" onClick={() => handleOpenEdit(v)} title="Editar Contrato">
                         <Pencil size={14} />
                       </Button>
+
                       {puedeValidar && (
                         <Button variant="outline" size="sm" className="h-8 text-xs text-primary border-primary/30 px-2" onClick={() => { setFactData({ observacionesFact: v.observacionesFact === 'Sin observaciones' ? '' : v.observacionesFact, verificacionFact: v.verificacionFact === 'Sin validar' ? '' : v.verificacionFact }); setFactModal({ open: true, venta: v }); }}>
                           <Edit3 size={14} className="mr-1" /> Auditar
@@ -412,6 +490,67 @@ export default function VentasPage() {
             </div>
           )}
         </div>
+
+        {/* 🔥 MODAL DE CREACIÓN DE TICKET DESDE VENTAS 🔥 */}
+        <Dialog open={ticketModal.open} onOpenChange={val => setTicketModal({ ...ticketModal, open: val })}>
+          <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
+                <Ticket className="text-amber-600" /> Generar Ticket de Novedad
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleCrearTicket} className="space-y-4 mt-2">
+              
+              <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
+                <div>
+                  <Label className="text-[10px] font-bold text-gray-500 uppercase">Institución Involucrada</Label>
+                  <div className="text-xs font-bold text-gray-800">{ticketModal.institucionNombre}</div>
+                </div>
+                <div>
+                  <Label className="text-[10px] font-bold text-gray-500 uppercase">Vendedor Asignado Automáticamente</Label>
+                  <div className="text-xs font-bold text-primary">{ticketModal.asignadoNombre}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-bold text-gray-700">Área Responsable *</Label>
+                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none" value={ticketModal.tipo} onChange={e => setTicketModal({ ...ticketModal, tipo: e.target.value })}>
+                    {departamentos.map(d => <option key={d.id} value={d.nombre}>{d.nombre}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs font-bold text-gray-700">Urgencia</Label>
+                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none" value={ticketModal.prioridad} onChange={e => setTicketModal({ ...ticketModal, prioridad: e.target.value })}>
+                    <option value="Baja">🟢 Baja</option>
+                    <option value="Media">🟡 Media</option>
+                    <option value="Alta">🟠 Alta</option>
+                    <option value="Urgente">🔴 Urgente</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-bold text-gray-700">Asunto del Ticket *</Label>
+                <Input required value={ticketModal.asunto} onChange={e => setTicketModal({ ...ticketModal, asunto: e.target.value })} className="mt-1 h-10 font-bold bg-gray-50" />
+              </div>
+
+              <div>
+                <Label className="text-xs font-bold text-gray-700">Instrucciones / Novedad *</Label>
+                <textarea required className="w-full h-24 border rounded-md p-2 text-xs bg-white mt-1 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 resize-none" placeholder="Ej: Falta copia de cédula, por favor subir el documento corregido..." value={ticketModal.mensajeInicial} onChange={e => setTicketModal({ ...ticketModal, mensajeInicial: e.target.value })} />
+              </div>
+
+              <DialogFooter className="pt-2 flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setTicketModal({ ...ticketModal, open: false })}>Cancelar</Button>
+                <Button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-600 text-white font-bold">
+                  {saving ? 'Enviando...' : 'Crear y Asignar Ticket'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+
         <Dialog open={openCreate} onOpenChange={setOpenCreate}>
           <DialogContent className="sm:max-w-xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
             <DialogHeader>

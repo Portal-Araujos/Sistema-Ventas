@@ -7,6 +7,7 @@ const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
 // GET: OBTENER LISTADO DE VENTAS CON FILTROS Y SEGURIDAD
+// GET: OBTENER LISTADO DE VENTAS CON FILTROS Y SEGURIDAD
 export async function GET(request: Request) {
   try {
     // 🔒 1. EXTRAER TOKEN Y SABER QUIÉN ES
@@ -70,6 +71,7 @@ export async function GET(request: Request) {
       cantonId: v.institucion.parroquia.canton.id,
       cantonNombre: v.institucion.parroquia.canton.nombre,
       provinciaNombre: v.institucion.parroquia.canton.provincia.nombre,
+      vendedorId: v.vendedor.id, // 🔥 NUEVO CAMPO AÑADIDO PARA ASIGNAR EL TICKET 🔥
       vendedorNombre: v.vendedor.nombre,
       numContrato: v.numContrato,
       valorContrato: v.valorContrato,

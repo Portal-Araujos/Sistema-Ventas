@@ -23,12 +23,15 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
   const [loading, setLoading] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => { setToastMsg({ tipo, texto }); setTimeout(() => setToastMsg(null), 4000); };
+  
   const [instituciones, setInstituciones] = useState<any[]>([]);
   const [tiposCobro, setTiposCobro] = useState<any[]>([]);
   const [estadosCliente, setEstadosCliente] = useState<any[]>([]);
   const [estadosContrato, setEstadosContrato] = useState<any[]>([]);
   const [tiposGestion, setTiposGestion] = useState<any[]>([]);
   const [estadosComerciales, setEstadosComerciales] = useState<any[]>([]);
+  const [tiposCliente, setTiposCliente] = useState<any[]>([]); // 🔥 INYECTAMOS EL NUEVO CATÁLOGO
+  
   const [catalogoSKU, setCatalogoSKU] = useState<any[]>([]);
   const [draftPrenda, setDraftPrenda] = useState({ tipoRopa: '', color: '', genero: '', talla: '', cantidad: 1, bordado: '', observacion: '' });
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -46,11 +49,13 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
   const [huboVenta, setHuboVenta] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number>(0);
   const [ventasItem, setVentasItem] = useState<any[]>([]);
+
   useEffect(() => {
     if (!isLibre && institucionPreseleccionada) {
       setFormData(prev => ({ ...prev, institucionId: institucionPreseleccionada.id }));
     }
   }, [isLibre, institucionPreseleccionada, open]);
+
   useEffect(() => {
     if (huboVenta && ventasItem.length === 0) {
       setVentasItem([{ numContrato: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', prendas: [] }]);
@@ -58,6 +63,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       setFormData(prev => ({ ...prev, estadoGestion: 'Visitada' }));
     }
   }, [huboVenta]);
+
   useEffect(() => {
     if (open) {
       fetch('/api/instituciones').then(res => res.json()).then(data => setInstituciones(data.data || data));
@@ -67,6 +73,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
         if (data.estadosContrato) setEstadosContrato(data.estadosContrato);
         if (data.tiposGestion) setTiposGestion(data.tiposGestion); 
         if (data.estadosComerciales) setEstadosComerciales(data.estadosComerciales);
+        if (data.tiposCliente) setTiposCliente(data.tiposCliente); // 🔥 GUARDAMOS EL CATÁLOGO
       });
       fetch('/api/pedidos/sku').then(res => res.json()).then(data => {
         if(data.success && data.raw) setCatalogoSKU(data.raw);
@@ -81,26 +88,18 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       setFormData({ institucionId: '', tipoGestion: 'Presencial', estadoGestion: 'Visitada', resumenAcuerdos: '', fechaProximoContacto: '' });
     }
   }, [open]);
-  // 🔥 REUTILIZAMOS EL BUSCADOR EXISTENTE DE INSTITUCIONES 🔥
+
   const handleBuscarEscuela = async (termino: string) => {
     setBusqueda(termino);
-    
-    // Si borra el texto o tiene menos de 2 letras, cerramos el menú desplegable
     if (termino.trim().length < 2) {
       setResultadosBusqueda([]);
       setDropdownBusquedaOpen(false);
       return;
     }
-
     try {
-      // Usamos exactamente el mismo endpoint /api/instituciones con el parámetro search
       const res = await fetch(`/api/instituciones?search=${encodeURIComponent(termino)}&limit=20`);
       const json = await res.json();
-      
-      // Adaptamos la respuesta por si viene en formato { data: [...] } o como arreglo directo [...]
       const lista = Array.isArray(json) ? json : (json.data || []);
-
-      // Formateamos los campos para asegurarnos de que la lista desplegable los muestre correctamente
       const formateados = lista.map((inst: any) => ({
         id: inst.id,
         nombre: inst.nombre,
@@ -108,24 +107,21 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
         canton: inst.parroquia?.canton?.nombre || inst.canton || '',
         provincia: inst.parroquia?.canton?.provincia?.nombre || inst.provincia || ''
       }));
-
       setResultadosBusqueda(formateados);
       setDropdownBusquedaOpen(true);
-    } catch (error) {
-      console.error("Error buscando escuela:", error);
-    }
+    } catch (error) { console.error("Error buscando escuela:", error); }
   };
+
   const seleccionarEscuelaBuscada = (inst: any) => {
     setFormData({ ...formData, institucionId: inst.id });
     setBusqueda(`${inst.nombre} (${inst.canton})`);
     setDropdownBusquedaOpen(false);
   };
+
   const handleVentaChange = (index: number, field: string, value: string) => {
     setVentasItem(prev => {
       const newVentas = [...prev];
-      // Clonamos el objeto específico para no mutar el estado y dañar otros contratos
       newVentas[index] = { ...newVentas[index], [field]: value };
-      
       if (['valorContrato', 'abono', 'meses'].includes(field)) {
         const valNum = parseFloat(newVentas[index].valorContrato) || 0;
         const abonoNum = parseFloat(newVentas[index].abono) || 0;
@@ -142,14 +138,15 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       ...prev, 
       { numContrato: '', nombreCliente: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', prendas: [] }
     ]);
-    // Expandimos el último contrato que se acaba de crear
     setExpandedIndex(ventasItem.length);
   };
+
   const removeContrato = (index: number) => {
     const newVentas = ventasItem.filter((_, i) => i !== index);
     setVentasItem(newVentas);
     if (expandedIndex === index) setExpandedIndex(Math.max(0, index - 1));
   };
+
   const capturarGPS = () => {
     if (!navigator.geolocation) { showToast('error', "Tu navegador no soporta GPS."); return; }
     setGpsLoading(true);
@@ -159,10 +156,12 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
+
   const tiposRopaDisp = [...Array.from(new Set(catalogoSKU.map(s => s.tipoRopa)))];
   const coloresDisp = [...Array.from(new Set(catalogoSKU.filter(s => s.tipoRopa === draftPrenda.tipoRopa).map(s => s.color)))];
   const generosDisp = [...Array.from(new Set(catalogoSKU.filter(s => s.tipoRopa === draftPrenda.tipoRopa && s.color === draftPrenda.color).map(s => s.genero)))];
   const tallasDisp = [...Array.from(new Set(catalogoSKU.filter(s => s.tipoRopa === draftPrenda.tipoRopa && s.color === draftPrenda.color && s.genero === draftPrenda.genero).map(s => s.talla)))];
+  
   const handleDraftChange = (field: string, value: string) => {
     setDraftPrenda(prev => {
       const next = { ...prev, [field]: value };
@@ -172,18 +171,20 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       return next;
     });
   };
+
   const handleAddPrenda = (vIndex: number) => {
     if (!draftPrenda.tipoRopa || !draftPrenda.color || !draftPrenda.genero || !draftPrenda.talla || draftPrenda.cantidad < 1) {
       showToast('alerta', 'Por favor completa todos los campos de la prenda (Tipo, Color, Género y Talla).'); return;
     }
     const skuObj = catalogoSKU.find(s => s.tipoRopa === draftPrenda.tipoRopa && s.color === draftPrenda.color && s.genero === draftPrenda.genero && s.talla === draftPrenda.talla);
-    const skuCodigo = skuObj ? skuObj.codigo : 'S/COD'; // Fallback
+    const skuCodigo = skuObj ? skuObj.codigo : 'S/COD'; 
     const newVentas = [...ventasItem];
     if (!newVentas[vIndex].prendas) newVentas[vIndex].prendas = [];
     newVentas[vIndex].prendas.push({ ...draftPrenda, skuCodigo });
     setVentasItem(newVentas);
     setDraftPrenda({ ...draftPrenda, talla: '', cantidad: 1, bordado: '', observacion: '' });
   };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.institucionId) { showToast('alerta', "Selecciona una institución válida."); return; }
@@ -214,7 +215,6 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       
       const data = await res.json();
       
-      // 🔥 NUEVO: Si el backend rechaza (por ejemplo, contrato duplicado), mostramos SU error
       if (!res.ok) {
         showToast('error', data.error || 'Error al registrar la gestión.');
         setLoading(false);
@@ -222,6 +222,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       }
       
       setOpen(false);
+      setLoading(false); // 🔥 CORREGIDO EL BUG DEL BOTÓN TRABADO 🔥
       if (onSuccess) onSuccess();
       showToast('exito', huboVenta ? "¡Venta y/o Pedido guardado exitosamente!" : "¡Gestión registrada, misión cumplida!");
     } catch (error) { 
@@ -229,6 +230,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       setLoading(false);
     } 
   };
+
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -314,7 +316,6 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
                 {ventasItem.map((venta, index) => {
                   const isExpanded = expandedIndex === index;
                   const estadoNombre = estadosCliente.find(e => e.id.toString() === venta.estadoClienteId)?.nombre?.toLowerCase() || '';
-                  // Detectará si la palabra tiene "pedido" en cualquier parte (ej: "nuevo pedido", "pedido", "pedidos")
                   const isPedido = estadoNombre.includes('pedido');
                   return (
                     <div key={index} className={`rounded-xl border transition-all overflow-hidden ${isExpanded ? 'bg-emerald-50/40 border-emerald-400 shadow-md' : 'bg-white border-gray-200 hover:border-emerald-200'}`}>
@@ -329,18 +330,12 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
                           {isExpanded ? <ChevronUp size={16} className="text-emerald-600"/> : <ChevronDown size={16} className="text-gray-400"/>}
                         </div>
                       </div>
-
-                      
-
                       {isExpanded && (
                         <div className="p-4 pt-4 border-t border-emerald-100 bg-emerald-50/10">
-                          
-                          {/* 🔥 AQUÍ LLAMAMOS AL SÚPER COMPONENTE UNIVERSAL 🔥 */}
                           <ContratoVentaForm 
                             data={venta} 
-                            catalogos={{ tiposCobro, estadosCliente, estadosContrato }}
+                            catalogos={{ tiposCobro, estadosCliente, estadosContrato, tiposCliente }} // 🔥 PASAMOS LA SEÑAL AQUÍ
                             onChange={(newData) => {
-                              // Reemplazamos los 50 "handleVentaChange" por esta simple función
                               const nuevasVentas = [...ventasItem];
                               nuevasVentas[index] = newData;
                               setVentasItem(nuevasVentas);

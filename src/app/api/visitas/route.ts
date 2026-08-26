@@ -105,17 +105,12 @@ export async function POST(request: Request) {
       institucionIds, vendedorId
     } = body;
 
-    // =========================================================================
-    // 🚀 INTERCEPTOR: LÓGICA DE ASIGNACIÓN MASIVA (DÍA ESTRICTO O RANGO LÍMITE)
-    // =========================================================================
     if (institucionIds && Array.isArray(institucionIds) && institucionIds.length > 0) {
       const targetVendedorId = vendedorId || userId;
       const hoyMasivo = new Date();
       const horaDefectoMasivo = horaProgramada || hoyMasivo.toTimeString().slice(0, 5);
-      
       const programadaMasiva = fechaProgramada ? new Date(`${fechaProgramada}T12:00:00Z`) : hoyMasivo;
       const proximoMasivo = fechaProximoContacto ? new Date(`${fechaProximoContacto}T12:00:00Z`) : null;
-
       const visitasPromesas = institucionIds.map((id: string) => {
         return prisma.visitaAgenda.create({
           data: {
@@ -143,14 +138,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, message: `Se asignaron ${institucionIds.length} escuelas correctamente.` }, { status: 201 });
     }
-    // =========================================================================
-
-
-    // =========================================================================
-    // ⬇️ LÓGICA ORIGINAL DE REGISTRO INDIVIDUAL DE VISITAS Y VENTAS (INTACTA) ⬇️
-    // =========================================================================
     if (!institucionId) return NextResponse.json({ error: 'Falta la institución' }, { status: 400 });
-
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
       const numerosContratos = ventas
         .map((v: any) => String(v.numContrato).trim())
@@ -193,6 +181,13 @@ export async function POST(request: Request) {
     });
 
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
+      
+      // 🔥 LÓGICA DINÁMICA DE CATÁLOGOS (Consulta la base de datos para no quemar IDs) 🔥
+      const catalogosCliente = await prisma.estadoCliente.findMany();
+      const configSeguridad = await prisma.configuracionSeguridad.findUnique({ where: { id: 1 } });
+      const jefeTextil = configSeguridad?.encargadoBodegaTextilId || userId;
+      const jefeElectro = configSeguridad?.encargadoBodegaElectroId || userId;
+      
       const transaccionesVentas = ventas.map((v: any) => {
         const valor = parseFloat(v.valorContrato) || 0;
         const abonoVal = parseFloat(v.abono) || 0;
@@ -212,20 +207,40 @@ export async function POST(request: Request) {
             tipoCobroId: v.tipoCobroId ? parseInt(v.tipoCobroId) : null,
             estadoClienteId: v.estadoClienteId ? parseInt(v.estadoClienteId) : null,
             estadoContratoId: v.estadoContratoId ? parseInt(v.estadoContratoId) : null,
+            tipoClienteId: v.tipoClienteId ? parseInt(v.tipoClienteId) : null, 
+            tieneCedula: Boolean(v.tieneCedula),
             estadoTicket: 'Pendiente Facturación'
           }
         });
       });
       await Promise.all(transaccionesVentas);
-
+      
+      // 🔥 BIFURCACIÓN LOGÍSTICA DE PEDIDOS (Cero Quemados) 🔥
       const transaccionesPedidos = ventas
-        .filter((v: any) => (Array.isArray(v.prendas) && v.prendas.length > 0) || v.nombreCliente)
+        .filter((v: any) => {
+          // Buscamos dinámicamente qué eligió
+          const estadoEscogido = catalogosCliente.find(e => e.id === (v.estadoClienteId ? parseInt(v.estadoClienteId) : null));
+          const nombreEstado = estadoEscogido?.nombre?.toLowerCase() || '';
+          const isEntregado = nombreEstado.includes('entregado');
+          // Si no es "Entregado" y tiene prendas, sí pasa a la bodega
+          return !isEntregado && ((Array.isArray(v.prendas) && v.prendas.length > 0) || v.nombreCliente);
+        })
         .map((v: any) => {
           const numContratoLimpio = String(v.numContrato || '').trim();
+          
+          // Clasificamos dinámicamente según la palabra
+          const estadoEscogido = catalogosCliente.find(e => e.id === (v.estadoClienteId ? parseInt(v.estadoClienteId) : null));
+          const nombreEstado = estadoEscogido?.nombre?.toLowerCase() || '';
+          const isElectro = nombreEstado.includes('electro');
+          const tipoLogistica = isElectro ? 'ELECTRO' : 'TEXTIL';
+          const operarioLogistica = isElectro ? jefeElectro : jefeTextil;
+          
           return prisma.pedido.create({
             data: {
               institucionId,
               usuarioId: userId,
+              operarioAsignadoId: operarioLogistica,
+              tipoPedido: tipoLogistica, // Se guarda TEXTIL o ELECTRO
               numContrato: numContratoLimpio || null, 
               nombreCliente: v.nombreCliente || `Cliente Contrato #${numContratoLimpio || 'S/N'}`,
               observacion: resumenAcuerdos || null,
@@ -244,6 +259,7 @@ export async function POST(request: Request) {
             }
           });
         });
+        
       if (transaccionesPedidos.length > 0) {
         await Promise.all(transaccionesPedidos);
       }

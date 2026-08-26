@@ -217,7 +217,7 @@ export default function EmpaquePage() {
         </head>
         <body>
           <h1>MASTER CHECKLIST GLOBAL - ${grupo.institucionNombre}</h1>
-          <p>Auditoría de Producción y Empaque | Generado: ${fechaImpresion}</p>
+          <p>Auditoría de Producción y Empaque | Generado: ${fechaImpresion} | Vendedor: ${grupo.vendedorNombre} </p>
           <table>
             <thead>
               <tr>
@@ -247,17 +247,39 @@ export default function EmpaquePage() {
   };
 
   const filteredData = data.filter(g => {
-    const matchSearch = g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) || g.codigoOP?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchInst = selectedInstFilter ? g.id === selectedInstFilter : true;
-    let matchKpi = true;
-    if (kpiFilter === 'Pendiente') matchKpi = g.estadoGlobal === 'Pendiente';
-    if (kpiFilter === 'En Preparación') matchKpi = g.estadoGlobal === 'En Preparación';
-    if (kpiFilter === 'Completado') matchKpi = g.estadoGlobal === 'Completado';
-    return matchSearch && matchInst && matchKpi;
+    const matchSearch = g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) || g.codigoPedido?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchInst = selectedInstFilter ? g.institucionId === selectedInstFilter : true;
+    return matchSearch && matchInst;
+  });
+  
+  // ▼ 1. COPIA Y PEGA DESDE AQUÍ HASTA paginatedData ▼
+  const sortedData = [...filteredData].sort((a, b) => {
+    const isFantasmaA = !a.fechaRequeridaTexto || a.fechaRequeridaTexto.includes('1969') || a.fechaRequeridaTexto.includes('1970');
+    const isFantasmaB = !b.fechaRequeridaTexto || b.fechaRequeridaTexto.includes('1969') || b.fechaRequeridaTexto.includes('1970');
+
+    // Mandar fantasmas (sin fecha) al final
+    if (isFantasmaA && !isFantasmaB) return 1;
+    if (!isFantasmaA && isFantasmaB) return -1;
+    if (isFantasmaA && isFantasmaB) return 0;
+
+    // Priorizar atrasados
+    if (a.esAtrasado && !b.esAtrasado) return -1;
+    if (!a.esAtrasado && b.esAtrasado) return 1;
+
+    // Convertir DD/MM/YYYY a Fecha Real para restar y ordenar
+    const parseDate = (dStr: string) => {
+      if (!dStr) return new Date(8640000000000000).getTime();
+      if (dStr.includes('-')) return new Date(dStr).getTime();
+      const p = dStr.split('/');
+      return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : new Date(dStr).getTime();
+    };
+
+    return parseDate(a.fechaRequerida || a.fechaRequeridaTexto) - parseDate(b.fechaRequerida || b.fechaRequeridaTexto);
   });
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
-  const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / itemsPerPage));
+  const paginatedData = sortedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  // ▲ FIN DE LA COPIA ▲
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
@@ -323,63 +345,80 @@ export default function EmpaquePage() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[65vh]">
             <table className="w-full text-left border-collapse text-xs min-w-800px">
               <thead>
                 <tr className="bg-gray-100 text-gray-600 font-black uppercase border-b border-gray-200">
                   <th className="p-3.5">Orden OP</th>
                   <th className="p-3.5">Institución</th>
+                  <th className="p-3.5">Vendedor</th>
                   <th className="p-3.5 text-center">Contratos</th>
                   <th className="p-3.5">Avance de Bodega</th>
                   <th className="p-3.5 text-center">Estado General</th>
+                  <th className="p-3.5 text-center">Fecha Requerida</th>
                   <th className="p-3.5 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {paginatedData.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="p-3.5 font-mono font-black text-purple-700">{item.codigoOP}</td>
-                    <td className="p-3.5 font-bold text-gray-900 truncate max-w-200px">{item.institucionNombre}</td>
-                    <td className="p-3.5 text-center">
-                      <div className="font-bold text-gray-800 text-sm">{item.paquetesCantidad}</div>
-                      <div className="text-[10px] font-bold text-gray-500 mt-1">
-                        Tot: {item.totalPrendasEscuela} | Desp: {item.despachadasHistoricasEscuela} | <span className="text-red-500">Saldo: {item.saldoPendienteEscuela}</span> | <span className="text-blue-600">Listo: {item.preparadasSinDespacharEscuela}</span>
-                      </div>
-                    </td>
-                    
-                    <td className="p-3.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                          <div className={`h-2.5 rounded-full ${getBarColor(item.avanceGlobal)}`} style={{ width: `${item.avanceGlobal}%` }}></div>
-                        </div>
-                        <span className="text-[10px] font-black w-8 text-right">{item.avanceGlobal}%</span>
-                      </div>
-                      <div className="text-[9px] text-gray-500 mt-1">{item.preparadasSinDespacharEscuela + item.despachadasHistoricasEscuela} de {item.totalPrendasEscuela} prendas listas/despachadas</div>
-                    </td>
+                {paginatedData.map((item) => {
+                  // 🔥 1. PREPARAMOS LA FECHA (Evitamos fechas fantasma si aún no la asignan) 🔥
+                  const isFantasma = !item.fechaRequeridaTexto || item.fechaRequeridaTexto.includes('1969') || item.fechaRequeridaTexto.includes('1970');
+                  const fechaReqCorregida = isFantasma ? 'No asignada' : item.fechaRequeridaTexto;
 
-                    <td className="p-3.5 text-center">
-                      <Badge className={item.estadoGlobal === 'Completado' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : item.estadoGlobal === 'En Preparación' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200'}>
-                        {item.estadoGlobal}
-                      </Badge>
-                    </td>
-                    <td className="p-3.5 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Button size="icon" variant="ghost" title="Imprimir Master Checklist Global" className="h-8 w-8 text-gray-700 hover:bg-gray-100" onClick={() => imprimirMasterChecklist(item)}>
-                          <Printer size={16} />
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-8 text-xs font-bold text-primary border-primary/30" onClick={() => handleOpenDetalle(item)}>
-                          <Eye size={14} className="mr-1" /> Panel Escuela
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
+                      <td className="p-3.5 font-mono font-black text-purple-700">{item.codigoOP}</td>
+                      <td className="p-3.5 font-bold text-gray-900 truncate max-w-100">{item.institucionNombre}</td>
+                      <td className="p-3.5 text-gray-600 font-semibold">{item.vendedorNombre}</td>
+                      <td className="p-3.5 text-center">
+                        <div className="font-bold text-gray-800 text-sm">{item.paquetesCantidad}</div>
+                        <div className="text-[10px] font-bold text-gray-500 mt-1">
+                          Tot: {item.totalPrendasEscuela} | Desp: {item.despachadasHistoricasEscuela} | <span className="text-red-500">Saldo: {item.saldoPendienteEscuela}</span> | <span className="text-blue-600">Listo: {item.preparadasSinDespacharEscuela}</span>
+                        </div>
+                      </td>
+                      
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                            <div className={`h-2.5 rounded-full ${getBarColor(item.avanceGlobal)}`} style={{ width: `${item.avanceGlobal}%` }}></div>
+                          </div>
+                          <span className="text-[10px] font-black w-8 text-right">{item.avanceGlobal}%</span>
+                        </div>
+                        <div className="text-[9px] text-gray-500 mt-1">{item.preparadasSinDespacharEscuela + item.despachadasHistoricasEscuela} de {item.totalPrendasEscuela} prendas listas/despachadas</div>
+                      </td>
+
+                      <td className="p-3.5 text-center">
+                        <Badge className={item.estadoGlobal === 'Completado' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : item.estadoGlobal === 'En Preparación' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200'}>
+                          {item.estadoGlobal}
+                        </Badge>
+                      </td>
+
+                      {/* 🔥 2. CELDA DE LA FECHA REQUERIDA 🔥 */}
+                      <td className="p-3.5 text-center">
+                        <span className={`font-bold px-2 py-1 rounded border ${item.esAtrasado ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                          {fechaReqCorregida}
+                        </span>
+                      </td>
+
+                      <td className="p-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <Button size="icon" variant="ghost" title="Imprimir Master Checklist Global" className="h-8 w-8 text-gray-700 hover:bg-gray-100" onClick={() => imprimirMasterChecklist(item)}>
+                            <Printer size={16} />
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 text-xs font-bold text-primary border-primary/30" onClick={() => handleOpenDetalle(item)}>
+                            <Eye size={14} className="mr-1" /> Panel Escuela
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
           
           {totalPages > 1 && (
-            <div className="p-4 border-t flex justify-between items-center bg-gray-50/50">
+            <div className="sticky bottom-0 z-20 p-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3 bg-white/95 backdrop-blur-sm shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
               <span className="text-xs text-gray-500 font-medium">Página {currentPage} de {totalPages}</span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="h-8"><ChevronLeft size={14}/></Button>
@@ -403,10 +442,14 @@ export default function EmpaquePage() {
           <div className="space-y-4 mt-2">
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-xl border border-gray-300 shadow-inner text-xs">
+                            <div><span className="text-gray-400 block font-bold uppercase">CÓDIGO PEDIDO</span><span className="font-mono font-black text-blue-600">{grupoDetalle?.codigoOP}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">INSTITUCIÓN</span><span className="font-extrabold text-gray-800">{grupoDetalle?.institucionNombre}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">VENDEDOR</span><span className="font-extrabold text-gray-800">{grupoDetalle?.vendedorNombre}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">PAQUETES</span><span className="font-extrabold text-gray-800">{grupoDetalle?.paquetesCantidad}</span></div>
               <div className="flex flex-col"><span className="text-gray-400 font-bold uppercase">Total Escuela</span><span className="font-black text-gray-800 text-xl">{grupoDetalle?.totalPrendasEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
               <div className="flex flex-col"><span className="text-emerald-500 font-bold uppercase">Ya Despachado</span><span className="font-black text-emerald-600 text-xl">{grupoDetalle?.despachadasHistoricasEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
               <div className="flex flex-col"><span className="text-red-500 font-bold uppercase">Saldo Pendiente</span><span className="font-black text-red-600 text-xl">{grupoDetalle?.saldoPendienteEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
-              <div className="flex flex-col"><span className="text-blue-500 font-bold uppercase">Listas p/ Despachar</span><span className="font-black text-blue-600 text-xl">{grupoDetalle?.preparadasSinDespacharEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
+              <div className="flex flex-col"><span className="text-blue-500 font-bold uppercase">Listas / Despachar</span><span className="font-black text-blue-600 text-xl">{grupoDetalle?.preparadasSinDespacharEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
             </div>
 
             {grupoDetalle?.preparadasSinDespacharEscuela > 0 && (
@@ -421,7 +464,11 @@ export default function EmpaquePage() {
               <table className="w-full text-left text-xs border-collapse min-w-[800px">
                 <thead>
                   <tr className="bg-gray-100 text-gray-600 font-bold uppercase border-b">
-                    <th className="p-3">N. Paquete</th><th className="p-3">Cliente</th><th className="p-3 text-center">Saldos Contrato</th><th className="p-3">Responsable</th><th className="p-3 text-center">Acciones</th>
+                    <th className="p-3">N. Paquete</th>
+                    <th className="p-3">Cliente</th>
+                    <th className="p-3 text-center">Saldos Contrato</th>
+                    <th className="p-3">Responsable</th>
+                    <th className="p-3 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -475,7 +522,7 @@ export default function EmpaquePage() {
                   <tr className="bg-gray-100 text-gray-600 font-bold uppercase border-b">
                     <th className="p-3">SKU</th>
                     <th className="p-3">Prenda</th>
-                    <th className="p-3">Talla/Color</th>
+                    <th className="p-3">Talla/Color/Genero</th>
                     <th className="p-3 text-center">Cant.</th>
                     <th className="p-3">Bordado/Obs</th>
                     <th className="p-3 text-center">Ubicación</th>
@@ -493,7 +540,7 @@ export default function EmpaquePage() {
                       <tr key={p.id} className={yaDespachado ? 'bg-blue-50/50 opacity-60' : aunEnTaller ? 'bg-gray-100 opacity-60' : p.estadoEmpaque === 'Preparado' ? 'bg-emerald-50/50' : 'hover:bg-gray-50'}>
                         <td className="p-3 font-mono font-bold text-blue-600">{p.skuCodigo || 'S/N'}</td>
                         <td className="p-3 font-bold text-gray-800">{p.tipoRopa}</td>
-                        <td className="p-3 text-gray-600">{p.talla} / {p.color || '-'}</td>
+                        <td className="p-3 text-gray-600">{p.talla} / {p.color || '-'} / {p.genero}</td>
                         <td className="p-3 text-center font-black text-sm">{p.cantidad}</td>
                         <td className="p-3 text-[10px]">
                           <div className="font-bold text-purple-700">{p.bordado || 'Sin bordado'}</div>

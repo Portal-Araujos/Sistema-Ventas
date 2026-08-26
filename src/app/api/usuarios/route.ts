@@ -7,12 +7,15 @@ import { cookies } from 'next/headers';
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
-// GET: Obtener todos los usuarios con su respectivo Rol
+// ==========================================
+// 🔍 GET: Obtener todos los usuarios con Rol y Área
+// ==========================================
 export async function GET() {
   try {
     const usuarios = await prisma.usuario.findMany({
       include: {
-        rol: true
+        rol: true,
+        departamento: true // 🔥 NUEVO: Traemos los datos del departamento
       },
       orderBy: { nombre: 'asc' }
     });
@@ -24,7 +27,9 @@ export async function GET() {
       rolNombre: u.rol.nombre,
       rolId: u.rolId,
       activo: u.activo,
-      bloqueado: u.bloqueado // 🔥 ESTA ES LA LÍNEA MÁGICA QUE FALTABA
+      bloqueado: u.bloqueado,
+      departamentoId: u.departamentoId, // 🔥 NUEVO
+      departamento: u.departamento      // 🔥 NUEVO (Para mostrar el nombre en la tabla)
     }));
 
     return NextResponse.json(data);
@@ -33,10 +38,13 @@ export async function GET() {
   }
 }
 
-// POST: Crear nuevo usuario
+// ==========================================
+// 🚀 POST: Crear nuevo usuario
+// ==========================================
 export async function POST(request: Request) {
   try {
-    const { nombre, email, password, rolId } = await request.json();
+    // 🔥 NUEVO: Atrapamos el departamentoId del frontend
+    const { nombre, email, password, rolId, departamentoId } = await request.json();
 
     const emailExiste = await prisma.usuario.findUnique({ where: { email } });
     if (emailExiste) return NextResponse.json({ error: 'El email ya está registrado' }, { status: 400 });
@@ -48,17 +56,22 @@ export async function POST(request: Request) {
         nombre,
         email,
         passwordHash: hashedPassword,
-        rolId: parseInt(rolId)
+        rolId: parseInt(rolId),
+        // Si mandan un departamento, lo guardamos. Si no, queda en null.
+        departamentoId: departamentoId ? parseInt(departamentoId) : null
       }
     });
 
     return NextResponse.json(nuevoUsuario, { status: 201 });
   } catch (error) {
+    console.error("Error al crear usuario:", error);
     return NextResponse.json({ error: 'Error al crear usuario' }, { status: 500 });
   }
 }
 
-// PUT: Editar usuario (Cambiar Rol, Nombre o Estado)
+// ==========================================
+// 🔄 PUT: Editar usuario (Cambiar Rol, Nombre, Área o Estado)
+// ==========================================
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -70,7 +83,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'No tienes permisos' }, { status: 403 });
     }
 
-    const { id, nombre, email, rolId, activo, password } = await request.json();
+    // 🔥 NUEVO: Extraemos el departamentoId
+    const { id, nombre, email, rolId, activo, password, departamentoId } = await request.json();
 
     const updateData: any = {};
     if (nombre) updateData.nombre = nombre;
@@ -78,7 +92,12 @@ export async function PUT(request: Request) {
     if (rolId) updateData.rolId = parseInt(rolId);
     if (activo !== undefined) updateData.activo = activo;
     
-    // 🔥 AQUÍ ESTABA EL ERROR: Cambiado de 'password' a 'passwordHash'
+    // Validamos y guardamos el cambio de departamento
+    if (departamentoId !== undefined) {
+      updateData.departamentoId = departamentoId ? parseInt(departamentoId) : null;
+    }
+    
+    // Si mandaron contraseña, la encriptamos y la actualizamos
     if (password) updateData.passwordHash = await argon2.hash(password);
 
     const usuarioActualizado = await prisma.usuario.update({
@@ -88,6 +107,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(usuarioActualizado);
   } catch (error) {
+    console.error("Error al actualizar usuario:", error);
     return NextResponse.json({ error: 'Error al actualizar usuario' }, { status: 500 });
   }
 }

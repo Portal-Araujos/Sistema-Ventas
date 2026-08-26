@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
+// GET: OBTENER LISTADO DE EMPAQUE (CON FECHA REQUERIDA Y ATRASOS)
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -60,11 +61,20 @@ export async function GET(request: Request) {
           despachadasHistoricasEscuela: 0,
           saldoPendienteEscuela: 0,
           preparadasSinDespacharEscuela: 0,
+          fechaRequeridaDate: null, // 🔥 NUEVO: Para guardar la fecha más urgente
           pedidosAsociados: []
         });
       }
 
       const grupo = mapaGrupos.get(instId);
+
+      // 🔥 LÓGICA INTELIGENTE: Buscar la fecha más próxima a vencer 🔥
+      if (ped.fechaRequerida) {
+        const pedReqDate = new Date(ped.fechaRequerida);
+        if (!grupo.fechaRequeridaDate || pedReqDate < grupo.fechaRequeridaDate) {
+          grupo.fechaRequeridaDate = pedReqDate;
+        }
+      }
       
       const totalContratoReal = ped.detalles.reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
       const despachadasHistoricas = ped.detalles.filter((d:any) => d.guiaDespachoId !== null).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
@@ -88,7 +98,7 @@ export async function GET(request: Request) {
         saldoPendienteContrato: totalContratoReal - despachadasHistoricas,
         preparadasSinDespacharContrato: preparadasSinDespachar,
         detalles: ped.detalles,
-        detallesCompletos: ped.detalles // 🔥 ESTA ES LA VARIABLE QUE FALTABA 🔥
+        detallesCompletos: ped.detalles 
       });
 
       grupo.paquetesCantidad += 1;
@@ -105,13 +115,33 @@ export async function GET(request: Request) {
       else if (avanceGlobal > 0 && avanceGlobal < 100) { estadoGlobal = 'En Preparación'; kpis.enPreparacion++; } 
       else if (avanceGlobal === 100) { estadoGlobal = 'Completado'; kpis.completados++; }
 
-      return { ...g, avanceGlobal, estadoGlobal };
+      // 🔥 FORMATO DE LA FECHA Y CÁLCULO DE ATRASOS 🔥
+      let fechaRequeridaTexto = 'No asignada';
+      let esAtrasado = false;
+
+      if (g.fechaRequeridaDate) {
+        // Formateo anti-errores de zona horaria
+        const isoString = g.fechaRequeridaDate.toISOString();
+        const [yyyy, mm, dd] = isoString.split('T')[0].split('-');
+        fechaRequeridaTexto = `${dd}/${mm}/${yyyy}`;
+
+        // Cálculo de atrasos (Comparado con Hoy a las 00:00:00)
+        const reqDateLocal = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+        const hoyLocal = new Date();
+        hoyLocal.setHours(0, 0, 0, 0);
+        esAtrasado = reqDateLocal < hoyLocal;
+      }
+
+      // Removemos el objeto fecha crudo para no ensuciar la respuesta y devolvemos lo procesado
+      const { fechaRequeridaDate, ...restoGrupo } = g;
+      return { ...restoGrupo, avanceGlobal, estadoGlobal, fechaRequeridaTexto, esAtrasado };
     });
 
     return NextResponse.json({ currentUser, kpis, tabla });
   } catch (error) { return NextResponse.json({ error: 'Error' }, { status: 500 }); }
 }
 
+// PUT: ACTUALIZAR Y DESPACHAR
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -124,7 +154,6 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { modo, pedidoId, responsableEmpaque, detallesUpdates, institucionId, codigoGuia, prendasIds } = body;
 
-    // 🔥 GENERACIÓN DE GUÍA GLOBAL DE DESPACHO 🔥
     if (modo === 'generar_guia') {
       const nuevaGuia = await prisma.guiaDespacho.create({
         data: {
@@ -158,7 +187,6 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: true, guia: nuevaGuia });
     }
 
-    // CHECKLIST INDIVIDUAL NORMAL
     const promesasDetalles = detallesUpdates.map((d: any) => 
       prisma.detallePedido.update({
         where: { id: d.id },

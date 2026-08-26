@@ -91,42 +91,41 @@ export default function OperacionesPage() {
   const handleOpenDetalle = (grupo: any) => {
     setGrupoDetalle(grupo); setContratoExpandido(null); setPrendasSeleccionadas([]); setModalDetalleOpen(true);
   };
-
-  // 🔥 NUEVA FUNCIÓN: CONSOLIDADOR DE STOCK 🔥
+  // 🔥 NUEVA FUNCIÓN: CONSOLIDADOR DE STOCK (ACTUALIZADA) 🔥
   const handleOpenStock = (grupo: any) => {
     setGrupoStock(grupo);
     let customCount = 0;
     const mapaGenericas = new Map();
 
-    // Consolidamos TODAS las prendas de la escuela que estén en revisión
     grupo.pedidosAsociados.forEach((ped: any) => {
       ped.detalles.forEach((det: any) => {
         if (det.estadoOperacion !== 'Pendiente en revision') return;
 
-        const isCustom = (det.bordado && det.bordado.trim() !== '') || (det.observacion && det.observacion.trim() !== '');
+        // Nueva regla: Solo si tiene observación escrita es "Personalizada/Obligatoria a Producción"
+        const tieneObservacion = (det.observacion && det.observacion.trim() !== '');
 
-        if (isCustom) {
+        if (tieneObservacion) {
           customCount += det.cantidad;
-        } else {
-          const sku = det.skuCodigo || 'S/N';
-          const ropa = det.tipoRopa || 'Prenda';
-          const color = det.color || '-';
-          const talla = det.talla || '-';
-          const key = `${sku}|${ropa}|${color}|${talla}`;
-
-          if (!mapaGenericas.has(key)) {
-            mapaGenericas.set(key, { key, sku, prenda: ropa, color, talla, totalSolicitado: 0 });
-          }
-          mapaGenericas.get(key).totalSolicitado += det.cantidad;
         }
+
+        // AHORA AGRUPAMOS TODAS (tengan o no observación) para que la tabla muestre el Total Real de la escuela
+        const sku = det.skuCodigo || 'S/N';
+        const ropa = det.tipoRopa || 'Prenda';
+        const color = det.color || '-';
+        const talla = det.talla || '-';
+        const key = `${sku}\vert{}${ropa}|${color}\vert{}${talla}`;
+
+        if (!mapaGenericas.has(key)) {
+          mapaGenericas.set(key, { key, sku, prenda: ropa, color, talla, totalSolicitado: 0 });
+        }
+        mapaGenericas.get(key).totalSolicitado += det.cantidad;
       });
     });
 
     setPrendasCustomCount(customCount);
     const arrayStock = Array.from(mapaGenericas.values());
     
-    // Si no hay nada que procesar, avisamos
-    if (arrayStock.length === 0 && customCount === 0) {
+    if (arrayStock.length === 0) {
       return showToast('error', 'No hay prendas en "Pendiente en revisión" para balancear.');
     }
 
@@ -211,8 +210,34 @@ export default function OperacionesPage() {
     return matchSearch && matchInst;
   });
   
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
-  const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  // ▼ 1. COPIA Y PEGA DESDE AQUÍ HASTA paginatedData ▼
+  const sortedData = [...filteredData].sort((a, b) => {
+    const isFantasmaA = !a.fechaRequeridaTexto || a.fechaRequeridaTexto.includes('1969') || a.fechaRequeridaTexto.includes('1970');
+    const isFantasmaB = !b.fechaRequeridaTexto || b.fechaRequeridaTexto.includes('1969') || b.fechaRequeridaTexto.includes('1970');
+
+    // Mandar fantasmas (sin fecha) al final
+    if (isFantasmaA && !isFantasmaB) return 1;
+    if (!isFantasmaA && isFantasmaB) return -1;
+    if (isFantasmaA && isFantasmaB) return 0;
+
+    // Priorizar atrasados
+    if (a.esAtrasado && !b.esAtrasado) return -1;
+    if (!a.esAtrasado && b.esAtrasado) return 1;
+
+    // Convertir DD/MM/YYYY a Fecha Real para restar y ordenar
+    const parseDate = (dStr: string) => {
+      if (!dStr) return new Date(8640000000000000).getTime();
+      if (dStr.includes('-')) return new Date(dStr).getTime();
+      const p = dStr.split('/');
+      return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : new Date(dStr).getTime();
+    };
+
+    return parseDate(a.fechaRequerida || a.fechaRequeridaTexto) - parseDate(b.fechaRequerida || b.fechaRequeridaTexto);
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / itemsPerPage));
+  const paginatedData = sortedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  // ▲ FIN DE LA COPIA ▲
   
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
@@ -292,7 +317,7 @@ export default function OperacionesPage() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[65vh]">
             <table className="w-full text-left border-collapse text-xs min-w-800px">
               <thead>
                 <tr className="bg-gray-100 text-gray-600 font-black uppercase border-b border-gray-200">
@@ -344,7 +369,7 @@ export default function OperacionesPage() {
           </div>
           
           {totalPages > 1 && (
-            <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3 bg-gray-50/50">
+            <div className="sticky bottom-0 z-20 p-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3 bg-white/95 backdrop-blur-sm shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
               <span className="text-xs text-gray-500 font-medium">Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredData.length)} de {filteredData.length} registros</span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="h-8"><ChevronLeft size={14} className="mr-1" /> Ant.</Button>
@@ -374,12 +399,14 @@ export default function OperacionesPage() {
             </div>
 
             {prendasCustomCount > 0 && (
-              <div className="bg-purple-50 p-3 rounded-lg border border-purple-200 flex items-center gap-2 mb-4 animate-pulse">
-                <AlertCircle className="text-purple-600 shrink-0" size={16}/>
-                <p className="text-xs text-purple-800 font-bold">
-                  Detectamos {prendasCustomCount} prendas personalizadas (Bordado/Observación especial). Éstas no se muestran aquí y se enviarán directamente a Producción al guardar.
+              <div className="bg-purple-50 p-3 rounded-lg border border-purple-200 flex items-center gap-3 mb-4">
+                <AlertCircle className="text-purple-600 shrink-0" size={20}/>
+                <p className="text-xs text-purple-800 font-medium">
+                  <strong>Atención: {prendasCustomCount} prenda(s)</strong> de esta lista tiene una <strong className="font-black">Observación Especial</strong>. 
+                  La tabla de abajo te muestra el <strong>Total General</strong>, pero al procesar, el sistema enviará obligatoriamente la prenda con observación a Producción, y usará tu Stock para asignarlo únicamente a las prendas regulares.
                 </p>
               </div>
+            
             )}
             {/* 🔥 NUEVO CAMPO: FECHA DE PRODUCCIÓN 🔥 */}
             <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 mb-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -451,10 +478,7 @@ export default function OperacionesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* MODAL DETALLE MANUAL... (Permanece igual) */}
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
-        {/* ... (Todo tu código del modalDetalleOpen anterior queda intacto aquí) ... */}
         <DialogContent className="sm:max-w-6xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[88vh]">
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-gray-900 border-b pb-3 flex items-center justify-between">
@@ -463,6 +487,12 @@ export default function OperacionesPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-xl border text-xs">
+              <div><span className="text-gray-400 block font-bold uppercase">CÓDIGO PEDIDO</span><span className="font-mono font-black text-blue-600">{grupoDetalle?.codigoPedido}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">INSTITUCIÓN</span><span className="font-extrabold text-gray-800">{grupoDetalle?.institucionNombre}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">VENDEDOR</span><span className="font-extrabold text-gray-800">{grupoDetalle?.vendedorNombre}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">PAQUETES</span><span className="font-extrabold text-gray-800">{grupoDetalle?.paquetesCantidad}</span></div>
+            </div>
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">Desglose por Contrato y Prendas:</p>
             <div className="space-y-3">
               {grupoDetalle?.pedidosAsociados?.map((ped: any) => {
@@ -484,7 +514,14 @@ export default function OperacionesPage() {
                         <table className="w-full text-left text-xs border-collapse min-w-650px">
                           <thead>
                             <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase text-[10px]">
-                              <th className="p-2 text-center w-8">Sel.</th><th className="p-2">Código</th><th className="p-2">Prenda</th><th className="p-2">Color / Talla</th><th className="p-2 text-center">Cant.</th><th className="p-2">Bordado</th><th className="p-2">Observación</th><th className="p-2 text-center">Estado Operación</th><th className="p-2 text-center">Fecha Confección</th>
+                              <th className="p-2 text-center w-8">Sel.</th>
+                              <th className="p-2">Código</th><th className="p-2">Prenda</th>
+                              <th className="p-2">Color / Talla / Genero</th>
+                              <th className="p-2 text-center">Cant.</th>
+                              <th className="p-2">Bordado</th>
+                              <th className="p-2">Observación</th>
+                              <th className="p-2 text-center">Estado Operación</th>
+                              <th className="p-2 text-center">Fecha Confección</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
@@ -493,7 +530,7 @@ export default function OperacionesPage() {
                                 <td className="p-2 text-center"><input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer" checked={prendasSeleccionadas.includes(p.id)} onChange={() => toggleSeleccionPrenda(p.id)} /></td>
                                 <td className="p-2 font-mono font-bold text-blue-600">{p.skuCodigo || 'S/N'}</td>
                                 <td className="p-2 font-bold text-gray-800">{p.tipoRopa}</td>
-                                <td className="p-2 text-gray-600">{p.color} ({p.talla})</td>
+                                <td className="p-2 text-gray-600">{p.color} ({p.talla}) ({p.genero})</td>
                                 <td className="p-2 text-center font-black">{p.cantidad}</td>
                                 <td className="p-2 text-[11px]">{p.bordado ? <span className="font-bold text-purple-700">{p.bordado}</span> : <span className="text-gray-400 italic">Sin bordado</span>}</td>
                                 <td className="p-2 text-[11px]">{(p.observacion || p.observacionOperaciones) ? <span className="text-gray-800 font-medium">{p.observacion || p.observacionOperaciones}</span> : <span className="text-gray-400 italic">Sin observaciones</span>}</td>
@@ -522,8 +559,6 @@ export default function OperacionesPage() {
           <DialogFooter className="mt-4"><Button variant="outline" size="sm" onClick={() => setModalDetalleOpen(false)}>Cerrar Panel</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* MODAL GESTIÓN MANUAL (Permanece igual) */}
       <Dialog open={modalGestionOpen} onOpenChange={setModalGestionOpen}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
           <DialogHeader><DialogTitle className="text-lg font-black text-gray-900 border-b pb-2">Actualizar Operaciones</DialogTitle></DialogHeader>

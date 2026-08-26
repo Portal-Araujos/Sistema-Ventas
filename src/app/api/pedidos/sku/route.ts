@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q') || '';
-    const whereClause: any = { }; // Traemos activos e inactivos para la tabla de config
+    const whereClause: any = { }; 
     
     if (q.trim().length > 0) {
       whereClause.OR = [
@@ -54,21 +54,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Formato de datos incorrecto' }, { status: 400 });
     }
 
-    // 1. Limpieza Extrema (Evita guardar la palabra "undefined")
+    // 1. Limpieza Extrema y Detección de Categoría
     const dataLimpia = datosExcel.map((item: any) => ({
       codigo: item.codigo ? String(item.codigo).trim().toUpperCase() : '',
       tipoRopa: item.tipoRopa ? String(item.tipoRopa).trim().toUpperCase() : '',
       color: item.color ? String(item.color).trim().toUpperCase() : '',
       genero: item.genero ? String(item.genero).trim().toUpperCase() : 'UNISEX',
       talla: item.talla ? String(item.talla).trim().toUpperCase() : 'N/A',
-      activo: item.activo !== undefined ? item.activo : true
-    })).filter(item => item.codigo !== '' && item.tipoRopa !== ''); // Borra filas en blanco
+      activo: item.activo !== undefined ? item.activo : true,
+      categoriaItem: item.categoriaItem || 'TEXTIL' // 🔥 Inyectamos la etiqueta Textil/Electro
+    })).filter(item => item.codigo !== '' && item.tipoRopa !== ''); 
 
     if (dataLimpia.length === 0) {
       return NextResponse.json({ error: 'El archivo está vacío o los datos son inválidos.' }, { status: 400 });
     }
 
-    // 2. LA MAGIA DEL "UPSERT": Si el código existe lo actualiza, si no, lo crea.
+    // 2. UPSERT: Si el código existe lo actualiza, si no, lo crea.
     const operaciones = dataLimpia.map((sku) => 
       prisma.catalogoSKU.upsert({
         where: { codigo: sku.codigo },
@@ -77,7 +78,8 @@ export async function POST(request: Request) {
           color: sku.color,
           genero: sku.genero,
           talla: sku.talla,
-          activo: sku.activo
+          activo: sku.activo,
+          categoriaItem: sku.categoriaItem // 🔥 Actualiza si cambió de bodega
         },
         create: {
           codigo: sku.codigo,
@@ -85,17 +87,17 @@ export async function POST(request: Request) {
           color: sku.color,
           genero: sku.genero,
           talla: sku.talla,
-          activo: sku.activo
+          activo: sku.activo,
+          categoriaItem: sku.categoriaItem // 🔥 Crea con la bodega correcta
         }
       })
     );
 
-    // Ejecutamos todo de golpe (Transacción)
     await prisma.$transaction(operaciones);
 
     return NextResponse.json({ 
       success: true, 
-      message: `¡Subida exitosa! Se procesaron ${dataLimpia.length} SKUs (Nuevos y Actualizados).`,
+      message: `¡Subida exitosa! Se procesaron ${dataLimpia.length} SKUs en bodega.`,
       creados: dataLimpia.length
     });
 

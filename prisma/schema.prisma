@@ -145,6 +145,11 @@ model Usuario {
   guiasDespacho                  GuiaDespacho[]
   pedidosAsignados               Pedido[]         @relation("OperarioAsignadoPedido")
   detallesAsignados              DetallePedido[]  @relation("OperarioAsignadoDetalle")
+  ticketsCreados                 TicketGestion[] @relation("TicketsCreados")
+  ticketsAsignados               TicketGestion[] @relation("TicketsAsignados")
+  mensajesTicket                 MensajeTicket[]
+  departamentoId                 Int?                 @map("departamento_id")
+  departamento                   DepartamentoEmpresa? @relation(fields: [departamentoId], references: [id])
   @@map("usuarios")
 }
 model Institution {
@@ -184,6 +189,7 @@ model Institution {
   ventas               Venta[]
   pedidos              Pedido[]
   guiasDespacho        GuiaDespacho[]
+  tickets              TicketGestion[]
   @@map("instituciones")
 }
 model VisitaAgenda {
@@ -253,6 +259,9 @@ model Venta {
   estadoTicket        String   @default("Pendiente Facturación") @map("estado_ticket") 
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
+  tipoClienteId       Int?          @map("tipo_cliente_id")
+  tieneCedula         Boolean  @default(false) @map("tiene_cedula")
+  tipoCliente         TipoCliente?  @relation(fields: [tipoClienteId], references: [id])
   @@map("ventas")
 }
 model MetaVendedor {
@@ -280,6 +289,7 @@ model CatalogoSKU {
   genero      String                          
   talla       String                           
   activo      Boolean  @default(true)
+  categoriaItem String @default("TEXTIL") @map("categoria_item")
   @@map("catalogo_sku")
 }
 model Pedido {
@@ -360,6 +370,8 @@ model ConfiguracionSeguridad {
   id               Int      @id @default(1) // Solo existirá 1 fila que actualizarás desde tu panel
   ipOficina        String?  @map("ip_oficina") // La placa de tu internet actual
   rolesBloqueados  String   @default("[]") @map("roles_bloqueados") // Ej: ["administrador", "bodeguero"]
+  encargadoBodegaTextilId  String?  @map("encargado_bodega_textil_id") 
+  encargadoBodegaElectroId String?  @map("encargado_bodega_electro_id")
   updatedAt        DateTime @updatedAt @map("updated_at")
   @@map("configuracion_seguridad")
 }
@@ -374,4 +386,57 @@ model BitacoraSeguridad {
   fechaBloqueoHasta DateTime? @map("fecha_bloqueo_hasta") // El reloj del castigo
   createdAt         DateTime  @default(now()) @map("created_at")
   @@map("bitacora_seguridad")
+}
+model TipoCliente {
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  activo    Boolean   @default(true)
+  
+  // Relación con tu tabla Venta
+  ventas    Venta[]   
+
+  @@map("tipos_cliente")
+}
+model TicketGestion {
+  id              Int       @id @default(autoincrement())
+  codigo          String    @unique // Ej: TKT-001, TKT-002
+  tipo            String    // Ej: Cobranza, Facturacion, Soporte
+  asunto          String
+  estado          String    @default("Abierto") // Abierto, En Proceso, Pendiente, Cerrado, Re-Abierto
+  prioridad       String    @default("Media")   // Baja, Media, Alta, Urgente
+  institucionId   String    // ID de la escuela vinculada
+  creadorId       String    // ID de la persona de oficina que lo creó
+  asignadoAId     String?   // ID del Vendedor en campo que debe resolverlo
+  fechaCierre     DateTime? // Se llena cuando pasa a Cerrado
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  mensajes        MensajeTicket[]
+  institucion     Institution @relation(fields: [institucionId], references: [id])
+  creador         Usuario     @relation("TicketsCreados", fields: [creadorId], references: [id])
+  asignado        Usuario?    @relation("TicketsAsignados", fields: [asignadoAId], references: [id])
+  @@map("tickets_gestion")
+}
+model MensajeTicket {
+  id              Int       @id @default(autoincrement())
+  ticketId        Int
+  remitenteId     String    
+  contenido       String    @db.Text
+  esSistema       Boolean   @default(false) 
+  adjuntoUrl      String?   
+  adjuntoTipo     String?   
+  adjuntoNombre   String?   
+  createdAt       DateTime  @default(now()) @map("created_at")
+  ticket          TicketGestion @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  remitente       Usuario       @relation(fields: [remitenteId], references: [id]) 
+  @@map("mensajes_ticket")
+}
+model DepartamentoEmpresa {
+  id        Int       @id @default(autoincrement())
+  nombre    String    @unique
+  activo    Boolean   @default(true)
+  
+  // Relación con los empleados
+  usuarios  Usuario[]
+
+  @@map("departamentos_empresa")
 }

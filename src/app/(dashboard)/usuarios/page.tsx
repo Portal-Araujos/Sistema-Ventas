@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Edit3, ShieldAlert, CheckCircle2, XCircle, Lock, Unlock, ShieldCheck, Activity, Save, ServerCrash } from 'lucide-react';
+import { User, Plus, Edit3, ShieldAlert, CheckCircle2, XCircle, Lock, Unlock, ShieldCheck, Activity, Save, ServerCrash, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,26 +15,44 @@ export default function UsuariosPage() {
   const [activeTab, setActiveTab] = useState<TabType>('personal');
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [rolesDinamicos, setRolesDinamicos] = useState<any[]>([]);
+  
+  // 🔥 NUEVO ESTADO: Departamentos 🔥
+  const [departamentos, setDepartamentos] = useState<any[]>([]);
+  const [modalDeptoOpen, setModalDeptoOpen] = useState(false);
+  const [nuevoDeptoNombre, setNuevoDeptoNombre] = useState('');
+  const [savingDepto, setSavingDepto] = useState(false);
+
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
-  const initialForm = { id: '', nombre: '', email: '', password: '', rolId: '', activo: true };
+  
+  // 🔥 SE AGREGÓ departamentoId 🔥
+  const initialForm = { id: '', nombre: '', email: '', password: '', rolId: '', departamentoId: '', activo: true };
   const [formUser, setFormUser] = useState(initialForm);
+  
   const [configSeguridad, setConfigSeguridad] = useState({ ipOficina: '', rolesBloqueados: [] as string[] });
   const [logsSeguridad, setLogsSeguridad] = useState<any[]>([]);
   const [loadingSeguridad, setLoadingSeguridad] = useState(false);
   const [savingSeguridad, setSavingSeguridad] = useState(false);
   const [currentPageSeguridad, setCurrentPageSeguridad] = useState(1);
   const itemsPerPageSeguridad = 15;
+
   const cargarUsuarios = async () => {
     setLoadingUsers(true);
     try {
-      const [resUsers, resRoles] = await Promise.all([ fetch('/api/usuarios'), fetch('/api/roles') ]);
+      // 🔥 AHORA CARGAMOS TAMBIÉN LOS DEPARTAMENTOS 🔥
+      const [resUsers, resRoles, resDeptos] = await Promise.all([ 
+        fetch('/api/usuarios'), 
+        fetch('/api/roles'),
+        fetch('/api/departamentos')
+      ]);
       setUsuarios(await resUsers.json());
       setRolesDinamicos(await resRoles.json());
+      setDepartamentos(await resDeptos.json());
     } catch (e) { console.error(e); } 
     finally { setLoadingUsers(false); }
   };
+
   const cargarSeguridad = async () => {
     setLoadingSeguridad(true);
     try {
@@ -50,10 +68,33 @@ export default function UsuariosPage() {
     } catch (e) { console.error(e); } 
     finally { setLoadingSeguridad(false); }
   };
+
   useEffect(() => {
     if (activeTab === 'personal') cargarUsuarios();
     else cargarSeguridad();
   }, [activeTab]);
+
+  // 🔥 NUEVA FUNCIÓN: Crear Departamento 🔥
+  const handleCrearDepartamento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if(!nuevoDeptoNombre.trim()) return;
+    setSavingDepto(true);
+    try {
+      const res = await fetch('/api/departamentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: nuevoDeptoNombre })
+      });
+      if(!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Error al crear área');
+      }
+      setNuevoDeptoNombre('');
+      cargarUsuarios(); // Recargamos para ver el nuevo departamento en las listas
+    } catch (e: any) { alert(e.message); }
+    finally { setSavingDepto(false); }
+  };
+
   const handleGuardarUsuario = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingUser(true);
@@ -61,6 +102,13 @@ export default function UsuariosPage() {
       const isEditing = !!formUser.id;
       const payload: any = { ...formUser };
       if (isEditing && !payload.password) delete payload.password; 
+      
+      // Parsear el departamentoId a Número
+      if (payload.departamentoId) {
+        payload.departamentoId = parseInt(payload.departamentoId);
+      } else {
+        payload.departamentoId = null;
+      }
 
       const res = await fetch('/api/usuarios', {
         method: isEditing ? 'PUT' : 'POST',
@@ -73,6 +121,7 @@ export default function UsuariosPage() {
     } catch (e: any) { alert(e.message); } 
     finally { setSavingUser(false); }
   };
+
   const handleToggleBloqueo = async (usuarioId: string, nombre: string, estaBloqueado: boolean) => {
     if (!confirm(`¿Estás seguro de querer ${estaBloqueado ? 'DESBLOQUEAR' : 'BLOQUEAR'} a ${nombre}?`)) return;
     try {
@@ -85,6 +134,7 @@ export default function UsuariosPage() {
       cargarUsuarios(); 
     } catch (error: any) { alert(`❌ Error: ${error.message}`); }
   };
+
   const handleToggleRolBloqueado = (rolNombre: string) => {
     setConfigSeguridad(prev => {
       const roles = prev.rolesBloqueados.includes(rolNombre)
@@ -93,6 +143,7 @@ export default function UsuariosPage() {
       return { ...prev, rolesBloqueados: roles };
     });
   };
+
   const handleGuardarConfigSeguridad = async () => {
     setSavingSeguridad(true);
     try {
@@ -138,7 +189,13 @@ export default function UsuariosPage() {
       {/* ========================================================================= */}
       {activeTab === 'personal' && (
         <div className="animate-in fade-in duration-300">
-          <div className="flex justify-end mb-4">
+          
+          <div className="flex gap-3 justify-end mb-4">
+            {/* 🔥 BOTÓN PARA GESTIONAR ÁREAS 🔥 */}
+            <Button variant="outline" onClick={() => setModalDeptoOpen(true)} className="font-bold border-gray-300 text-gray-700 shadow-sm">
+              <Briefcase size={16} className="mr-2" /> Áreas / Departamentos
+            </Button>
+            
             <Button onClick={() => { setFormUser(initialForm); setModalOpen(true); }} className="bg-primary hover:bg-primary/90 text-white font-bold shadow-sm">
               <Plus size={16} className="mr-1" /> Nuevo Usuario
             </Button>
@@ -149,7 +206,7 @@ export default function UsuariosPage() {
               <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead className="font-bold text-gray-700">Nombre / Email</TableHead>
-                  <TableHead className="font-bold text-gray-700 text-center">Rol Asignado</TableHead>
+                  <TableHead className="font-bold text-gray-700 text-center">Rol y Área</TableHead>
                   <TableHead className="font-bold text-gray-700 text-center">Estado</TableHead>
                   <TableHead className="font-bold text-gray-700 text-center">Acciones</TableHead>
                 </TableRow>
@@ -166,6 +223,12 @@ export default function UsuariosPage() {
                         <Badge className={`uppercase text-[10px] tracking-wider font-bold ${u.rolNombre === 'super_admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-50 text-blue-700'}`}>
                           {u.rolNombre.replace('_', ' ')}
                         </Badge>
+                        {/* 🔥 MOSTRAR EL DEPARTAMENTO ASIGNADO 🔥 */}
+                        {u.departamento && (
+                          <div className="text-[10px] text-gray-500 font-bold mt-1 uppercase flex items-center justify-center gap-1">
+                            <Briefcase size={10}/> {u.departamento.nombre}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
                         {u.bloqueado ? (
@@ -185,7 +248,7 @@ export default function UsuariosPage() {
                       <TableCell className="text-center">
                         {u.rolNombre !== 'super admin' && u.rolNombre !== 'super_admin' ? (
                           <div className="flex justify-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => { setFormUser({...u, password: '', rolId: u.rolId.toString()}); setModalOpen(true); }} className="h-8 w-8 p-0 text-gray-600">
+                            <Button variant="outline" size="sm" onClick={() => { setFormUser({...u, password: '', rolId: u.rolId.toString(), departamentoId: u.departamentoId?.toString() || '' }); setModalOpen(true); }} className="h-8 w-8 p-0 text-gray-600">
                               <Edit3 size={16} />
                             </Button>
                             <Button 
@@ -215,25 +278,18 @@ export default function UsuariosPage() {
       {activeTab === 'seguridad' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in zoom-in-95 duration-300">
           
-          {/* PANEL DE CONFIGURACIÓN DE IP */}
           <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
             <h3 className="text-lg font-black text-gray-900 flex items-center gap-2 mb-1">
               <ShieldCheck className="text-red-600"/> Guardián de Oficina
             </h3>
             <p className="text-xs text-gray-500 mb-6 leading-relaxed">
-              Configura la IP de tu internet. Si alguien intenta iniciar sesión fuera de esta red, el sistema lo bloqueará automáticamente (Aplica solo a los roles que selecciones).
+              Configura la IP de tu internet. Si alguien intenta iniciar sesión fuera de esta red, el sistema lo bloqueará automáticamente.
             </p>
 
             <div className="space-y-5">
               <div>
                 <Label className="text-xs font-bold text-gray-700 uppercase">Dirección IP Autorizada</Label>
-                <Input 
-                  placeholder="Ej: 186.42.11.55" 
-                  value={configSeguridad.ipOficina} 
-                  onChange={e => setConfigSeguridad({...configSeguridad, ipOficina: e.target.value})} 
-                  className="mt-1.5 font-mono bg-gray-50"
-                />
-                <p className="text-[10px] text-gray-400 mt-1">Busca "Cual es mi IP" en Google desde tu oficina y pégala aquí.</p>
+                <Input placeholder="Ej: 186.42.11.55" value={configSeguridad.ipOficina} onChange={e => setConfigSeguridad({...configSeguridad, ipOficina: e.target.value})} className="mt-1.5 font-mono bg-gray-50" />
               </div>
 
               <div>
@@ -241,16 +297,10 @@ export default function UsuariosPage() {
                 <div className="space-y-2 bg-gray-50 p-3 rounded-xl border border-gray-200 max-h-200px overflow-y-auto">
                   {rolesDinamicos.filter(r => r.nombre !== 'super_admin' && r.nombre !== 'vendedor').map(rol => (
                     <label key={rol.id} className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={configSeguridad.rolesBloqueados.includes(rol.nombre)}
-                        onChange={() => handleToggleRolBloqueado(rol.nombre)}
-                        className="rounded text-red-600 focus:ring-red-600"
-                      />
+                      <input type="checkbox" checked={configSeguridad.rolesBloqueados.includes(rol.nombre)} onChange={() => handleToggleRolBloqueado(rol.nombre)} className="rounded text-red-600 focus:ring-red-600" />
                       <span className="uppercase text-xs">{rol.nombre.replace('_', ' ')}</span>
                     </label>
                   ))}
-                  <p className="text-[10px] text-gray-500 mt-2 italic">* Vendedores y Super Admin están exentos por defecto.</p>
                 </div>
               </div>
 
@@ -260,13 +310,11 @@ export default function UsuariosPage() {
             </div>
           </div>
 
-          {/* PANEL DE BITÁCORA DE ATAQUES (RATE LIMITING) */}
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col">
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
                 <Activity className="text-blue-600"/> Monitoreo de Ataques (Bots)
               </h3>
-              <p className="text-xs text-gray-500 mt-1">Bitácora en tiempo real del Rate Limiting y bloqueos automáticos del servidor.</p>
             </div>
             
             <div className="flex-1 overflow-auto p-0">
@@ -280,18 +328,12 @@ export default function UsuariosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loadingSeguridad ? <TableRow><TableCell colSpan={4} className="text-center py-8">Cargando bitácora...</TableCell></TableRow> : 
-                    logsSeguridad.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-8 text-gray-500 font-bold"><ShieldCheck className="mx-auto text-emerald-500 mb-2" size={32}/> Sistema seguro. No hay ataques recientes.</TableCell></TableRow> :
-                    
-                    // 🔥 APLICAMOS LA REGLA DE CORTE DE 15 POR PÁGINA 🔥
+                  {loadingSeguridad ? <TableRow><TableCell colSpan={4} className="text-center py-8">Cargando...</TableCell></TableRow> : 
+                    logsSeguridad.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-8 text-gray-500 font-bold">Sistema seguro.</TableCell></TableRow> :
                     logsSeguridad.slice((currentPageSeguridad - 1) * itemsPerPageSeguridad, currentPageSeguridad * itemsPerPageSeguridad).map(log => (
                       <TableRow key={log.id} className="hover:bg-red-50/30">
-                        <TableCell className="text-xs text-gray-600 font-medium">
-                          {new Date(log.createdAt).toLocaleString('es-EC')}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono font-bold text-gray-900">
-                          {log.ip === '::1' ? '127.0.0.1 (Local)' : log.ip}
-                        </TableCell>
+                        <TableCell className="text-xs text-gray-600 font-medium">{new Date(log.createdAt).toLocaleString('es-EC')}</TableCell>
+                        <TableCell className="text-xs font-mono font-bold text-gray-900">{log.ip === '::1' ? '127.0.0.1 (Local)' : log.ip}</TableCell>
                         <TableCell>
                           {log.evento === 'RATE_LIMIT_ACTIVADO' ? (
                             <Badge className="bg-red-100 text-red-700 border-red-200 text-[10px]">BLOQUEO AUTOMÁTICO</Badge>
@@ -301,10 +343,7 @@ export default function UsuariosPage() {
                           {log.emailIntentado && <div className="text-[10px] text-gray-500 mt-1">Target: {log.emailIntentado}</div>}
                         </TableCell>
                         <TableCell className="text-center">
-                          {log.nivelBloqueo === 3 ? <span className="text-xs font-black text-red-600">24 HORAS</span> : 
-                           log.nivelBloqueo === 2 ? <span className="text-xs font-black text-amber-600">30 MINUTOS</span> :
-                           log.nivelBloqueo === 1 ? <span className="text-xs font-black text-blue-600">15 MINUTOS</span> : 
-                           <span className="text-xs text-gray-400">-</span>}
+                          {log.nivelBloqueo === 3 ? <span className="text-xs font-black text-red-600">24H</span> : log.nivelBloqueo === 2 ? <span className="text-xs font-black text-amber-600">30M</span> : log.nivelBloqueo === 1 ? <span className="text-xs font-black text-blue-600">15M</span> : <span className="text-xs text-gray-400">-</span>}
                         </TableCell>
                       </TableRow>
                     ))
@@ -313,12 +352,9 @@ export default function UsuariosPage() {
               </Table>
             </div>
             
-            {/* 🔥 CONTROLES DE PAGINACIÓN 🔥 */}
             {logsSeguridad.length > itemsPerPageSeguridad && (
               <div className="p-4 border-t flex justify-between items-center bg-gray-50/50">
-                <span className="text-xs text-gray-500 font-medium">
-                  Página {currentPageSeguridad} de {Math.ceil(logsSeguridad.length / itemsPerPageSeguridad)} ({logsSeguridad.length} registros)
-                </span>
+                <span className="text-xs text-gray-500 font-medium">Página {currentPageSeguridad} de {Math.ceil(logsSeguridad.length / itemsPerPageSeguridad)}</span>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => setCurrentPageSeguridad(p => Math.max(1, p - 1))} disabled={currentPageSeguridad === 1} className="h-8 text-xs font-bold">Ant.</Button>
                   <Button variant="outline" size="sm" onClick={() => setCurrentPageSeguridad(p => Math.min(Math.ceil(logsSeguridad.length / itemsPerPageSeguridad), p + 1))} disabled={currentPageSeguridad === Math.ceil(logsSeguridad.length / itemsPerPageSeguridad)} className="h-8 text-xs font-bold">Sig.</Button>
@@ -326,13 +362,52 @@ export default function UsuariosPage() {
               </div>
             )}
           </div>
-
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* 🔥 NUEVO MODAL: GESTIONAR ÁREAS / DEPARTAMENTOS 🔥 */}
+      {/* ========================================================================= */}
+      <Dialog open={modalDeptoOpen} onOpenChange={setModalDeptoOpen}>
+        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-gray-900 flex items-center gap-2 border-b pb-3">
+              <Briefcase className="text-primary" /> Gestionar Áreas Operativas
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <form onSubmit={handleCrearDepartamento} className="flex gap-2 items-end">
+              <div className="flex-1">
+                <Label className="text-xs font-bold text-gray-600 uppercase">Crear Nuevo Departamento</Label>
+                <Input required placeholder="Ej. Logística, Bodega 2..." value={nuevoDeptoNombre} onChange={e => setNuevoDeptoNombre(e.target.value)} className="mt-1 h-10" />
+              </div>
+              <Button type="submit" disabled={savingDepto} className="bg-primary hover:bg-primary/90 text-white font-bold h-10 px-4">
+                {savingDepto ? '...' : <Plus size={18}/>}
+              </Button>
+            </form>
+
+            <div className="mt-4 border border-gray-200 rounded-xl overflow-hidden">
+              <div className="bg-slate-50 p-2 border-b border-gray-200 font-bold text-[10px] text-gray-500 uppercase text-center tracking-widest">
+                Catálogo de Áreas Actuales
+              </div>
+              <ul className="max-h-48 overflow-y-auto divide-y divide-gray-100">
+                {departamentos.length === 0 ? <li className="p-4 text-center text-xs text-gray-500 font-bold">No hay departamentos creados.</li> :
+                  departamentos.map(d => (
+                    <li key={d.id} className="p-3 text-sm font-bold text-gray-700 flex items-center gap-2 hover:bg-gray-50">
+                      <CheckCircle2 size={16} className="text-emerald-500"/> {d.nombre}
+                    </li>
+                  ))
+                }
+              </ul>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
       {/* MODAL CREAR/EDITAR USUARIO */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
+        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-gray-900 flex items-center gap-2 border-b pb-3">
               <User className="text-primary" /> {formUser.id ? 'Editar Usuario' : 'Crear Nuevo Usuario'}
@@ -352,17 +427,32 @@ export default function UsuariosPage() {
               <Label className="text-xs font-bold text-gray-600 uppercase">Contraseña {formUser.id ? '(Opcional)' : '*'}</Label>
               <Input required={!formUser.id} type="password" placeholder={formUser.id ? 'Escribe para cambiarla...' : 'Contraseña...'} value={formUser.password} onChange={e => setFormUser({ ...formUser, password: e.target.value })} className="mt-1 h-10" />
             </div>
-            <div>
-              <Label className="text-xs font-bold text-gray-600 uppercase">Asignar Rol *</Label>
-              <select required className="w-full h-10 border border-gray-300 rounded-lg px-3 text-sm mt-1" value={formUser.rolId} onChange={e => setFormUser({ ...formUser, rolId: e.target.value })}>
-                <option value="">Seleccione un rol...</option>
-                {rolesDinamicos.map(r => (r.nombre !== 'super_admin' && <option key={r.id} value={r.id} className="uppercase">{r.nombre.replace('_', ' ')}</option>))}
-              </select>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-bold text-gray-600 uppercase">Asignar Rol *</Label>
+                <select required className="w-full h-10 border border-gray-300 rounded-lg px-2 text-sm mt-1 outline-none" value={formUser.rolId} onChange={e => setFormUser({ ...formUser, rolId: e.target.value })}>
+                  <option value="">Rol...</option>
+                  {rolesDinamicos.map(r => (r.nombre !== 'super_admin' && <option key={r.id} value={r.id} className="uppercase">{r.nombre.replace('_', ' ')}</option>))}
+                </select>
+              </div>
+
+              {/* 🔥 NUEVO: Asignar Departamento 🔥 */}
+              <div>
+                <Label className="text-xs font-bold text-gray-600 uppercase">Área Operativa *</Label>
+                <select className="w-full h-10 border border-gray-300 rounded-lg px-2 text-sm mt-1 outline-none" value={formUser.departamentoId} onChange={e => setFormUser({ ...formUser, departamentoId: e.target.value })}>
+                  <option value="">General (Sin Área)</option>
+                  {departamentos.map(d => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+
             {formUser.id && (
               <div className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border mt-2">
                 <Label className="text-xs font-bold text-gray-700 uppercase">Estado:</Label>
-                <select className="h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold text-gray-700" value={formUser.activo ? 'true' : 'false'} onChange={e => setFormUser({ ...formUser, activo: e.target.value === 'true' })}>
+                <select className="h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold text-gray-700 outline-none" value={formUser.activo ? 'true' : 'false'} onChange={e => setFormUser({ ...formUser, activo: e.target.value === 'true' })}>
                   <option value="true">🟢 Permitir Acceso</option>
                   <option value="false">🔴 Suspender Cuenta</option>
                 </select>

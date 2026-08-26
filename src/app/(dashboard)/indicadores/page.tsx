@@ -17,16 +17,19 @@ export default function IndicadoresPage() {
   const [reporte, setReporte] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRol, setUserRol] = useState('vendedor');
+  
   const getLunesHoy = () => {
     const d = new Date();
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(d.setDate(diff)).toISOString().split('T')[0];
   };
+  
   const [fechaLunes, setFechaLunes] = useState(getLunesHoy());
   const [modalMetas, setModalMetas] = useState(false);
   const [metasForm, setMetasForm] = useState<any[]>([]);
   const [savingMetas, setSavingMetas] = useState(false);
+  
   const cargarIndicadores = async () => {
     setLoading(true);
     try {
@@ -47,6 +50,7 @@ export default function IndicadoresPage() {
   };
 
   useEffect(() => { cargarIndicadores(); }, [fechaLunes]);
+  
   const handleOpenModalMetas = () => {
     setMetasForm(
       reporte.map(r => ({
@@ -57,6 +61,7 @@ export default function IndicadoresPage() {
     );
     setModalMetas(true);
   };
+  
   const handleGuardarMetas = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingMetas(true);
@@ -76,11 +81,13 @@ export default function IndicadoresPage() {
       setSavingMetas(false);
     }
   };
+  
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error', texto: string) => {
     setToastMsg({ tipo, texto });
     setTimeout(() => setToastMsg(null), 4000);
   };
+  
   // EXPORTAR A EXCEL (AMBAS TABLAS EN UNA HOJA)
   const exportarExcel = () => {
     const dataAprobada = reporte.map(r => ({
@@ -93,6 +100,7 @@ export default function IndicadoresPage() {
       'Jueves ($)': r.diasReales.jueves,
       'Viernes ($)': r.diasReales.viernes,
       'Sábado ($)': r.diasReales.sabado,
+      'Domingo ($)': r.diasReales.domingo, // 🔥 Añadido Domingo
       'Total Cierre ($)': r.cierreSemanal,
       'Meta Asignada ($)': r.metaMonto,
       '% Cumplido': r.porcentajeCumplido
@@ -107,6 +115,7 @@ export default function IndicadoresPage() {
       'Jueves ($)': r.diasTransito.jueves,
       'Viernes ($)': r.diasTransito.viernes,
       'Sábado ($)': r.diasTransito.sabado,
+      'Domingo ($)': r.diasTransito.domingo, // 🔥 Añadido Domingo
       'Total Cierre ($)': r.transitoTotal,
       'Meta Asignada ($)': 0,
       '% Cumplido': 0
@@ -118,6 +127,7 @@ export default function IndicadoresPage() {
     XLSX.utils.book_append_sheet(wb, ws, `Indicadores_${fechaLunes}`);
     XLSX.writeFile(wb, `Reporte_Indicadores_${fechaLunes}.xlsx`);
   };
+  
   const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
   const totalCierreSemanal = reporte.reduce((sum, r) => sum + r.cierreSemanal, 0);
   const totalMetaSemanal = reporte.reduce((sum, r) => sum + r.metaMonto, 0);
@@ -147,6 +157,7 @@ export default function IndicadoresPage() {
           )}
         </div>
       </div>
+      
       {/* SELECTOR DE SEMANA Y MÉTRICAS GLOBALES */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-center gap-3">
@@ -182,6 +193,7 @@ export default function IndicadoresPage() {
           </div>
         </div>
       </div>
+      
       {/* TABLA 1: SÁBANA DE VENTAS REALES (APROBADAS) */}
       <div>
         <h2 className="text-sm font-bold text-emerald-800 mb-3 flex items-center gap-2"><CheckCircle2 size={16} /> VENTAS VALIDADAS (Suman a Meta)</h2>
@@ -196,6 +208,7 @@ export default function IndicadoresPage() {
                 <TableHead className="font-semibold text-gray-700 text-center">Jueves</TableHead>
                 <TableHead className="font-semibold text-gray-700 text-center">Viernes</TableHead>
                 <TableHead className="font-semibold text-gray-700 text-center">Sábado</TableHead>
+                <TableHead className="font-semibold text-red-700 text-center">Domingo</TableHead> {/* 🔥 Añadido Domingo */}
                 <TableHead className="font-bold text-emerald-800 text-center bg-emerald-100/50">Cierre Real</TableHead>
                 <TableHead className="font-bold text-gray-800 text-center bg-gray-100/50">Meta Asignada</TableHead>
                 <TableHead className="font-bold text-gray-800 text-center">% Meta</TableHead>
@@ -203,9 +216,9 @@ export default function IndicadoresPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-gray-500">Calculando informe semanal...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center py-8 text-gray-500">Calculando informe semanal...</TableCell></TableRow>
               ) : reporte.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-gray-500">No hay vendedores o datos registrados.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center py-8 text-gray-500">No hay vendedores o datos registrados.</TableCell></TableRow>
               ) : reporte.map(r => (
                 <TableRow key={r.vendedorId} className="hover:bg-emerald-50/30">
                   <TableCell className="font-bold text-gray-900 text-sm">👤 {r.vendedorNombre}</TableCell>
@@ -215,6 +228,7 @@ export default function IndicadoresPage() {
                   <TableCell className="text-center font-medium text-xs text-gray-600">${r.diasReales.jueves.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-medium text-xs text-gray-600">${r.diasReales.viernes.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-medium text-xs text-gray-600">${r.diasReales.sabado.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-medium text-xs text-red-600 bg-red-50/20">${r.diasReales.domingo.toFixed(2)}</TableCell> {/* 🔥 Añadido Domingo */}
                   <TableCell className="text-center font-extrabold text-sm text-emerald-700 bg-emerald-50/50">${r.cierreSemanal.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-bold text-sm text-gray-800 bg-gray-50/50">${r.metaMonto.toFixed(2)}</TableCell>
                   <TableCell className="text-center">
@@ -228,6 +242,7 @@ export default function IndicadoresPage() {
           </Table>
         </div>
       </div>
+      
       {/* TABLA 2: SÁBANA DE VENTAS EN TRÁNSITO (LIMBO) */}
       <div className="mt-4 opacity-90">
         <h2 className="text-sm font-bold text-amber-800 mb-3 flex items-center gap-2"><AlertTriangle size={16} /> DINERO EN TRÁNSITO (Falta Facturación / Documentos)</h2>
@@ -242,14 +257,15 @@ export default function IndicadoresPage() {
                 <TableHead className="font-semibold text-gray-700 text-center">Jueves</TableHead>
                 <TableHead className="font-semibold text-gray-700 text-center">Viernes</TableHead>
                 <TableHead className="font-semibold text-gray-700 text-center">Sábado</TableHead>
+                <TableHead className="font-semibold text-red-700 text-center">Domingo</TableHead> {/* 🔥 Añadido Domingo */}
                 <TableHead className="font-bold text-amber-800 text-center bg-amber-100/50">Total Retenido</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-gray-500">Calculando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-gray-500">Calculando...</TableCell></TableRow>
               ) : reporte.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-gray-500">No hay datos.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-gray-500">No hay datos.</TableCell></TableRow>
               ) : reporte.map(r => (
                 <TableRow key={r.vendedorId} className="hover:bg-amber-50/30">
                   <TableCell className="font-bold text-gray-600 text-sm">👤 {r.vendedorNombre}</TableCell>
@@ -259,6 +275,7 @@ export default function IndicadoresPage() {
                   <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.jueves.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.viernes.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.sabado.toFixed(2)}</TableCell>
+                  <TableCell className="text-center font-medium text-xs text-red-700 bg-red-50/20">${r.diasTransito.domingo.toFixed(2)}</TableCell> {/* 🔥 Añadido Domingo */}
                   <TableCell className="text-center font-bold text-sm text-amber-700 bg-amber-50/50">${r.transitoTotal.toFixed(2)}</TableCell>
                 </TableRow>
               ))}
@@ -266,6 +283,7 @@ export default function IndicadoresPage() {
           </Table>
         </div>
       </div>
+      
       {/* MODAL DEFINIR METAS SEMANALES */}
       <Dialog open={modalMetas} onOpenChange={setModalMetas}>
         <DialogContent className="sm:max-w-lg bg-white p-6 rounded-2xl max-h-[85vh] overflow-y-auto">
@@ -305,6 +323,7 @@ export default function IndicadoresPage() {
           </form>
         </DialogContent>
       </Dialog>
+      
       {/* NOTIFICACIÓN FLOTANTE */}
       {toastMsg && (
         <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
