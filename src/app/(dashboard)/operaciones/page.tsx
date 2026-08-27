@@ -91,7 +91,7 @@ export default function OperacionesPage() {
   const handleOpenDetalle = (grupo: any) => {
     setGrupoDetalle(grupo); setContratoExpandido(null); setPrendasSeleccionadas([]); setModalDetalleOpen(true);
   };
-  // 🔥 NUEVA FUNCIÓN: CONSOLIDADOR DE STOCK (ACTUALIZADA) 🔥
+  // 🔥 NUEVA FUNCIÓN: CONSOLIDADOR DE STOCK (CORREGIDA) 🔥
   const handleOpenStock = (grupo: any) => {
     setGrupoStock(grupo);
     let customCount = 0;
@@ -113,7 +113,9 @@ export default function OperacionesPage() {
         const ropa = det.tipoRopa || 'Prenda';
         const color = det.color || '-';
         const talla = det.talla || '-';
-        const key = `${sku}\vert{}${ropa}|${color}\vert{}${talla}`;
+        
+        // 🔥 AQUÍ ESTABA EL ERROR: Se corrigió el símbolo separador a un simple pipe "|" 🔥
+        const key = `${sku}|${ropa}|${color}|${talla}`;
 
         if (!mapaGenericas.has(key)) {
           mapaGenericas.set(key, { key, sku, prenda: ropa, color, talla, totalSolicitado: 0 });

@@ -58,6 +58,12 @@ export async function GET(request: Request) {
     todosLosDetalles.forEach((det: any) => {
       const ped = det.pedido;
       const instId = ped.institucionId;
+      
+      // 🔥 REGLA DE ORO DE OPERACIONES: Separamos por Escuela + Fecha de Lote 🔥
+      // Si la escuela envía lotes en fechas distintas, no se mezclarán nunca más.
+      const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
+      const grupoKey = `${instId}_${fr}`;
+
       const estPrenda = det.estadoOperacion || 'Pendiente en revision';
       const fConfeccion = det.fechaEstimadaConfeccion ? new Date(det.fechaEstimadaConfeccion) : null;
       const fUpdatedAt = new Date(det.updatedAt);
@@ -88,25 +94,25 @@ export async function GET(request: Request) {
 
       if (!cumpleFiltro) return;
 
-      if (!mapaEscuelas.has(instId)) {
-        mapaEscuelas.set(instId, {
-          id: instId,
-          institucionId: instId,
+      if (!mapaEscuelas.has(grupoKey)) {
+        mapaEscuelas.set(grupoKey, {
+          id: grupoKey, 
+          institucionId: instId, // Conserva el id original para que el filtro de la tabla funcione perfecto
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
-          codigoPedido: `PED-${instId.slice(0, 6).toUpperCase()}`,
+          codigoPedido: `PED-${ped.id.slice(0, 6).toUpperCase()}`,
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaIngresoTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
           fechaRequeridaTexto: ped.fechaRequerida ? new Date(ped.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'No asignada',
           esAtrasado: false,
           paquetesCantidad: 0,
           totalPrendas: 0,
-          estadosUnicosEscuela: new Set(), // Recolector de Estados Globales
+          estadosUnicosEscuela: new Set(),
           fechaEstimadaConfeccionGlobal: fConfeccion,
           pedidosAsociados: new Map()
         });
       }
 
-      const escuela = mapaEscuelas.get(instId);
+      const escuela = mapaEscuelas.get(grupoKey);
       if (esAtrasado) escuela.esAtrasado = true;
       if (fConfeccion) {
         if (!escuela.fechaEstimadaConfeccionGlobal || fConfeccion < escuela.fechaEstimadaConfeccionGlobal) {
@@ -123,7 +129,7 @@ export async function GET(request: Request) {
           nombreCliente: ped.nombreCliente || 'Sin Cliente',
           estado: ped.estado,
           fechaRequerida: ped.fechaRequerida,
-          estadosUnicosContrato: new Set(), // Recolector de Estados por Contrato
+          estadosUnicosContrato: new Set(),
           detalles: []
         });
         escuela.paquetesCantidad += 1;
@@ -135,14 +141,12 @@ export async function GET(request: Request) {
       contrato.detalles.push({
         ...det,
         estadoOperacion: estPrenda,
-        // 🔥 LECTURA EN UTC 🔥
         fechaEstimadaConfeccionTexto: fConfeccion ? fConfeccion.toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'Sin Asignar'
       });
     });
 
     const tablaRes = Array.from(mapaEscuelas.values()).map(e => ({
       ...e,
-      // 🔥 LÓGICA: Si hay más de un estado, se llama "Varios Estados" 🔥
       estadoActual: e.estadosUnicosEscuela.size > 1 ? 'Varios Estados' : Array.from(e.estadosUnicosEscuela)[0],
       fechaEstimadaConfeccionTexto: e.fechaEstimadaConfeccionGlobal 
          ? e.fechaEstimadaConfeccionGlobal.toLocaleDateString('es-EC', { timeZone: 'UTC' }) 
@@ -171,15 +175,34 @@ export async function PUT(request: Request) {
     const { modo } = body;
     if (modo === 'asignacion_stock') {
       const { institucionId, stockAsignado, fechaEstimadaConfeccion } = body;
+      
+      // 🔥 EXTRACCIÓN SEGURA DE LA CAJA CERRADA 🔥
+      // Desarmamos el "grupoKey" para saber exactamente a qué lote aplicarle el stock.
+      const realInstId = institucionId.split('_')[0];
+      const frStr = institucionId.includes('_') ? institucionId.split('_')[1] : null;
+
       let fechaParseada = null;
       if (fechaEstimadaConfeccion) {
         const fechaLimpia = fechaEstimadaConfeccion.split('T')[0];
         fechaParseada = new Date(`${fechaLimpia}T12:00:00Z`);
       }
 
-      // 2. Buscamos TODAS las prendas de la escuela que están "Pendientes en revisión"
+      // Buscamos estrictamente en esa escuela y en esa fecha de lote
+      const whereClause: any = {
+        pedido: { institucionId: realInstId },
+        estadoOperacion: 'Pendiente en revision'
+      };
+
+      if (frStr && frStr !== 'sin-fecha') {
+        const startOfDay = new Date(`${frStr}T00:00:00.000Z`);
+        const endOfDay = new Date(`${frStr}T23:59:59.999Z`);
+        whereClause.pedido.fechaRequerida = { gte: startOfDay, lte: endOfDay };
+      } else if (frStr === 'sin-fecha') {
+        whereClause.pedido.fechaRequerida = null;
+      }
+
       const prendasPendientes = await prisma.detallePedido.findMany({
-        where: { pedido: { institucionId }, estadoOperacion: 'Pendiente en revision' },
+        where: whereClause,
         orderBy: { pedidoId: 'asc' }
       });
 
@@ -214,7 +237,6 @@ export async function PUT(request: Request) {
           let stockDisponible = stockAsignado[key] ? parseInt(stockAsignado[key]) : 0;
 
           if (stockDisponible >= prenda.cantidad) {
-            // ✅ Hay stock: A Despacho
             await prisma.detallePedido.update({
               where: { id: prenda.id },
               data: { estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' }
@@ -222,16 +244,13 @@ export async function PUT(request: Request) {
             stockAsignado[key] -= prenda.cantidad;
 
           } else if (stockDisponible > 0 && stockDisponible < prenda.cantidad) {
-            // ✂️ MITOSIS: Partimos el requerimiento
             const faltante = prenda.cantidad - stockDisponible;
             
-            // A) Actualizamos la prenda actual con lo que SÍ HAY en stock (A Despacho)
             await prisma.detallePedido.update({
               where: { id: prenda.id },
               data: { cantidad: stockDisponible, estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' }
             });
 
-            // B) Creamos un registro gemelo con lo que FALTA (A Producción + Fecha)
             const dataCreate: any = {
               pedidoId: prenda.pedidoId,
               skuCodigo: prenda.skuCodigo,
@@ -252,7 +271,6 @@ export async function PUT(request: Request) {
             stockAsignado[key] = 0;
 
           } else {
-            // ❌ No hay stock: Va a Producción (Con Fecha)
             await prisma.detallePedido.update({
               where: { id: prenda.id },
               data: dataProduccion

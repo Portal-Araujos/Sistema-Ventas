@@ -6,7 +6,9 @@ import { cookies } from 'next/headers';
 const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
-// GET: OBTENER LISTADO DE EMPAQUE (CON FECHA REQUERIDA Y ATRASOS)
+// ==========================================
+// 📥 GET: OBTENER LISTADO DE EMPAQUE (CON CÓDIGO INMUTABLE)
+// ==========================================
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -48,12 +50,20 @@ export async function GET(request: Request) {
 
     for (const ped of pedidos) {
       const instId = ped.institucionId;
+      
+      // Agrupamos por Lote (Escuela + Fecha Requerida)
+      const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
+      const grupoKey = `${instId}_${fr}`;
+      const pedCreatedAt = new Date(ped.createdAt).getTime(); // Para rastrear el código maestro
+      
       let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
 
-      if (!mapaGrupos.has(instId)) {
-        mapaGrupos.set(instId, {
-          id: instId,
-          codigoOP: `OP-${instId.slice(0, 6).toUpperCase()}`,
+      if (!mapaGrupos.has(grupoKey)) {
+        mapaGrupos.set(grupoKey, {
+          id: grupoKey,
+          institucionId: instId, 
+          codigoOP: `PED-${ped.id.slice(0, 6).toUpperCase()}`, // Código Inicial
+          _maxCreatedAt: pedCreatedAt, // 🔥 Rastreador del contrato original para evitar que cambie el código
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Vendedor',
           paquetesCantidad: 0, 
@@ -61,14 +71,20 @@ export async function GET(request: Request) {
           despachadasHistoricasEscuela: 0,
           saldoPendienteEscuela: 0,
           preparadasSinDespacharEscuela: 0,
-          fechaRequeridaDate: null, // 🔥 NUEVO: Para guardar la fecha más urgente
+          fechaRequeridaDate: null,
           pedidosAsociados: []
         });
+      } else {
+        const grupo = mapaGrupos.get(grupoKey);
+        // 🔥 MAGIA: Obligamos a que el código se ancle al contrato base (Igual que en Operaciones) 🔥
+        if (pedCreatedAt > grupo._maxCreatedAt) {
+          grupo._maxCreatedAt = pedCreatedAt;
+          grupo.codigoOP = `PED-${ped.id.slice(0, 6).toUpperCase()}`;
+        }
       }
 
-      const grupo = mapaGrupos.get(instId);
+      const grupo = mapaGrupos.get(grupoKey);
 
-      // 🔥 LÓGICA INTELIGENTE: Buscar la fecha más próxima a vencer 🔥
       if (ped.fechaRequerida) {
         const pedReqDate = new Date(ped.fechaRequerida);
         if (!grupo.fechaRequeridaDate || pedReqDate < grupo.fechaRequeridaDate) {
@@ -115,25 +131,22 @@ export async function GET(request: Request) {
       else if (avanceGlobal > 0 && avanceGlobal < 100) { estadoGlobal = 'En Preparación'; kpis.enPreparacion++; } 
       else if (avanceGlobal === 100) { estadoGlobal = 'Completado'; kpis.completados++; }
 
-      // 🔥 FORMATO DE LA FECHA Y CÁLCULO DE ATRASOS 🔥
       let fechaRequeridaTexto = 'No asignada';
       let esAtrasado = false;
 
       if (g.fechaRequeridaDate) {
-        // Formateo anti-errores de zona horaria
         const isoString = g.fechaRequeridaDate.toISOString();
         const [yyyy, mm, dd] = isoString.split('T')[0].split('-');
         fechaRequeridaTexto = `${dd}/${mm}/${yyyy}`;
 
-        // Cálculo de atrasos (Comparado con Hoy a las 00:00:00)
         const reqDateLocal = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
         const hoyLocal = new Date();
         hoyLocal.setHours(0, 0, 0, 0);
         esAtrasado = reqDateLocal < hoyLocal;
       }
 
-      // Removemos el objeto fecha crudo para no ensuciar la respuesta y devolvemos lo procesado
-      const { fechaRequeridaDate, ...restoGrupo } = g;
+      // Limpiamos las variables temporales para que no lleguen al frontend
+      const { fechaRequeridaDate, _maxCreatedAt, ...restoGrupo } = g;
       return { ...restoGrupo, avanceGlobal, estadoGlobal, fechaRequeridaTexto, esAtrasado };
     });
 
@@ -141,7 +154,9 @@ export async function GET(request: Request) {
   } catch (error) { return NextResponse.json({ error: 'Error' }, { status: 500 }); }
 }
 
-// PUT: ACTUALIZAR Y DESPACHAR
+// ==========================================
+// ✏️ PUT: ACTUALIZAR Y DESPACHAR
+// ==========================================
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -158,7 +173,7 @@ export async function PUT(request: Request) {
       const nuevaGuia = await prisma.guiaDespacho.create({
         data: {
           codigoGuia: codigoGuia,
-          institucionId: institucionId,
+          institucionId: institucionId, 
           responsable: responsableDefecto
         }
       });

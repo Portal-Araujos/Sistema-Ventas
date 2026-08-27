@@ -14,7 +14,7 @@ import ContratoVentaForm from '@/components/shared/ContratoVentaForm';
 export default function PedidosPage() {
   const [grupos, setGrupos] = useState<any[]>([]);
   const [institucionesList, setInstitucionesList] = useState<any[]>([]);
-  const [catalogos, setCatalogos] = useState<any>(null);
+  const [catalogos, setCatalogos] = useState<any>(null); // Guardamos catálogos para el formulario
   const [tabActiva, setTabActiva] = useState<'Borrador' | 'Operaciones'>('Borrador');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,8 +34,9 @@ export default function PedidosPage() {
   const [mostrarFormContrato, setMostrarFormContrato] = useState(false);
   const [saving, setSaving] = useState(false);
   
-  const [globalFechaRequerida, setGlobalFechaRequerida] = useState('');
-  const [contratoData, setContratoData] = useState<any>({});
+  // 🔥 ESTADOS LIMPIOS 🔥
+  const [globalFechaRequerida, setGlobalFechaRequerida] = useState(''); // Fecha GLOBAL de la escuela
+  const [contratoData, setContratoData] = useState<any>({}); // Todo el contrato en 1 sola variable
 
   const [toast, setToast] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error', texto: string) => {
@@ -67,6 +68,7 @@ export default function PedidosPage() {
       const dataPed = await resPed.json();
       setGrupos(Array.isArray(dataPed) ? dataPed : []);
       
+      // Si estamos editando y guardamos, refrescamos el modal en vivo
       if (modalEditOpen && grupoEdit) {
         const grupoActualizado = dataPed.find((g: any) => g.id === grupoEdit.id);
         if (grupoActualizado) setGrupoEdit(grupoActualizado);
@@ -83,6 +85,7 @@ export default function PedidosPage() {
 
   const handleOpenEdit = (grupo: any) => {
     setGrupoEdit(grupo);
+    // Cargamos la fecha global de la escuela (si existe)
     setGlobalFechaRequerida(grupo.fechaRequerida ? grupo.fechaRequerida.split('T')[0] : '');
     
     if (grupo.pedidosAsociados && grupo.pedidosAsociados.length > 0) {
@@ -95,23 +98,24 @@ export default function PedidosPage() {
 
   const seleccionarContratoParaEditar = (pedido: any) => {
     setPedidoEditSelId(pedido.id);
+    
+    // Mandamos la info completa y sin fallos al Componente Universal
     setContratoData({
       numContrato: pedido.numContrato !== 'S/N' ? pedido.numContrato : '',
       nombreCliente: pedido.nombreCliente || '',
       valorContrato: pedido.valorContrato || '',
       abono: pedido.abono || '',
-      cuotaMensual: pedido.cuotaMensual || '',
+      cuotaMensual: pedido.cuotaMensual || '', // 🔥 AHORA SÍ PASAMOS LA CUOTA 🔥
       meses: pedido.meses?.toString() || '12',
       mesCobro: pedido.mesCobro || 'Enero',
-      prendas: pedido.detalles || [],
+      prendas: pedido.detalles || [], // 🔥 Las prendas intactas para que el form aplique alertas 🔥
       tipoPedido: pedido.tipoPedido || 'Pedido',
       observacion: pedido.observacion || '',
       tipoCobroId: pedido.tipoCobroId || '',
       estadoClienteId: pedido.estadoClienteId || '',
-      estadoContratoId: pedido.estadoContratoId || '',
-      tipoClienteId: pedido.tipoClienteId || '',
-      tieneCedula: pedido.tieneCedula || false
+      estadoContratoId: pedido.estadoContratoId || ''
     });
+    
     setMostrarFormContrato(false); 
   };
 
@@ -119,9 +123,10 @@ export default function PedidosPage() {
     setPedidoEditSelId('NUEVO');
     setContratoData({
       numContrato: '', nombreCliente: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero',
-      prendas: [], tipoPedido: 'Pedido', observacion: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', tipoClienteId: '', 
-      tieneCedula: false
+      prendas: [], tipoPedido: 'Pedido', observacion: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: ''
     });
+    
+    // 🔥 SI ES NUEVO: ABRIMOS LOS DATOS ADMINISTRATIVOS 🔥
     setMostrarFormContrato(true); 
   };
 
@@ -137,30 +142,58 @@ export default function PedidosPage() {
 
   const handleEnviarMasivo = async (institucionId: string) => {
     if (!confirm('¿Seguro que quieres enviar TODOS los contratos de esta escuela a Operaciones?')) return;
-    const grupoAEnviar = grupos.find(g => g.id === institucionId);
-    if (!grupoAEnviar) return showToast('error', 'No se encontró la institución.');
-    if (!grupoAEnviar.fechaRequerida) return showToast('error', 'Debes asignar la Fecha Global de Entrega antes de enviar a Operaciones.');
 
+    const grupoAEnviar = grupos.find(g => g.id === institucionId);
+
+    if (!grupoAEnviar) {
+      showToast('error', 'No se encontró la institución.');
+      return;
+    }
+
+    // Validamos que exista una fecha real
+    if (!grupoAEnviar.fechaRequerida) {
+      showToast(
+        'error',
+        'Debes asignar la Fecha Global de Entrega antes de enviar a Operaciones.'
+      );
+      return;
+    }
+
+    // Ejemplo:
+    // 2026-08-18T12:00:00.000Z
+    // se convierte en:
+    // 2026-08-18
     const fechaLimpia = grupoAEnviar.fechaRequerida.split('T')[0];
 
     try {
       const res = await fetch('/api/pedidos', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modo: 'masivo', institucionId, fechaRequerida: fechaLimpia })
+        body: JSON.stringify({
+          modo: 'masivo',
+          institucionId,
+          fechaRequerida: fechaLimpia
+        })
       });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+
+      if (!res.ok) {
+        throw new Error(data.error);
+      }
 
       showToast('exito', '¡Escuela enviada a Producción!');
       cargarDatos();
-    } catch (e: any) { showToast('error', e.message || 'Error al enviar a Operaciones.'); }
+
+    } catch (e: any) {
+      showToast('error', e.message || 'Error al enviar a Operaciones.');
+    }
   };
 
   const handleGuardarContrato = async () => {
-    if (!globalFechaRequerida) return showToast('error', 'Falta la Fecha de Entrega Global de la escuela (Arriba).');
-    if (!contratoData.numContrato) return showToast('error', 'Ingresa el Número de Contrato.');
-    if (!contratoData.prendas || contratoData.prendas.length === 0) return showToast('error', 'No puedes guardar un contrato vacío. Agrega prendas.');
+    if (!globalFechaRequerida) { showToast('error', 'Falta la Fecha de Entrega Global de la escuela (Arriba).'); return; }
+    if (!contratoData.numContrato) { showToast('error', 'Ingresa el Número de Contrato.'); return; }
+    if (!contratoData.prendas || contratoData.prendas.length === 0) { showToast('error', 'No puedes guardar un contrato vacío. Agrega prendas.'); return; }
 
     setSaving(true);
     try {
@@ -168,7 +201,7 @@ export default function PedidosPage() {
         modo: 'individual',
         id: pedidoEditSelId !== 'NUEVO' ? pedidoEditSelId : undefined,
         institucionId: grupoEdit.id,
-        fechaRequerida: globalFechaRequerida,
+        fechaRequerida: globalFechaRequerida, // Mandamos la global
         ...contratoData,
         detalles: contratoData.prendas 
       };
@@ -185,20 +218,8 @@ export default function PedidosPage() {
       showToast('exito', 'Contrato guardado exitosamente.');
       if (pedidoEditSelId === 'NUEVO' && data.id) setPedidoEditSelId(data.id);
       cargarDatos(true);
+      
     } catch (e: any) { showToast('error', e.message); } finally { setSaving(false); }
-  };
-
-  // 🔥 NUEVA FUNCIÓN PARA COLORES DINÁMICOS DE ESTADOS 🔥
-  const getEstadoColor = (estado: string) => {
-    const e = estado?.toLowerCase() || '';
-    if (e.includes('borrador')) return 'bg-amber-100 text-amber-800 border-amber-200';
-    if (e.includes('varios')) return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-    if (e.includes('revision')) return 'bg-orange-100 text-orange-800 border-orange-200';
-    if (e.includes('producci')) return 'bg-purple-100 text-purple-800 border-purple-200';
-    if (e.includes('empaque')) return 'bg-blue-100 text-blue-800 border-blue-200';
-    if (e.includes('listos')) return 'bg-teal-100 text-teal-800 border-teal-200';
-    if (e.includes('despacho')) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-    return 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
   const filteredGrupos = grupos.filter(g => g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) || g.codigoPedido?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -206,6 +227,7 @@ export default function PedidosPage() {
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
       
+      {/* CABECERA */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
@@ -220,6 +242,7 @@ export default function PedidosPage() {
         <button onClick={() => setTabActiva('Operaciones')} className={`pb-3 px-3 text-sm font-black transition-all border-b-2 ${tabActiva === 'Operaciones' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500'}`}>🏭 Enviados a Operaciones</button>
       </div>
       
+      {/* FILTROS */}
       <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col lg:flex-row gap-3 items-center justify-between">
         <div className="relative flex-1 w-full">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
@@ -241,6 +264,7 @@ export default function PedidosPage() {
         </div>
       </div>
       
+      {/* TABLA PRINCIPAL */}
       {loading ? (
         <div className="p-12 text-center text-gray-500 font-bold animate-pulse">Cargando pedidos...</div>
       ) : filteredGrupos.length === 0 ? (
@@ -250,89 +274,67 @@ export default function PedidosPage() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-auto max-h-[65vh]">
+          <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs min-w-650px">
               <thead>
                 <tr className="bg-gray-100 text-gray-600 font-black uppercase border-b border-gray-200">
                   <th className="p-3.5">Código</th>
                   <th className="p-3.5">Institución</th>
-                  <th className="p-3.5">Vendedor</th>
                   <th className="p-3.5 text-center">Contratos</th>
                   <th className="p-3.5 text-center">Paquetes</th>
                   <th className="p-3.5 text-center">Prendas</th>
-                  <th className="p-3.5 text-center">Estado General</th>
+                  <th className="p-3.5 text-center">Estado</th>
                   <th className="p-3.5">Última Actualización</th>
                   <th className="p-3.5 text-center">Entrega Pautada</th>
                   <th className="p-3.5 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredGrupos.map((item) => {
-                  
-                  // 🔥 LÓGICA DE "VARIOS ESTADOS" PARA LA TABLA GENERAL 🔥
-                  let estadoMostrar = item.estado;
-                  if (item.estado !== 'Borrador') {
-                    let estadosUnicos = new Set();
-                    item.pedidosAsociados?.forEach((ped: any) => {
-                      ped.detalles?.forEach((d: any) => {
-                        if (d.estadoOperacion) estadosUnicos.add(d.estadoOperacion);
-                      });
-                    });
-                    if (estadosUnicos.size > 1) {
-                      estadoMostrar = 'Varios Estados';
-                    } else if (estadosUnicos.size === 1) {
-                      estadoMostrar = Array.from(estadosUnicos)[0] as string;
-                    }
-                  }
-                  return (
-                    <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
-                      <td className="p-3.5 font-mono font-black text-blue-600">{item.codigoPedido}</td>
-                      <td className="p-3.5 font-bold text-gray-900">{item.institucionNombre}</td>
-                      <td className="p-3.5 text-gray-600 font-semibold">{item.vendedorNombre}</td>
-                      <td className="p-3.5 text-center font-semibold text-gray-700">{item.contratosTotal}</td>
-                      <td className="p-3.5 text-center font-bold text-gray-800">{item.paquetesCantidad}</td>
-                      <td className="p-3.5 text-center font-black text-emerald-600 text-sm">{item.totalPrendas}</td>
-                      <td className="p-3.5 text-center">
-                        <Badge className={`text-[10px] ${getEstadoColor(estadoMostrar)}`}>
-                          {estadoMostrar}
-                        </Badge>
-                      </td>
-                      <td className="p-3.5 text-gray-500 whitespace-nowrap">{item.updatedAt}</td>
-                      <td className="p-3.5 text-center font-bold text-blue-600">{item.fechaRequeridaTexto}</td>
-                      <td className="p-3.5">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {item.estado === 'Borrador' && (
-                            <Button size="icon" variant="ghost" title="Enviar Todo a Operaciones" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleEnviarMasivo(item.id)}>
-                              <Send size={15} />
-                            </Button>
-                          )}
-                          <Button size="icon" variant="ghost" title="Ver Contratos y Prendas" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => handleOpenDetalle(item)}>
-                            <Eye size={15} />
+                {filteredGrupos.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
+                    <td className="p-3.5 font-mono font-black text-blue-600">{item.codigoPedido}</td>
+                    <td className="p-3.5 font-bold text-gray-900">{item.institucionNombre}</td>
+                    <td className="p-3.5 text-center font-semibold text-gray-700">{item.contratosTotal}</td>
+                    <td className="p-3.5 text-center font-bold text-gray-800">{item.paquetesCantidad}</td>
+                    <td className="p-3.5 text-center font-black text-emerald-600 text-sm">{item.totalPrendas}</td>
+                    <td className="p-3.5 text-center">
+                      <Badge className={item.estado === 'Borrador' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200'}>{item.estado}</Badge>
+                    </td>
+                    <td className="p-3.5 text-gray-500 whitespace-nowrap">{item.updatedAt}</td>
+                    <td className="p-3.5 text-center font-bold text-blue-600">{item.fechaRequeridaTexto}</td>
+                    <td className="p-3.5">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {item.estado === 'Borrador' && (
+                          <Button size="icon" variant="ghost" title="Enviar Todo a Operaciones" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => handleEnviarMasivo(item.id)}>
+                            <Send size={15} />
                           </Button>
-                          {item.estado === 'Borrador' && (
-                            <Button size="icon" variant="ghost" title="Completar Pedido" className="h-8 w-8 text-amber-600 hover:bg-amber-50" onClick={() => handleOpenEdit(item)}>
-                              <Edit size={15} />
-                            </Button>
-                          )}
-                          {item.estado === 'Borrador' && (
-                            <Button size="icon" variant="ghost" title="Eliminar Registro" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => handleEliminarGrupo(item.id)}>
-                              <Trash2 size={15} />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        )}
+                        <Button size="icon" variant="ghost" title="Ver Contratos" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => handleOpenDetalle(item)}>
+                          <Eye size={15} />
+                        </Button>
+                        {item.estado === 'Borrador' && (
+                          <Button size="icon" variant="ghost" title="Completar Pedido" className="h-8 w-8 text-amber-600 hover:bg-amber-50" onClick={() => handleOpenEdit(item)}>
+                            <Edit size={15} />
+                          </Button>
+                        )}
+                        {item.estado === 'Borrador' && (
+                          <Button size="icon" variant="ghost" title="Eliminar Registro" className="h-8 w-8 text-red-600 hover:bg-red-50" onClick={() => handleEliminarGrupo(item.id)}>
+                            <Trash2 size={15} />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* 👁️ MODAL DE SOLO LECTURA (AHORA CON ESTADOS Y OBSERVACIONES POR PRENDA) */}
+      {/* MODAL DE SOLO LECTURA */}
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
-        <DialogContent className="sm:max-w-5xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
+        <DialogContent className="sm:max-w-3xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-gray-900 border-b pb-3 flex items-center justify-between">
               <span>Detalle del Grupo de Pedidos</span>
@@ -341,14 +343,12 @@ export default function PedidosPage() {
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-xl border text-xs">
-              <div><span className="text-gray-400 block font-bold uppercase">CÓDIGO PEDIDO</span><span className="font-mono font-black text-blue-600">{grupoDetalle?.codigoPedido}</span></div>
               <div><span className="text-gray-400 block font-bold uppercase">INSTITUCIÓN</span><span className="font-extrabold text-gray-800">{grupoDetalle?.institucionNombre}</span></div>
-              <div><span className="text-gray-400 block font-bold uppercase">FECHA DE CREACIÓN</span><span className="font-extrabold text-gray-700">{grupoDetalle?.fechaCreacionTexto}</span></div>
-              <div><span className="text-gray-400 block font-bold uppercase">VENDEDOR</span><span className="font-extrabold text-gray-800">{grupoDetalle?.vendedorNombre}</span></div>
-              <div><span className="text-gray-400 block font-bold uppercase">CONTRATOS</span><span className="font-extrabold text-blue-700">{grupoDetalle?.contratosTotal}</span></div>
-              <div><span className="text-gray-400 block font-bold uppercase">PAQUETES</span><span className="font-extrabold text-gray-800">{grupoDetalle?.paquetesCantidad}</span></div>
-              <div className="col-span-2"><span className="text-gray-400 block font-bold uppercase">TOTAL PRENDAS</span><span className="font-black text-emerald-600 text-sm">{grupoDetalle?.totalPrendas} prendas</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">ENTREGA PROMETIDA</span><span className="font-extrabold text-blue-700">{grupoDetalle?.fechaRequeridaTexto}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">CONTRATOS</span><span className="font-extrabold text-gray-700">{grupoDetalle?.contratosTotal}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">TOTAL PRENDAS</span><span className="font-black text-emerald-600 text-sm">{grupoDetalle?.totalPrendas} prendas</span></div>
             </div>
+            
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">Contratos Vinculados:</p>
             <div className="space-y-3">
               {grupoDetalle?.pedidosAsociados?.map((ped: any) => {
@@ -361,48 +361,32 @@ export default function PedidosPage() {
                         <span className="text-xs font-bold text-gray-800">{ped.nombreCliente}</span>
                       </div>
                       <Button size="sm" variant="ghost" className="text-xs font-bold text-primary flex items-center gap-1" onClick={() => setContratoExpandido(isExpanded ? null : ped.id)}>
-                        <Eye size={14} /> {isExpanded ? 'Ocultar Prendas' : 'Ver Prendas y Estado'}
+                        <Eye size={14} /> {isExpanded ? 'Ocultar Prendas' : 'Ver Prendas'}
                       </Button>
                     </div>
                     {isExpanded && (
                       <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse min-w-800px">
+                        <table className="w-full text-left text-xs border-collapse min-w-550px">
                           <thead>
                             <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase">
-                              <th className="pb-2">SKU</th>
-                              <th className="pb-2">Prenda</th>
-                              <th className="pb-2">Color/Talla/Genero</th>
-                              <th className="pb-2 text-center">Cant.</th>
+                              <th className="pb-2">SKU</th><th className="pb-2">Prenda</th><th className="pb-2">Color</th>
+                              <th className="pb-2">Género</th><th className="pb-2">Talla</th><th className="pb-2 text-center">Cant.</th>
                               <th className="pb-2">Bordado</th>
-                              <th className="pb-2 text-center">Estado Actual</th>
-                              <th className="pb-2">Observaciones</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {ped.detalles?.length === 0 ? (
-                              <tr><td colSpan={9} className="py-3 text-center text-gray-400 italic">No hay prendas.</td></tr>
+                              <tr><td colSpan={7} className="py-3 text-center text-gray-400 italic">No hay prendas.</td></tr>
                             ) : (
                               ped.detalles?.map((p: any, i: number) => (
                                 <tr key={i} className="hover:bg-white">
                                   <td className="py-2 font-mono font-bold text-blue-600">{p.skuCodigo}</td>
                                   <td className="py-2 font-bold text-gray-800">{p.tipoRopa}</td>
-                                  <td className="py-2 text-gray-600">{p.color}-{p.talla}-{p.genero}</td>
+                                  <td className="py-2 text-gray-600">{p.color}</td>
+                                  <td className="py-2 font-semibold text-purple-700">{p.genero}</td>
+                                  <td className="py-2 font-bold text-primary">{p.talla}</td>
                                   <td className="py-2 text-center font-black">{p.cantidad}</td>
                                   <td className="py-2 text-gray-600 italic">{p.bordado || '-'}</td>
-                                  <td className="py-2 text-center">
-                                    <Badge variant="outline" className={`text-[9px] uppercase font-bold ${getEstadoColor(p.estadoOperacion || 'Pendiente en revision')}`}>
-                                      {p.estadoOperacion || 'En revisión'}
-                                    </Badge>
-                                  </td>
-                                  <td className="py-2 text-[10px]">
-                                    {p.observacion && (
-                                      <div className="mb-0.5"><span className="font-bold text-gray-700">Ven:</span> {p.observacion}</div>
-                                    )}
-                                    {p.observacionOperaciones && (
-                                      <div><span className="font-bold text-blue-700">Taller:</span> {p.observacionOperaciones}</div>
-                                    )}
-                                    {!p.observacion && !p.observacionOperaciones && <span className="text-gray-400 italic">-</span>}
-                                  </td>
                                 </tr>
                               ))
                             )}
@@ -421,9 +405,8 @@ export default function PedidosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* SÚPER MODAL DE EDICIÓN */}
+      {/* 🔥 SÚPER MODAL DE EDICIÓN (CON COMPONENTE UNIVERSAL) 🔥 */}
       <Dialog open={modalEditOpen} onOpenChange={setModalEditOpen}>
-        {/* ... (El modal de edición permanece exactamente igual) ... */}
         <DialogContent className="sm:max-w-6xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[95vh]">
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-gray-900 border-b pb-2 flex justify-between items-center">
@@ -432,6 +415,7 @@ export default function PedidosPage() {
             </DialogTitle>
           </DialogHeader>
 
+          {/* 🔥 FECHA GLOBAL DE ENTREGA (FUERA DEL CONTRATO) 🔥 */}
           <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl flex items-center justify-between mt-4">
             <div>
               <Label className="text-xs font-black text-blue-900 uppercase">Fecha de Entrega Prometida (Aplica a toda la escuela) *</Label>
@@ -441,6 +425,8 @@ export default function PedidosPage() {
           </div>
 
           <div className="flex flex-col lg:flex-row gap-6 mt-4">
+            
+            {/* PANEL IZQUIERDO: LISTA DE CONTRATOS */}
             <div className="w-full lg:w-1/3 border-r lg:pr-4 space-y-4">
               <div className="flex justify-between items-center">
                 <Label className="text-xs font-bold text-gray-500 uppercase">1. Selecciona un Contrato</Label>
@@ -467,10 +453,16 @@ export default function PedidosPage() {
                     </div>
                   </button>
                 ))}
+                {grupoEdit?.pedidosAsociados?.length === 0 && (
+                  <p className="text-xs text-gray-400 italic text-center py-4">No hay contratos registrados aún.</p>
+                )}
               </div>
             </div>
 
+            {/* PANEL DERECHO: FORMULARIO UNIVERSAL */}
             <div className="w-full lg:w-2/3 space-y-5">
+              
+              {/* 🔥 AQUÍ LLAMAMOS A NUESTRO COMPONENTE UNIVERSAL 🔥 */}
               <ContratoVentaForm 
                 data={contratoData}
                 catalogos={catalogos}
@@ -484,6 +476,7 @@ export default function PedidosPage() {
                 {saving ? 'Guardando base de datos...' : '💾 Guardar este Contrato'}
               </Button>
             </div>
+
           </div>
         </DialogContent>
       </Dialog>

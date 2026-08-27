@@ -116,7 +116,7 @@ export default function EmpaquePage() {
     });
 
     if (preparadas.length === 0) {
-      showToast('error', 'No hay prendas en estado "Preparado" en esta escuela.');
+      showToast('error', 'No hay prendas en estado "Preparado" en este pedido.');
       return;
     }
     setPrendasParaGuia(preparadas);
@@ -135,7 +135,7 @@ export default function EmpaquePage() {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modo: 'generar_guia',
-          institucionId: grupoDetalle.id,
+          institucionId: grupoDetalle.institucionId, // 🔥 ENVIAMOS EL ID DE LA ESCUELA A LA GUÍA
           codigoGuia: codigoGuia,
           prendasIds: prendasParaGuia.map(p => p.id)
         })
@@ -221,7 +221,7 @@ export default function EmpaquePage() {
           <table>
             <thead>
               <tr>
-                <th>Código OP</th><th>N° Contrato</th><th>Cliente</th>
+                <th>Código Pedido</th><th>N° Contrato</th><th>Cliente</th>
                 <th>SKU</th><th>Prenda</th><th>Color</th><th>Sexo</th><th>Talla</th>
                 <th>Cant.</th><th>Bordado</th><th>Observación</th>
                 <th>Estado Actual</th><th>Guía</th>
@@ -246,27 +246,24 @@ export default function EmpaquePage() {
     return 'bg-gray-300';
   };
 
+  // 🔥 FILTRO ADAPTADO AL ID REAL DE LA ESCUELA 🔥
   const filteredData = data.filter(g => {
-    const matchSearch = g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) || g.codigoPedido?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchSearch = g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) || g.codigoOP?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchInst = selectedInstFilter ? g.institucionId === selectedInstFilter : true;
     return matchSearch && matchInst;
   });
   
-  // ▼ 1. COPIA Y PEGA DESDE AQUÍ HASTA paginatedData ▼
   const sortedData = [...filteredData].sort((a, b) => {
     const isFantasmaA = !a.fechaRequeridaTexto || a.fechaRequeridaTexto.includes('1969') || a.fechaRequeridaTexto.includes('1970');
     const isFantasmaB = !b.fechaRequeridaTexto || b.fechaRequeridaTexto.includes('1969') || b.fechaRequeridaTexto.includes('1970');
 
-    // Mandar fantasmas (sin fecha) al final
     if (isFantasmaA && !isFantasmaB) return 1;
     if (!isFantasmaA && isFantasmaB) return -1;
     if (isFantasmaA && isFantasmaB) return 0;
 
-    // Priorizar atrasados
     if (a.esAtrasado && !b.esAtrasado) return -1;
     if (!a.esAtrasado && b.esAtrasado) return 1;
 
-    // Convertir DD/MM/YYYY a Fecha Real para restar y ordenar
     const parseDate = (dStr: string) => {
       if (!dStr) return new Date(8640000000000000).getTime();
       if (dStr.includes('-')) return new Date(dStr).getTime();
@@ -279,8 +276,7 @@ export default function EmpaquePage() {
 
   const totalPages = Math.max(1, Math.ceil(sortedData.length / itemsPerPage));
   const paginatedData = sortedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  // ▲ FIN DE LA COPIA ▲
-
+  
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
       
@@ -320,7 +316,7 @@ export default function EmpaquePage() {
       <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-3 items-center">
         <div className="relative w-full md:w-1/3">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
-          <Input className="pl-9 text-xs h-10 bg-gray-50" placeholder="Buscar OP- o Institución..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <Input className="pl-9 text-xs h-10 bg-gray-50" placeholder="Buscar PED- o Institución..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
         <select className="h-10 border rounded-xl px-3 text-xs font-bold bg-gray-50 w-full md:w-1/3" value={selectedInstFilter} onChange={e => setSelectedInstFilter(e.target.value)}>
           <option value="">🏫 Todas las Instituciones</option>
@@ -349,7 +345,7 @@ export default function EmpaquePage() {
             <table className="w-full text-left border-collapse text-xs min-w-800px">
               <thead>
                 <tr className="bg-gray-100 text-gray-600 font-black uppercase border-b border-gray-200">
-                  <th className="p-3.5">Orden OP</th>
+                  <th className="p-3.5">Código Pedido</th>
                   <th className="p-3.5">Institución</th>
                   <th className="p-3.5">Vendedor</th>
                   <th className="p-3.5 text-center">Contratos</th>
@@ -361,7 +357,6 @@ export default function EmpaquePage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {paginatedData.map((item) => {
-                  // 🔥 1. PREPARAMOS LA FECHA (Evitamos fechas fantasma si aún no la asignan) 🔥
                   const isFantasma = !item.fechaRequeridaTexto || item.fechaRequeridaTexto.includes('1969') || item.fechaRequeridaTexto.includes('1970');
                   const fechaReqCorregida = isFantasma ? 'No asignada' : item.fechaRequeridaTexto;
 
@@ -393,7 +388,6 @@ export default function EmpaquePage() {
                         </Badge>
                       </td>
 
-                      {/* 🔥 2. CELDA DE LA FECHA REQUERIDA 🔥 */}
                       <td className="p-3.5 text-center">
                         <span className={`font-bold px-2 py-1 rounded border ${item.esAtrasado ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
                           {fechaReqCorregida}
@@ -406,7 +400,7 @@ export default function EmpaquePage() {
                             <Printer size={16} />
                           </Button>
                           <Button size="sm" variant="outline" className="h-8 text-xs font-bold text-primary border-primary/30" onClick={() => handleOpenDetalle(item)}>
-                            <Eye size={14} className="mr-1" /> Panel Escuela
+                            <Eye size={14} className="mr-1" /> Panel Pedido
                           </Button>
                         </div>
                       </td>
@@ -429,7 +423,7 @@ export default function EmpaquePage() {
         </div>
       )}
 
-      {/* 👁️ MODAL NIVEL 2: EL GRAN PANEL DE AUDITORÍA DE LA ESCUELA */}
+      {/* 👁️ MODAL NIVEL 2: EL GRAN PANEL DE AUDITORÍA */}
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
         <DialogContent className="sm:max-w-5xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[90vh]">
           <DialogHeader>
@@ -442,11 +436,11 @@ export default function EmpaquePage() {
           <div className="space-y-4 mt-2">
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-xl border border-gray-300 shadow-inner text-xs">
-                            <div><span className="text-gray-400 block font-bold uppercase">CÓDIGO PEDIDO</span><span className="font-mono font-black text-blue-600">{grupoDetalle?.codigoOP}</span></div>
+              <div><span className="text-gray-400 block font-bold uppercase">CÓDIGO PEDIDO</span><span className="font-mono font-black text-blue-600">{grupoDetalle?.codigoOP}</span></div>
               <div><span className="text-gray-400 block font-bold uppercase">INSTITUCIÓN</span><span className="font-extrabold text-gray-800">{grupoDetalle?.institucionNombre}</span></div>
               <div><span className="text-gray-400 block font-bold uppercase">VENDEDOR</span><span className="font-extrabold text-gray-800">{grupoDetalle?.vendedorNombre}</span></div>
               <div><span className="text-gray-400 block font-bold uppercase">PAQUETES</span><span className="font-extrabold text-gray-800">{grupoDetalle?.paquetesCantidad}</span></div>
-              <div className="flex flex-col"><span className="text-gray-400 font-bold uppercase">Total Escuela</span><span className="font-black text-gray-800 text-xl">{grupoDetalle?.totalPrendasEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
+              <div className="flex flex-col"><span className="text-gray-400 font-bold uppercase">Total Pedido</span><span className="font-black text-gray-800 text-xl">{grupoDetalle?.totalPrendasEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
               <div className="flex flex-col"><span className="text-emerald-500 font-bold uppercase">Ya Despachado</span><span className="font-black text-emerald-600 text-xl">{grupoDetalle?.despachadasHistoricasEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
               <div className="flex flex-col"><span className="text-red-500 font-bold uppercase">Saldo Pendiente</span><span className="font-black text-red-600 text-xl">{grupoDetalle?.saldoPendienteEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
               <div className="flex flex-col"><span className="text-blue-500 font-bold uppercase">Listas / Despachar</span><span className="font-black text-blue-600 text-xl">{grupoDetalle?.preparadasSinDespacharEscuela} <span className="text-[10px] font-normal text-gray-500">prendas</span></span></div>
@@ -461,7 +455,7 @@ export default function EmpaquePage() {
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1 mt-4">Lista de Contratos para Empacar (Checklist):</p>
             
             <div className="overflow-x-auto border rounded-xl">
-              <table className="w-full text-left text-xs border-collapse min-w-[800px">
+              <table className="w-full text-left text-xs border-collapse min-w-800px">
                 <thead>
                   <tr className="bg-gray-100 text-gray-600 font-bold uppercase border-b">
                     <th className="p-3">N. Paquete</th>
@@ -597,7 +591,7 @@ export default function EmpaquePage() {
 
           <div className="space-y-4 mt-2">
             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-              <p className="text-xs text-blue-800 font-medium">Vas a despachar <strong className="text-lg font-black">{prendasParaGuia.length}</strong> prendas que ya están Listas de la escuela <strong>{grupoDetalle?.institucionNombre}</strong>.</p>
+              <p className="text-xs text-blue-800 font-medium">Vas a despachar <strong className="text-lg font-black">{prendasParaGuia.length}</strong> prendas que ya están Listas del pedido <strong>{grupoDetalle?.codigoOP}</strong>.</p>
             </div>
 
             <div>

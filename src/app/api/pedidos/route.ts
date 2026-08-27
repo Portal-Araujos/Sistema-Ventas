@@ -18,9 +18,6 @@ const parseMoney = (val: any) => {
   return isNaN(num) ? 0 : num;
 };
 
-// ==========================================
-// 📥 GET: OBTENER PEDIDOS (SEPARADOS POR VISITA)
-// ==========================================
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -80,7 +77,7 @@ export async function GET(request: Request) {
       include: {
         institucion: { select: { id: true, nombre: true } },
         usuario: { select: { id: true, nombre: true } },
-        operarioAsignado: { select: { id: true, nombre: true } }, 
+        operarioAsignado: { select: { id: true, nombre: true } },
         detalles: true
       },
       orderBy: { createdAt: 'desc' }
@@ -103,13 +100,16 @@ export async function GET(request: Request) {
     
     for (const ped of pedidos as any[]) {
       const instId = ped.institucionId;
-      
-      // 🔥 LA MAGIA: Agrupamos por Institución + El minuto exacto de creación.
-      // Así separamos la visita de la mañana de la visita de la tarde.
-      const minutoCreacion = new Date(ped.createdAt).toISOString().slice(0, 16);
-      const grupoKey = `${instId}_${minutoCreacion}`;
-
       let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
+      
+      // 🔥 LA REGLA MAESTRA: CAJA ABIERTA VS CAJA CERRADA 🔥
+      let grupoKey = instId; 
+      if (ped.estado !== 'Borrador') {
+         // Si ya se fue a Operaciones, se agrupa separadamente por su fecha requerida.
+         // Esto permite que nazca un nuevo "Borrador" limpio para esta misma escuela.
+         const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
+         grupoKey = `${instId}_${fr}`;
+      }
       
       const ventaAsociada = ventasGuardadas.find(v => {
         const vNum = v.numContrato ? String(v.numContrato).trim() : 'S/N';
@@ -135,9 +135,8 @@ export async function GET(request: Request) {
       
       if (!mapaGrupos.has(grupoKey)) {
         mapaGrupos.set(grupoKey, {
-          id: grupoKey, // 🔥 El ID ahora es compuesto para no mezclar las eliminaciones
-          institucionId: instId, // Guardamos el ID real por si acaso
-          codigoPedido: `PED-${ped.id.slice(0, 6).toUpperCase()}`, // 🔥 Código único real basado en la BD
+          id: grupoKey, 
+          codigoPedido: ped.estado === 'Borrador' ? `PED-${instId.slice(0, 6).toUpperCase()}` : `PED-${ped.id.slice(0,6).toUpperCase()}`,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaCreacion: ped.createdAt, fechaRequerida: fechaValida,
@@ -162,7 +161,7 @@ export async function GET(request: Request) {
         nombreCliente: ped.nombreCliente || `Cliente Contrato #${contratoExtraido}`,
         tipoPedido: ped.tipoPedido || 'Pedido', observacion: ped.observacion || '',
         fechaRequerida: fechaValida, 
-        operarioAsignadoId: ped.operarioAsignadoId || '', 
+        operarioAsignadoId: ped.operarioAsignadoId || '',
         operarioAsignadoNombre: ped.operarioAsignado?.nombre || 'Auto-asignado', 
         detalles: ped.detalles || [],
         totalUnidadesContrato: unidadesEnEstePedido,
@@ -195,14 +194,10 @@ export async function GET(request: Request) {
 
     return NextResponse.json(resultado);
   } catch (error: any) {
-    console.error(" ERROR EN GET PEDIDOS:", error);
     return NextResponse.json({ error: error.message || 'Error al consultar pedidos' }, { status: 500 });
   }
 }
 
-// ==========================================
-// ✏️ PUT: ACTUALIZAR PEDIDO Y VENTA
-// ==========================================
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -221,12 +216,14 @@ export async function PUT(request: Request) {
     const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
 
     if (modo === 'masivo') {
+      // 🔥 ENVÍO A OPERACIONES DE LA CAJA ABIERTA 🔥
       await prisma.pedido.updateMany({
         where: { institucionId, estado: 'Borrador' },
         data: { estado: 'Pendiente en revisión', fechaRequerida: fechaParseada }
       });
       return NextResponse.json({ success: true });
     } else {
+      
       const pedidoAntiguo = await prisma.pedido.findUnique({ where: { id } });
       const oldNumContrato = pedidoAntiguo?.numContrato ? String(pedidoAntiguo.numContrato).trim() : 'S/N';
       const numContratoLimpio = numContrato !== undefined ? String(numContrato).trim() : oldNumContrato;
@@ -297,14 +294,90 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: true });
     }
   } catch (error: any) { 
-    console.error(" ERROR EN PUT PEDIDOS:", error);
     return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 }); 
   }
 }
 
-// ==========================================
-// 🗑️ DELETE: EFECTO DOMINÓ (Borrador -> Venta -> Visita)
-// ==========================================
+export async function POST(request: Request) {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('session_token')?.value;
+    const { payload } = await jwtVerify(token!, JWT_SECRET);
+    const userId = payload.id as string;
+    const userRol = payload.rol as string;
+
+    const body = await request.json();
+    const fechaParseada = (body.fechaRequerida && body.fechaRequerida.length > 4) ? new Date(`${body.fechaRequerida}T12:00:00Z`) : null;
+    const numContratoLimpio = body.numContrato ? String(body.numContrato).trim() : 'S/N';
+    
+    let vendedorFinalId = userId;
+    const dueñoEscuela = await prisma.usuario.findFirst({
+      where: { institucionesAsignadas: { some: { id: body.institucionId } } },
+      select: { id: true }
+    });
+    
+    if (dueñoEscuela) {
+      vendedorFinalId = dueñoEscuela.id;
+    }
+
+    // 🔥 DETECCIÓN DINÁMICA DE ELECTRO VS TEXTIL 🔥
+    let isElectro = false;
+    if (body.estadoClienteId) {
+      const estadoCli = await prisma.estadoCliente.findUnique({ where: { id: parseId(body.estadoClienteId) || 0 }});
+      if (estadoCli?.nombre?.toLowerCase().includes('electro')) isElectro = true;
+    }
+    const tipoLogistica = isElectro ? 'ELECTRO' : 'TEXTIL';
+
+    const configSeguridad = await prisma.configuracionSeguridad.findUnique({ where: { id: 1 } });
+    const jefeElectro = configSeguridad?.encargadoBodegaElectroId || userId;
+    const jefeTextil = configSeguridad?.encargadoBodegaTextilId || userId;
+    
+    let operarioDefinitivo = isElectro ? jefeElectro : jefeTextil;
+    if (userRol === 'super_admin' && body.operarioAsignadoId) {
+      operarioDefinitivo = body.operarioAsignadoId; 
+    }
+
+    const nuevoPedido = await prisma.pedido.create({
+      data: {
+        institucionId: body.institucionId, 
+        usuarioId: vendedorFinalId, 
+        operarioAsignadoId: operarioDefinitivo, 
+        tipoPedido: tipoLogistica,
+        numContrato: body.numContrato || null,
+        nombreCliente: body.nombreCliente || `Cliente`,
+        fechaRequerida: fechaParseada,
+        detalles: {
+          create: (body.detalles || []).map((d: any) => ({
+            skuCodigo: d.skuCodigo || 'S/N', tipoRopa: d.tipoRopa || 'Prenda', color: d.color || '',
+            genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1, bordado: d.bordado || null, observacion: d.observacion || null
+          }))
+        }
+      }
+    });
+
+    await prisma.venta.create({
+      data: {
+        institucionId: body.institucionId,
+        vendedorId: vendedorFinalId,
+        numContrato: numContratoLimpio,
+        fechaVenta: new Date(), 
+        valorContrato: parseMoney(body.valorContrato),
+        abono: parseMoney(body.abono),
+        cuotaMensual: parseMoney(body.cuotaMensual),
+        meses: parseInt(body.meses) || 12,
+        mesCobro: body.mesCobro ? String(body.mesCobro) : 'Enero',
+        tipoCobroId: parseId(body.tipoCobroId),
+        estadoClienteId: parseId(body.estadoClienteId),
+        estadoContratoId: parseId(body.estadoContratoId),
+      }
+    });
+
+    return NextResponse.json(nuevoPedido);
+  } catch (error: any) { 
+    return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 }); 
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -316,75 +389,48 @@ export async function DELETE(request: Request) {
     const userId = payload.id as string;
 
     const { searchParams } = new URL(request.url);
-    const rawParam = searchParams.get('institucionId') || searchParams.get('id');
+    const institucionId = searchParams.get('institucionId');
 
-    if (!rawParam) {
+    if (!institucionId) {
       return NextResponse.json({ error: 'Falta ID para eliminar' }, { status: 400 });
     }
 
-    // Extraemos si viene la nueva llave compuesta (ID_FECHA) o solo el ID
-    const realInstId = rawParam.split('_')[0];
-    const timeStr = rawParam.includes('_') ? rawParam.split('_')[1] : null;
-
-    // 🔥 INICIAMOS LA TRANSACCIÓN SEGURA (Efecto Dominó) 🔥
     await prisma.$transaction(async (tx) => {
-      
-      const whereClause: any = { estado: 'Borrador' }; // 🔒 REGLA DE ORO: Solo Borradores
-      whereClause.institucionId = realInstId;
-      
-      if (userRol === 'vendedor') {
-        whereClause.usuarioId = userId;
-      }
+      // SOLO SE BORRA LA CAJA ABIERTA (Borradores)
+      const whereClause: any = { institucionId, estado: 'Borrador' };
+      if (userRol === 'vendedor') whereClause.usuarioId = userId;
 
-      const pedidosBrutos = await tx.pedido.findMany({ where: whereClause });
+      const pedidosABorrar = await tx.pedido.findMany({ where: whereClause });
       
-      // Filtramos SOLO los de esa visita específica (por la hora)
-      const pedidosABorrar = timeStr 
-        ? pedidosBrutos.filter(p => new Date(p.createdAt).toISOString().slice(0,16) === timeStr)
-        : pedidosBrutos;
-
       if (pedidosABorrar.length === 0) {
-        throw new Error('No hay pedidos en estado Borrador para esta visita o ya fueron procesados.');
+        throw new Error('No hay borradores para eliminar.');
       }
 
       for (const pedido of pedidosABorrar) {
-        // 1. Encontrar la Venta Financiera asociada a este pedido
         const ventaAsociada = await tx.venta.findFirst({
           where: {
             institucionId: pedido.institucionId,
             numContrato: pedido.numContrato || 'S/N',
-            vendedorId: pedido.usuarioId
+            vendedorId: pedido.usuarioId,
+            estadoTicket: 'Pendiente Facturación'
           }
         });
 
-        // 2. Eliminar el Pedido (Las prendas se borran solas por Cascade)
         await tx.pedido.delete({ where: { id: pedido.id } });
 
-        // 3. Efecto Dominó en Ventas y Visitas
         if (ventaAsociada) {
           await tx.venta.delete({ where: { id: ventaAsociada.id } });
-
-          // 4. Analizar la Visita del GPS
           if (ventaAsociada.visitaId) {
-            const ventasRestantes = await tx.venta.count({
-              where: { visitaId: ventaAsociada.visitaId }
-            });
-
-            // Si esta era la ÚNICA venta de esa visita, revertimos la escuela a Pendiente
+            const ventasRestantes = await tx.venta.count({ where: { visitaId: ventaAsociada.visitaId } });
             if (ventasRestantes === 0) {
               const visita = await tx.visitaAgenda.findUnique({ where: { id: ventaAsociada.visitaId } });
-              
               if (visita) {
                 if (visita.esVisitaLibre) {
                   await tx.visitaAgenda.delete({ where: { id: visita.id } });
                 } else {
-                  const hoy = new Date(); 
-                  hoy.setHours(0, 0, 0, 0);
-                  const fechaProg = new Date(visita.fechaProgramada); 
-                  fechaProg.setHours(0, 0, 0, 0);
-                  
+                  const hoy = new Date(); hoy.setHours(0,0,0,0);
+                  const fechaProg = new Date(visita.fechaProgramada); fechaProg.setHours(0,0,0,0);
                   const nuevoEstado = fechaProg < hoy ? 'Vencida' : 'Pendiente';
-                  
                   await tx.visitaAgenda.update({
                     where: { id: visita.id },
                     data: { estadoGestion: nuevoEstado, resumenAcuerdos: null }
@@ -397,9 +443,8 @@ export async function DELETE(request: Request) {
       }
     });
 
-    return NextResponse.json({ success: true, message: 'Pedido y registros eliminados con éxito.' });
+    return NextResponse.json({ success: true, message: 'Borradores eliminados.' });
   } catch (error: any) {
-    console.error(" ERROR EN DELETE PEDIDOS:", error);
-    return NextResponse.json({ error: error.message || 'Error al eliminar el pedido' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Error al eliminar.' }, { status: 500 });
   }
 }

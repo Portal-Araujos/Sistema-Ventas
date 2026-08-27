@@ -56,7 +56,7 @@ export async function GET(request: Request) {
               usuario: { select: { id: true, nombre: true } }
             }
           },
-          operarioAsignado: { select: { id: true, nombre: true } } // 🔥 AQUÍ ESTÁ LA MAGIA, TRAEMOS AL TRABAJADOR
+          operarioAsignado: { select: { id: true, nombre: true } }
         },
         orderBy: { createdAt: 'desc' }
       });
@@ -68,11 +68,16 @@ export async function GET(request: Request) {
     }).filter((u: any) => !u.rol.toLowerCase().includes('vendedor'));
 
     let kpis = { ordenesProceso: 0, prendasProduccion: 0, prendasDia: 0, vencidos: 0 };
-    const mapaEscuelas = new Map();
+    const mapaPedidosTaller = new Map();
 
     prendasEnTaller.forEach((det: any) => {
       const ped = det.pedido;
       const instId = ped.institucionId;
+      
+      // 🔥 REGLA DE ORO: Separación por Lote de Pedido (Escuela + Fecha Requerida / Pedido) 🔥
+      const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
+      const grupoKey = `${instId}_${fr}`;
+
       const estTaller = det.estadoProduccion || 'Planificacion';
       const fUpdatedAt = new Date(det.updatedAt);
       const fConfeccion = det.fechaEstimadaConfeccion ? new Date(det.fechaEstimadaConfeccion) : null;
@@ -86,12 +91,12 @@ export async function GET(request: Request) {
         kpis.prendasDia += det.cantidad;
       }
 
-      if (!mapaEscuelas.has(instId)) {
-        mapaEscuelas.set(instId, {
-          id: instId,
+      if (!mapaPedidosTaller.has(grupoKey)) {
+        mapaPedidosTaller.set(grupoKey, {
+          id: grupoKey,
           institucionId: instId,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
-          codigoOP: `OP-${instId.slice(0, 6).toUpperCase()}`,
+          codigoOP: `PED-${ped.id.slice(0, 6).toUpperCase()}`, // 🔥 ESTANDARIZADO A PED-XXXXXX
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaInicioTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
           fechaCompromisoTexto: fConfeccion ? fConfeccion.toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'Sin Asignar',
@@ -105,7 +110,7 @@ export async function GET(request: Request) {
         kpis.ordenesProceso += 1;
       }
 
-      const escuela = mapaEscuelas.get(instId);
+      const escuela = mapaPedidosTaller.get(grupoKey);
       escuela.totalPrendas += det.cantidad;
       escuela.estadosArray.add(estTaller);
       if (esVencido) escuela.esAtrasado = true;
@@ -124,7 +129,7 @@ export async function GET(request: Request) {
       contrato.detalles.push(det);
     });
 
-    const tablaRes = Array.from(mapaEscuelas.values()).map(e => ({
+    const tablaRes = Array.from(mapaPedidosTaller.values()).map(e => ({
       ...e,
       estadosArray: Array.from(e.estadosArray),
       pedidosAsociados: Array.from(e.pedidosAsociados.values())
@@ -159,10 +164,28 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { modo, id, institucionId, prendaIds, estado, operarioAsignadoId } = body;
 
+    // 🔥 ENVÍO MASIVO A EMPAQUE POR LOTE EXACTO 🔥
     if (modo === 'masivo_empaque') {
+      const realInstId = institucionId.split('_')[0];
+      const frStr = institucionId.includes('_') ? institucionId.split('_')[1] : null;
+
+      const whereClause: any = {
+        pedido: { institucionId: realInstId },
+        estadoOperacion: { contains: 'producci', mode: 'insensitive' }
+      };
+
+      if (frStr && frStr !== 'sin-fecha') {
+        const startOfDay = new Date(`${frStr}T00:00:00.000Z`);
+        const endOfDay = new Date(`${frStr}T23:59:59.999Z`);
+        whereClause.pedido.fechaRequerida = { gte: startOfDay, lte: endOfDay };
+      } else if (frStr === 'sin-fecha') {
+        whereClause.pedido.fechaRequerida = null;
+      }
+
       const prendasEscuela = await prisma.detallePedido.findMany({ 
-        where: { pedido: { institucionId }, estadoOperacion: { contains: 'producci', mode: 'insensitive' } } 
+        where: whereClause 
       });
+
       await prisma.detallePedido.updateMany({
         where: { id: { in: prendasEscuela.map((p: any) => p.id) } },
         data: { estadoOperacion: 'en empaque', estadoProduccion: 'Terminado' }
@@ -182,17 +205,13 @@ export async function PUT(request: Request) {
       const updateData: any = {};
       if (estado) updateData.estadoProduccion = estado;
 
-      // 🔥 AUTO-ASIGNACIÓN INTELIGENTE 🔥
       const esAdmin = userRol.includes('admin');
       
       if (esAdmin) {
-        // Si el Admin selecciona a alguien específico en el combo box, lo asignamos.
-        // Si lo deja vacío ("Dejar igual"), no tocamos la variable para no borrarlo accidentalmente.
         if (operarioAsignadoId) {
           updateData.operarioAsignadoId = operarioAsignadoId;
         }
       } else {
-        // Si es un operario normal el que está cambiando el estado de la prenda, el sistema atrapa su ID y lo hace dueño automáticamente.
         updateData.operarioAsignadoId = userId;
       }
 
