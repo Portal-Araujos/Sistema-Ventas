@@ -1,40 +1,28 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
-// ==========================================
-// 📥 GET: HISTORIAL DE VISITAS (CERO FUSIONES)
-// ==========================================
-// ==========================================
-// 📥 GET: HISTORIAL DE VISITAS (CERO FUSIONES)
-// ==========================================
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userRol = payload.rol as string;
     const userId = payload.id as string;
     const { searchParams } = new URL(request.url);
-    
     const fInicio = searchParams.get('fechaInicio');
     const fFin = searchParams.get('fechaFin');
     const cantonId = searchParams.get('cantonId');
     const institucionId = searchParams.get('institucionId');
     const vendedorId = searchParams.get('vendedorId');
-    
     const dateStart = fInicio ? new Date(`${fInicio}T00:00:00-05:00`) : new Date(new Date().setHours(0,0,0,0));
     const dateEnd = fFin ? new Date(`${fFin}T23:59:59.999-05:00`) : new Date(new Date().setHours(23,59,59,999));
-    
     const instFilters: any = {};
     if (cantonId) instFilters.parroquia = { cantonId: parseInt(cantonId) };
-    
     const visitaFilters: any = {
       createdAt: { gte: dateStart, lte: dateEnd },
       institucionId: institucionId ? institucionId : undefined,
@@ -66,14 +54,9 @@ export async function GET(request: Request) {
 
     const dataConsolidada = visitas.map(v => {
       const dateVisitaEcuador = new Date(new Date(v.createdAt).toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
-      
-      // 🔥 LA SOLUCIÓN: Buscamos las ventas EXACTAS de esta visita por su ID único. 🔥
-      // Ya no importa si fuiste 10 veces el mismo día, no se mezclarán.
       const ventasParaEstaVisita = ventas.filter(venta => venta.visitaId === v.id);
-      
       const totalVendidoVisita = ventasParaEstaVisita.reduce((sum, vta) => sum + vta.valorContrato, 0);
       const contratosTexto = ventasParaEstaVisita.map(va => `N° ${va.numContrato}`).join(', ');
-      
       return {
         id: v.id,
         fecha: dateVisitaEcuador.toLocaleDateString('es-EC'),
@@ -100,16 +83,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Error al generar reporte consolidado' }, { status: 500 });
   }
 }
-
-// ==========================================
-// 🚀 POST: REGISTRAR VISITA (CON BIFURCACIÓN LOGÍSTICA)
-// ==========================================
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userId = payload.id as string;
     const userRol = payload.rol as string;
@@ -119,15 +97,12 @@ export async function POST(request: Request) {
       fechaProgramada, horaProgramada, fechaProximoContacto,
       huboVenta, ventas, institucionIds, vendedorId
     } = body;
-
-    // --- ASIGNACIÓN MASIVA GERENCIAL ---
     if (institucionIds && Array.isArray(institucionIds) && institucionIds.length > 0) {
       const targetVendedorId = vendedorId || userId;
       const hoyMasivo = new Date();
       const horaDefectoMasivo = horaProgramada || hoyMasivo.toTimeString().slice(0, 5);
       const programadaMasiva = fechaProgramada ? new Date(`${fechaProgramada}T12:00:00Z`) : hoyMasivo;
       const proximoMasivo = fechaProximoContacto ? new Date(`${fechaProximoContacto}T12:00:00Z`) : null;
-      
       const visitasPromesas = institucionIds.map((id: string) => {
         return prisma.visitaAgenda.create({
           data: {
@@ -152,10 +127,7 @@ export async function POST(request: Request) {
       });
       return NextResponse.json({ success: true, message: `Se asignaron ${institucionIds.length} escuelas correctamente.` }, { status: 201 });
     }
-
     if (!institucionId) return NextResponse.json({ error: 'Falta la institución' }, { status: 400 });
-
-    // --- PRE-VALIDACIÓN DE CONTRATOS DUPLICADOS ---
     if (huboVenta && Array.isArray(ventas) && ventas.length > 0) {
       const numerosContratos = ventas.map((v: any) => String(v.numContrato).trim()).filter((n: string) => n && n !== 'S/N' && n !== '');
       if (numerosContratos.length > 0) {
@@ -169,12 +141,9 @@ export async function POST(request: Request) {
         }
       }
     }
-
     const hoy = new Date();
     const horaDefecto = horaProgramada || hoy.toTimeString().slice(0, 5);
     const fechaProximo = fechaProximoContacto ? new Date(`${fechaProximoContacto}T12:00:00Z`) : null;
-    
-    // 1. CREAR LA VISITA
     const nuevaVisita = await prisma.visitaAgenda.create({
       data: {
         institucionId, usuarioId: userId, tipoGestion, estadoGestion, resumenAcuerdos,
@@ -188,8 +157,6 @@ export async function POST(request: Request) {
       const configSeguridad = await prisma.configuracionSeguridad.findUnique({ where: { id: 1 } });
       const jefeTextil = configSeguridad?.encargadoBodegaTextilId || userId;
       const jefeElectro = configSeguridad?.encargadoBodegaElectroId || userId;
-      
-      // 2. CREAR LAS VENTAS (CON EL ID EXACTO DE LA VISITA)
       const transaccionesVentas = ventas.map((v: any) => {
         const valor = parseFloat(v.valorContrato) || 0;
         const abonoVal = parseFloat(v.abono) || 0;
@@ -212,8 +179,6 @@ export async function POST(request: Request) {
         });
       });
       await Promise.all(transaccionesVentas);
-      
-      // 3. CREAR LOS PEDIDOS LOGÍSTICOS
       const transaccionesPedidos = ventas
         .filter((v: any) => {
           const estadoEscogido = catalogosCliente.find(e => e.id === (v.estadoClienteId ? parseInt(v.estadoClienteId) : null));
@@ -225,10 +190,8 @@ export async function POST(request: Request) {
           const numContratoLimpio = String(v.numContrato || '').trim();
           const estadoEscogido = catalogosCliente.find(e => e.id === (v.estadoClienteId ? parseInt(v.estadoClienteId) : null));
           const nombreEstado = estadoEscogido?.nombre?.toLowerCase() || '';
-          
           const isElectro = nombreEstado.includes('electro');
           const tipoLogistica = isElectro ? 'ELECTRO' : 'TEXTIL';
-          
           let operarioLogistica = isElectro ? jefeElectro : jefeTextil;
           if (userRol === 'super_admin' && body.operarioAsignadoId) {
             operarioLogistica = body.operarioAsignadoId; 

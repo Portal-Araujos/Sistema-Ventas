@@ -3,8 +3,6 @@ import { NextResponse } from 'next/server';
 export async function POST() {
   try {
     const response = NextResponse.json({ success: true, message: 'Sesión cerrada correctamente' });
-    
-    // Eliminar cookie de sesión
     response.cookies.set('session_token', '', {
       httpOnly: true,
       expires: new Date(0),

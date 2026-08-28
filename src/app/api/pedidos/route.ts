@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
 const parseId = (val: any) => {
@@ -23,7 +22,6 @@ export async function GET(request: Request) {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userRol = payload.rol as string;
     const userId = payload.id as string;
@@ -78,7 +76,10 @@ export async function GET(request: Request) {
         institucion: { select: { id: true, nombre: true } },
         usuario: { select: { id: true, nombre: true } },
         operarioAsignado: { select: { id: true, nombre: true } },
-        detalles: true
+        // 🔥 INYECCIÓN 1: Traer los detalles con el nombre del usuario que lo recibió 🔥
+        detalles: {
+          include: { usuarioReceptor: { select: { nombre: true } } }
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -94,28 +95,21 @@ export async function GET(request: Request) {
       },
       orderBy: { fechaVenta: 'desc' }
     });
-
     const mapaGrupos = new Map();
     const prioridadEstados = ['Pendiente en revision', 'En produccion', 'en empaque', 'Listos para el despacho', 'Despacho'];
     
     for (const ped of pedidos as any[]) {
       const instId = ped.institucionId;
       let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
-      
-      // 🔥 LA REGLA MAESTRA: CAJA ABIERTA VS CAJA CERRADA 🔥
       let grupoKey = instId; 
       if (ped.estado !== 'Borrador') {
-         // Si ya se fue a Operaciones, se agrupa separadamente por su fecha requerida.
-         // Esto permite que nazca un nuevo "Borrador" limpio para esta misma escuela.
          const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
          grupoKey = `${instId}_${fr}`;
       }
-      
       const ventaAsociada = ventasGuardadas.find(v => {
         const vNum = v.numContrato ? String(v.numContrato).trim() : 'S/N';
         return vNum === contratoExtraido && v.institucionId === instId;
       });
-      
       let estadoRealPedido = ped.estado;
       if (ped.estado !== 'Borrador') {
         const estPrendas = (ped.detalles || []).map((d:any) => d.estadoOperacion || 'Pendiente en revision');
@@ -129,10 +123,8 @@ export async function GET(request: Request) {
           estadoRealPedido = estadoMasRetrasado;
         }
       }
-      
       let fechaValida = ped.fechaRequerida;
       if (fechaValida && new Date(fechaValida).getFullYear() < 2000) fechaValida = null;
-      
       if (!mapaGrupos.has(grupoKey)) {
         mapaGrupos.set(grupoKey, {
           id: grupoKey, 
@@ -152,10 +144,8 @@ export async function GET(request: Request) {
              grupo.fechaRequerida = fechaValida;
          }
       }
-      
       const grupo = mapaGrupos.get(grupoKey);
       const unidadesEnEstePedido = (ped.detalles || []).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
-      
       grupo.pedidosAsociados.push({
         id: ped.id, numContrato: contratoExtraido,
         nombreCliente: ped.nombreCliente || `Cliente Contrato #${contratoExtraido}`,
@@ -192,7 +182,8 @@ export async function GET(request: Request) {
       updatedAt: new Date(g.updatedAt).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })
     }));
 
-    return NextResponse.json(resultado);
+    // 🔥 INYECCIÓN 2: Devolvemos el currentUser para que el Frontend sepa si eres Admin y active el botón rojo 🔥
+    return NextResponse.json({ tabla: resultado, currentUser: { id: userId, rol: userRol } });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Error al consultar pedidos' }, { status: 500 });
   }
@@ -213,22 +204,52 @@ export async function PUT(request: Request) {
 
     const body = await request.json();
     const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, cuotaMensual, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId, tipoClienteId,tieneCedula } = body;
-    const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
+    
+    // 🔥 INYECCIÓN 3: MODO RECEPCIÓN PARA VENDEDOR 🔥
+    if (modo === 'recepcion_vendedor') {
+      const { prendasIds } = body;
+      if (!prendasIds || prendasIds.length === 0) return NextResponse.json({ error: 'No se seleccionaron prendas' }, { status: 400 });
+      
+      await prisma.detallePedido.updateMany({
+        where: { id: { in: prendasIds } },
+        data: {
+          recibidoPorVendedor: true,
+          fechaRecepcion: new Date(),
+          usuarioReceptorId: userIdFallback
+        }
+      });
+      return NextResponse.json({ success: true });
+    }
 
+    // 🔥 INYECCIÓN 4: MODO DESBLOQUEO PARA SUPER ADMIN 🔥
+    if (modo === 'desbloquear_recepcion') {
+      const { prendaId } = body;
+      if (!userRol.includes('admin')) return NextResponse.json({ error: 'Solo un administrador puede desbloquear esto.' }, { status: 403 });
+      
+      await prisma.detallePedido.update({
+        where: { id: prendaId },
+        data: {
+          recibidoPorVendedor: false,
+          fechaRecepcion: null,
+          usuarioReceptorId: null
+        }
+      });
+      return NextResponse.json({ success: true });
+    }
+
+    const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
+    
     if (modo === 'masivo') {
-      // 🔥 ENVÍO A OPERACIONES DE LA CAJA ABIERTA 🔥
       await prisma.pedido.updateMany({
         where: { institucionId, estado: 'Borrador' },
         data: { estado: 'Pendiente en revisión', fechaRequerida: fechaParseada }
       });
       return NextResponse.json({ success: true });
     } else {
-      
       const pedidoAntiguo = await prisma.pedido.findUnique({ where: { id } });
       const oldNumContrato = pedidoAntiguo?.numContrato ? String(pedidoAntiguo.numContrato).trim() : 'S/N';
       const numContratoLimpio = numContrato !== undefined ? String(numContrato).trim() : oldNumContrato;
       const idEscuelaReal = pedidoAntiguo ? pedidoAntiguo.institucionId : institucionId;
-      
       let vendedorFinalId = pedidoAntiguo?.usuarioId || userIdFallback;
       const dueñoEscuela = await prisma.usuario.findFirst({
         where: { institucionesAsignadas: { some: { id: idEscuelaReal } } },
@@ -305,7 +326,6 @@ export async function POST(request: Request) {
     const { payload } = await jwtVerify(token!, JWT_SECRET);
     const userId = payload.id as string;
     const userRol = payload.rol as string;
-
     const body = await request.json();
     const fechaParseada = (body.fechaRequerida && body.fechaRequerida.length > 4) ? new Date(`${body.fechaRequerida}T12:00:00Z`) : null;
     const numContratoLimpio = body.numContrato ? String(body.numContrato).trim() : 'S/N';
@@ -319,24 +339,19 @@ export async function POST(request: Request) {
     if (dueñoEscuela) {
       vendedorFinalId = dueñoEscuela.id;
     }
-
-    // 🔥 DETECCIÓN DINÁMICA DE ELECTRO VS TEXTIL 🔥
     let isElectro = false;
     if (body.estadoClienteId) {
       const estadoCli = await prisma.estadoCliente.findUnique({ where: { id: parseId(body.estadoClienteId) || 0 }});
       if (estadoCli?.nombre?.toLowerCase().includes('electro')) isElectro = true;
     }
     const tipoLogistica = isElectro ? 'ELECTRO' : 'TEXTIL';
-
     const configSeguridad = await prisma.configuracionSeguridad.findUnique({ where: { id: 1 } });
     const jefeElectro = configSeguridad?.encargadoBodegaElectroId || userId;
     const jefeTextil = configSeguridad?.encargadoBodegaTextilId || userId;
-    
     let operarioDefinitivo = isElectro ? jefeElectro : jefeTextil;
     if (userRol === 'super_admin' && body.operarioAsignadoId) {
       operarioDefinitivo = body.operarioAsignadoId; 
     }
-
     const nuevoPedido = await prisma.pedido.create({
       data: {
         institucionId: body.institucionId, 
@@ -354,7 +369,6 @@ export async function POST(request: Request) {
         }
       }
     });
-
     await prisma.venta.create({
       data: {
         institucionId: body.institucionId,
@@ -371,7 +385,6 @@ export async function POST(request: Request) {
         estadoContratoId: parseId(body.estadoContratoId),
       }
     });
-
     return NextResponse.json(nuevoPedido);
   } catch (error: any) { 
     return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 }); 
@@ -383,29 +396,22 @@ export async function DELETE(request: Request) {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userRol = payload.rol as string;
     const userId = payload.id as string;
-
     const { searchParams } = new URL(request.url);
     const institucionId = searchParams.get('institucionId');
-
     if (!institucionId) {
       return NextResponse.json({ error: 'Falta ID para eliminar' }, { status: 400 });
     }
-
     await prisma.$transaction(async (tx) => {
       // SOLO SE BORRA LA CAJA ABIERTA (Borradores)
       const whereClause: any = { institucionId, estado: 'Borrador' };
       if (userRol === 'vendedor') whereClause.usuarioId = userId;
-
       const pedidosABorrar = await tx.pedido.findMany({ where: whereClause });
-      
       if (pedidosABorrar.length === 0) {
         throw new Error('No hay borradores para eliminar.');
       }
-
       for (const pedido of pedidosABorrar) {
         const ventaAsociada = await tx.venta.findFirst({
           where: {
@@ -415,9 +421,7 @@ export async function DELETE(request: Request) {
             estadoTicket: 'Pendiente Facturación'
           }
         });
-
         await tx.pedido.delete({ where: { id: pedido.id } });
-
         if (ventaAsociada) {
           await tx.venta.delete({ where: { id: ventaAsociada.id } });
           if (ventaAsociada.visitaId) {

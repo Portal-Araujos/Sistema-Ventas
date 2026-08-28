@@ -1,21 +1,16 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import * as argon2 from 'argon2';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
-
-// ==========================================
-// 🔍 GET: Obtener todos los usuarios con Rol y Área
-// ==========================================
 export async function GET() {
   try {
     const usuarios = await prisma.usuario.findMany({
       include: {
         rol: true,
-        departamento: true // 🔥 NUEVO: Traemos los datos del departamento
+        departamento: true 
       },
       orderBy: { nombre: 'asc' }
     });
@@ -28,8 +23,8 @@ export async function GET() {
       rolId: u.rolId,
       activo: u.activo,
       bloqueado: u.bloqueado,
-      departamentoId: u.departamentoId, // 🔥 NUEVO
-      departamento: u.departamento      // 🔥 NUEVO (Para mostrar el nombre en la tabla)
+      departamentoId: u.departamentoId, 
+      departamento: u.departamento     
     }));
 
     return NextResponse.json(data);
@@ -38,26 +33,19 @@ export async function GET() {
   }
 }
 
-// ==========================================
-// 🚀 POST: Crear nuevo usuario
-// ==========================================
 export async function POST(request: Request) {
   try {
-    // 🔥 NUEVO: Atrapamos el departamentoId del frontend
-    const { nombre, email, password, rolId, departamentoId } = await request.json();
 
+    const { nombre, email, password, rolId, departamentoId } = await request.json();
     const emailExiste = await prisma.usuario.findUnique({ where: { email } });
     if (emailExiste) return NextResponse.json({ error: 'El email ya está registrado' }, { status: 400 });
-
     const hashedPassword = await argon2.hash(password);
-
     const nuevoUsuario = await prisma.usuario.create({
       data: {
         nombre,
         email,
         passwordHash: hashedPassword,
         rolId: parseInt(rolId),
-        // Si mandan un departamento, lo guardamos. Si no, queda en null.
         departamentoId: departamentoId ? parseInt(departamentoId) : null
       }
     });
@@ -68,10 +56,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Error al crear usuario' }, { status: 500 });
   }
 }
-
-// ==========================================
-// 🔄 PUT: Editar usuario (Cambiar Rol, Nombre, Área o Estado)
-// ==========================================
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -82,24 +66,16 @@ export async function PUT(request: Request) {
     if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') {
       return NextResponse.json({ error: 'No tienes permisos' }, { status: 403 });
     }
-
-    // 🔥 NUEVO: Extraemos el departamentoId
     const { id, nombre, email, rolId, activo, password, departamentoId } = await request.json();
-
     const updateData: any = {};
     if (nombre) updateData.nombre = nombre;
     if (email) updateData.email = email;
     if (rolId) updateData.rolId = parseInt(rolId);
     if (activo !== undefined) updateData.activo = activo;
-    
-    // Validamos y guardamos el cambio de departamento
     if (departamentoId !== undefined) {
       updateData.departamentoId = departamentoId ? parseInt(departamentoId) : null;
     }
-    
-    // Si mandaron contraseña, la encriptamos y la actualizamos
     if (password) updateData.passwordHash = await argon2.hash(password);
-
     const usuarioActualizado = await prisma.usuario.update({
       where: { id },
       data: updateData

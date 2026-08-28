@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-
-const prisma = new PrismaClient();
+import prisma from '@/lib/prisma';
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
 export async function POST(request: Request) {
@@ -16,14 +14,11 @@ export async function POST(request: Request) {
     if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') {
       return NextResponse.json({ error: 'Solo los administradores pueden armar rutas' }, { status: 403 });
     }
-
     const body = await request.json();
     const { institucionIds, vendedorId, fechaProgramada, horaProgramada } = body;
-
     if (!institucionIds || institucionIds.length === 0 || !vendedorId || !fechaProgramada) {
       return NextResponse.json({ error: 'Faltan datos obligatorios para armar la ruta' }, { status: 400 });
     }
-
     const escuelasAfectadas = await prisma.institution.findMany({
       where: { id: { in: institucionIds } },
       include: {
@@ -34,20 +29,17 @@ export async function POST(request: Request) {
         }
       }
     });
-
     for (const escuela of escuelasAfectadas) {
       if (escuela.vendedorId && escuela.vendedorId !== vendedorId) {
          return NextResponse.json({ 
            error: `Bloqueo: La escuela "${escuela.nombre}" ya le pertenece a ${escuela.vendedor?.nombre || 'otro vendedor'}. Desmárcala de tu selección o retírala de su cartera primero.`
          }, { status: 400 });
       }
-
       if (escuela.visitas.length > 0) {
         const visitaProblema = escuela.visitas[0];
         const fechaVisitaObj = new Date(visitaProblema.fechaProgramada);
         const hoyObj = new Date();
         hoyObj.setHours(0, 0, 0, 0);
-
         const fechaFormateada = fechaVisitaObj.toLocaleDateString('es-EC', { timeZone: 'UTC' });
         const nombreDueño = visitaProblema.usuario?.nombre || 'el vendedor actual';
 
@@ -62,10 +54,7 @@ export async function POST(request: Request) {
         }
       }
     }
-
-    // 🔥 CORRECCIÓN ZONA HORARIA: T12:00:00Z para evitar el desfase de -5 horas de Ecuador 🔥
     const fechaISO = new Date(`${fechaProgramada}T12:00:00Z`);
-
     const nuevasVisitas = institucionIds.map((instId: string) => ({
       institucionId: instId,
       usuarioId: vendedorId, 
@@ -75,17 +64,14 @@ export async function POST(request: Request) {
       estadoGestion: 'No Visitada', 
       esVisitaLibre: false
     }));
-
     const result = await prisma.visitaAgenda.createMany({
       data: nuevasVisitas,
       skipDuplicates: true
     });
-
     await prisma.institution.updateMany({
       where: { id: { in: institucionIds } },
       data: { vendedorId: vendedorId }
     });
-
     return NextResponse.json({ success: true, creadas: result.count }, { status: 201 });
   } catch (error) {
     console.error("Error Masiva:", error);

@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
 export async function GET(request: Request) {
@@ -27,13 +26,11 @@ export async function GET(request: Request) {
 
     const resultado = guias.map((guia: any) => {
       const pedidosInvolucrados = new Map();
-      
       guia.prendasDespachadas.forEach((prenda: any) => {
         const ped = prenda.pedido;
         if (!pedidosInvolucrados.has(ped.id)) {
           const totalContrato = ped.detalles.reduce((acc: number, d: any) => acc + (d.cantidad || 1), 0);
           const totalDespachadoHistorico = ped.detalles.filter((d:any) => d.guiaDespachoId !== null).reduce((acc: number, d: any) => acc + (d.cantidad || 1), 0);
-          
           pedidosInvolucrados.set(ped.id, {
             id: ped.id,
             numContrato: ped.numContrato || 'S/N',
@@ -46,7 +43,6 @@ export async function GET(request: Request) {
         }
         pedidosInvolucrados.get(ped.id).prendasEnEstaGuia.push(prenda);
       });
-
       return {
         id: guia.id,
         codigoGuia: guia.codigoGuia,
@@ -57,7 +53,6 @@ export async function GET(request: Request) {
         contratosInvolucrados: Array.from(pedidosInvolucrados.values())
       };
     });
-
     return NextResponse.json(resultado);
   } catch (error) { return NextResponse.json({ error: 'Error' }, { status: 500 }); }
 }

@@ -1,41 +1,31 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
-
-// ==========================================
-// 📥 GET: OBTENER LISTADO DE EMPAQUE (CON CÓDIGO INMUTABLE)
-// ==========================================
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const currentUser = { id: payload.id, nombre: payload.nombre, rol: payload.rol };
-
     const { searchParams } = new URL(request.url);
     const fechaInicio = searchParams.get('fechaInicio');
     const fechaFin = searchParams.get('fechaFin');
-
     const whereCondition: any = {
       estado: { not: 'Borrador' },
       detalles: {
         some: { estadoOperacion: { in: ['en empaque', 'En empaque', 'Listos para el despacho', 'Despacho'] } }
       }
     };
-
     if (fechaInicio && fechaFin) {
       whereCondition.updatedAt = {
         gte: new Date(`${fechaInicio}T00:00:00-05:00`),
         lte: new Date(`${fechaFin}T23:59:59.999-05:00`)
       };
     }
-
     const pedidos = await prisma.pedido.findMany({
       where: whereCondition,
       include: {
@@ -45,13 +35,9 @@ export async function GET(request: Request) {
       },
       orderBy: { updatedAt: 'desc' }
     });
-
     const mapaGrupos = new Map();
-
     for (const ped of pedidos) {
       const instId = ped.institucionId;
-      
-      // Agrupamos por Lote (Escuela + Fecha Requerida)
       const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
       const grupoKey = `${instId}_${fr}`;
       const pedCreatedAt = new Date(ped.createdAt).getTime(); // Para rastrear el código maestro
@@ -63,7 +49,7 @@ export async function GET(request: Request) {
           id: grupoKey,
           institucionId: instId, 
           codigoOP: `PED-${ped.id.slice(0, 6).toUpperCase()}`, // Código Inicial
-          _maxCreatedAt: pedCreatedAt, // 🔥 Rastreador del contrato original para evitar que cambie el código
+          _maxCreatedAt: pedCreatedAt,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Vendedor',
           paquetesCantidad: 0, 
@@ -76,31 +62,25 @@ export async function GET(request: Request) {
         });
       } else {
         const grupo = mapaGrupos.get(grupoKey);
-        // 🔥 MAGIA: Obligamos a que el código se ancle al contrato base (Igual que en Operaciones) 🔥
         if (pedCreatedAt > grupo._maxCreatedAt) {
           grupo._maxCreatedAt = pedCreatedAt;
           grupo.codigoOP = `PED-${ped.id.slice(0, 6).toUpperCase()}`;
         }
       }
-
       const grupo = mapaGrupos.get(grupoKey);
-
       if (ped.fechaRequerida) {
         const pedReqDate = new Date(ped.fechaRequerida);
         if (!grupo.fechaRequeridaDate || pedReqDate < grupo.fechaRequeridaDate) {
           grupo.fechaRequeridaDate = pedReqDate;
         }
       }
-      
       const totalContratoReal = ped.detalles.reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
       const despachadasHistoricas = ped.detalles.filter((d:any) => d.guiaDespachoId !== null).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
       const preparadasSinDespachar = ped.detalles.filter((d:any) => d.estadoEmpaque === 'Preparado' && d.guiaDespachoId === null).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
-      
       grupo.totalPrendasEscuela += totalContratoReal;
       grupo.despachadasHistoricasEscuela += despachadasHistoricas;
       grupo.saldoPendienteEscuela += (totalContratoReal - despachadasHistoricas);
       grupo.preparadasSinDespacharEscuela += preparadasSinDespachar;
-
       grupo.pedidosAsociados.push({
         id: ped.id, 
         numContrato: contratoExtraido,
@@ -116,36 +96,27 @@ export async function GET(request: Request) {
         detalles: ped.detalles,
         detallesCompletos: ped.detalles 
       });
-
       grupo.paquetesCantidad += 1;
     }
-
     const kpis = { pendientes: 0, enPreparacion: 0, completados: 0 };
-
     const tabla = Array.from(mapaGrupos.values()).map(g => {
       const procesadasTotal = g.preparadasSinDespacharEscuela + g.despachadasHistoricasEscuela;
       const avanceGlobal = g.totalPrendasEscuela > 0 ? Math.round((procesadasTotal / g.totalPrendasEscuela) * 100) : 0;
-      
       let estadoGlobal = 'Pendiente';
       if (avanceGlobal === 0) { estadoGlobal = 'Pendiente'; kpis.pendientes++; } 
       else if (avanceGlobal > 0 && avanceGlobal < 100) { estadoGlobal = 'En Preparación'; kpis.enPreparacion++; } 
       else if (avanceGlobal === 100) { estadoGlobal = 'Completado'; kpis.completados++; }
-
       let fechaRequeridaTexto = 'No asignada';
       let esAtrasado = false;
-
       if (g.fechaRequeridaDate) {
         const isoString = g.fechaRequeridaDate.toISOString();
         const [yyyy, mm, dd] = isoString.split('T')[0].split('-');
         fechaRequeridaTexto = `${dd}/${mm}/${yyyy}`;
-
         const reqDateLocal = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
         const hoyLocal = new Date();
         hoyLocal.setHours(0, 0, 0, 0);
         esAtrasado = reqDateLocal < hoyLocal;
       }
-
-      // Limpiamos las variables temporales para que no lleguen al frontend
       const { fechaRequeridaDate, _maxCreatedAt, ...restoGrupo } = g;
       return { ...restoGrupo, avanceGlobal, estadoGlobal, fechaRequeridaTexto, esAtrasado };
     });
@@ -153,10 +124,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ currentUser, kpis, tabla });
   } catch (error) { return NextResponse.json({ error: 'Error' }, { status: 500 }); }
 }
-
-// ==========================================
-// ✏️ PUT: ACTUALIZAR Y DESPACHAR
-// ==========================================
 export async function PUT(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -165,10 +132,8 @@ export async function PUT(request: Request) {
     if (token) {
       try { const { payload } = await jwtVerify(token, JWT_SECRET); responsableDefecto = payload.nombre as string || 'Bodega'; } catch (e) {}
     }
-
     const body = await request.json();
     const { modo, pedidoId, responsableEmpaque, detallesUpdates, institucionId, codigoGuia, prendasIds } = body;
-
     if (modo === 'generar_guia') {
       const nuevaGuia = await prisma.guiaDespacho.create({
         data: {
@@ -177,7 +142,6 @@ export async function PUT(request: Request) {
           responsable: responsableDefecto
         }
       });
-      
       await prisma.detallePedido.updateMany({
         where: { id: { in: prendasIds } },
         data: {
@@ -187,7 +151,6 @@ export async function PUT(request: Request) {
           guiaDespachoId: nuevaGuia.id
         }
       });
-
       const pedidosInvolucrados = await prisma.detallePedido.findMany({
          where: { id: { in: prendasIds } }, select: { pedidoId: true }, distinct: ['pedidoId']
       });
@@ -201,7 +164,6 @@ export async function PUT(request: Request) {
       }
       return NextResponse.json({ success: true, guia: nuevaGuia });
     }
-
     const promesasDetalles = detallesUpdates.map((d: any) => 
       prisma.detallePedido.update({
         where: { id: d.id },
@@ -212,11 +174,9 @@ export async function PUT(request: Request) {
       })
     );
     await Promise.all(promesasDetalles);
-
     const pedidoActualizado = await prisma.pedido.findUnique({ where: { id: pedidoId }, include: { detalles: true } });
     const totalDetalles = pedidoActualizado?.detalles.length || 0;
     const completados = pedidoActualizado?.detalles.filter(d => d.estadoEmpaque === 'Preparado' || d.guiaDespachoId !== null).length || 0;
-
     let nuevoEstado = pedidoActualizado?.estado;
     let fechaFin = pedidoActualizado?.fechaFinEmpaque;
 
@@ -231,7 +191,6 @@ export async function PUT(request: Request) {
       where: { id: pedidoId },
       data: { estado: nuevoEstado, responsableEmpaque: responsableEmpaque || responsableDefecto, fechaFinEmpaque: fechaFin }
     });
-
     return NextResponse.json({ success: true, data: resultadoFinal });
   } catch (error) { return NextResponse.json({ error: 'Error interno' }, { status: 500 }); }
 }

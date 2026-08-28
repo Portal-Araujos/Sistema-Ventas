@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
 export async function GET(request: Request) {
@@ -11,11 +10,9 @@ export async function GET(request: Request) {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userRol = payload.rol as string;
     const userId = payload.id as string;
-
     const { searchParams } = new URL(request.url);
     const fechaInicio = searchParams.get('fechaInicio');
     const fechaFin = searchParams.get('fechaFin');
@@ -26,8 +23,6 @@ export async function GET(request: Request) {
     if (userRol.toLowerCase() === 'vendedor') {
       vendedorId = userId;
     }
-
-    // Preparar filtros dinámicos (Con los nombres correctos de tu BD)
     const whereVisitas: any = { estadoGestion: 'Realizada' };
     const whereVentas: any = {};
     const wherePrendas: any = { pedido: { estado: { not: 'Borrador' } } };
@@ -39,45 +34,28 @@ export async function GET(request: Request) {
       whereVentas.fechaVenta = { gte: start, lte: end };
       wherePrendas.createdAt = { gte: start, lte: end }; 
     }
-
     if (vendedorId) {
       whereVisitas.usuarioId = vendedorId; // Corregido a usuarioId
       whereVentas.vendedorId = vendedorId;
       wherePrendas.pedido = { ...wherePrendas.pedido, usuarioId: vendedorId };
     }
-
     if (provinciaId) {
       whereVisitas.institucion = { provinciaId: parseInt(provinciaId) };
       whereVentas.institucion = { provinciaId: parseInt(provinciaId) };
     }
-
-    // ==========================================
-    // 1. MÉTRICAS FINANCIERAS Y COMERCIALES
-    // ==========================================
     const [visitas, ventas] = await Promise.all([
-      // Corregido: En VisitaAgenda la relación se llama "usuario"
       prisma.visitaAgenda.findMany({ where: whereVisitas, include: { usuario: true } }),
-      // En Ventas sí se llama "vendedor"
       prisma.venta.findMany({ where: whereVentas, include: { vendedor: true, institucion: true } })
     ]);
-
     const totalVisitas = visitas.length;
     const totalContratos = ventas.length;
-    
-    // Sumamos el valor total de los contratos limpiando símbolos de moneda
     const totalMontoVentas = ventas.reduce((acc, v) => {
       const numStr = String(v.valorContrato || '0').replace(/[^0-9.-]+/g,"");
       const num = parseFloat(numStr);
       return acc + (isNaN(num) ? 0 : num);
     }, 0);
-
     const tasaCierre = totalVisitas > 0 ? Math.round((totalContratos / totalVisitas) * 100) : 0;
-
-    // ==========================================
-    // 2. MÉTRICAS OPERATIVAS (LA FÁBRICA)
-    // ==========================================
     const prendas = await prisma.detallePedido.findMany({ where: wherePrendas });
-    
     let enRevision = 0, enTaller = 0, enEmpaque = 0, despachadas = 0;
     prendas.forEach(p => {
        const est = (p.estadoOperacion || '').toLowerCase();
@@ -87,8 +65,6 @@ export async function GET(request: Request) {
        else if (est.includes('despacho')) despachadas += p.cantidad;
        else enTaller += p.cantidad; 
     });
-
-    // Auditoría de Atrasos
     const hoy = new Date();
     const prendasAtrasadasRaw = await prisma.detallePedido.findMany({
       where: {
@@ -97,13 +73,7 @@ export async function GET(request: Request) {
       }
     });
     const prendasAtrasadas = prendasAtrasadasRaw.reduce((acc, p) => acc + p.cantidad, 0);
-
-    // ==========================================
-    // 3. GRÁFICOS: RENDIMIENTO Y EMBUDO
-    // ==========================================
     const mapVendedores = new Map();
-    
-    // Extracción de datos de Visitas (Usando "usuario")
     visitas.forEach(v => {
       const vId = v.usuarioId;
       if (!mapVendedores.has(vId)) {

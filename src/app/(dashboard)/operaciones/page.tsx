@@ -319,10 +319,10 @@ export default function OperacionesPage() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="overflow-auto max-h-[65vh]">
+          <div className="overflow-auto max-h-[65vh] w-full">
             <table className="w-full text-left border-collapse text-xs min-w-800px">
-              <thead>
-                <tr className="bg-gray-100 text-gray-600 font-black uppercase border-b border-gray-200">
+              <thead className="sticky top-0 z-20 bg-gray-100 shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
+                <tr className="text-gray-600 font-black uppercase border-b border-gray-300">
                   <th className="p-3.5">Código</th>
                   <th className="p-3.5">Institución</th>
                   <th className="p-3.5">Vendedor</th>

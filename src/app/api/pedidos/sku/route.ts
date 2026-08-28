@@ -1,14 +1,9 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
-
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
-// ==========================================
-// 🔥 FUNCIÓN GET (BÚSQUEDA Y LISTADO) 🔥
-// ==========================================
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -36,25 +31,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Error al cargar catálogo SKU' }, { status: 500 });
   }
 }
-
-// ==========================================
-// 🔥 FUNCIÓN POST (CREAR / ACTUALIZAR MASIVO) 🔥
-// ==========================================
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     await jwtVerify(token, JWT_SECRET);
-
     const body = await request.json();
     const datosExcel = Array.isArray(body) ? body : body.skus;
-
     if (!datosExcel || !Array.isArray(datosExcel)) {
       return NextResponse.json({ error: 'Formato de datos incorrecto' }, { status: 400 });
     }
-
-    // 1. Limpieza Extrema y Detección de Categoría
     const dataLimpia = datosExcel.map((item: any) => ({
       codigo: item.codigo ? String(item.codigo).trim().toUpperCase() : '',
       tipoRopa: item.tipoRopa ? String(item.tipoRopa).trim().toUpperCase() : '',
@@ -62,14 +49,12 @@ export async function POST(request: Request) {
       genero: item.genero ? String(item.genero).trim().toUpperCase() : 'UNISEX',
       talla: item.talla ? String(item.talla).trim().toUpperCase() : 'N/A',
       activo: item.activo !== undefined ? item.activo : true,
-      categoriaItem: item.categoriaItem || 'TEXTIL' // 🔥 Inyectamos la etiqueta Textil/Electro
+      categoriaItem: item.categoriaItem || 'TEXTIL'
     })).filter(item => item.codigo !== '' && item.tipoRopa !== ''); 
 
     if (dataLimpia.length === 0) {
       return NextResponse.json({ error: 'El archivo está vacío o los datos son inválidos.' }, { status: 400 });
     }
-
-    // 2. UPSERT: Si el código existe lo actualiza, si no, lo crea.
     const operaciones = dataLimpia.map((sku) => 
       prisma.catalogoSKU.upsert({
         where: { codigo: sku.codigo },
@@ -79,7 +64,7 @@ export async function POST(request: Request) {
           genero: sku.genero,
           talla: sku.talla,
           activo: sku.activo,
-          categoriaItem: sku.categoriaItem // 🔥 Actualiza si cambió de bodega
+          categoriaItem: sku.categoriaItem 
         },
         create: {
           codigo: sku.codigo,
@@ -88,13 +73,11 @@ export async function POST(request: Request) {
           genero: sku.genero,
           talla: sku.talla,
           activo: sku.activo,
-          categoriaItem: sku.categoriaItem // 🔥 Crea con la bodega correcta
+          categoriaItem: sku.categoriaItem 
         }
       })
     );
-
     await prisma.$transaction(operaciones);
-
     return NextResponse.json({ 
       success: true, 
       message: `¡Subida exitosa! Se procesaron ${dataLimpia.length} SKUs en bodega.`,
@@ -106,19 +89,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Error al procesar el archivo masivo' }, { status: 500 });
   }
 }
-
-// ==========================================
-// 🔥 FUNCIÓN PUT (ACTIVAR / DESACTIVAR) 🔥
-// ==========================================
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { id, activo } = body;
-
     if (!id) {
       return NextResponse.json({ error: 'ID es requerido' }, { status: 400 });
     }
-
     const skuActualizado = await prisma.catalogoSKU.update({
       where: { id },
       data: { activo }

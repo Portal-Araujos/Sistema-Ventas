@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 const parseOptionalInt = (val: any): number | null => {
   if (!val || val === '' || isNaN(Number(val))) return null;
   return parseInt(val);
 };
-
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -17,15 +15,10 @@ export async function GET(request: Request) {
     if (token) {
       try { await jwtVerify(token, JWT_SECRET); } catch (e) { console.error("Token inválido:", e); }
     }
-
     const { searchParams } = new URL(request.url);
-
-    // 1. RECOGER PARÁMETROS DE PAGINACIÓN
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '15'); // 99999 si es exportación Excel
     const skip = (page - 1) * limit;
-
-    // 2. RECOGER TODOS LOS FILTROS
     const search = searchParams.get('search') || '';
     const provinciaId = searchParams.get('provinciaId');
     const cantonId = searchParams.get('cantonId');
@@ -34,14 +27,11 @@ export async function GET(request: Request) {
     const estado = searchParams.get('estado');
     const sostenimientoId = searchParams.get('sostenimientoId');
     const filtroVendedor = searchParams.get('vendedorId');
-
-    // 3. ARMAR LA BÚSQUEDA DINÁMICA DE PRISMA (WHERE)
     const where: any = {};
 
     if (search) {
       where.nombre = { contains: search, mode: 'insensitive' };
     }
-
     if (provinciaId || cantonId || parroquiaId) {
       where.parroquia = {};
       if (parroquiaId) {
@@ -52,19 +42,14 @@ export async function GET(request: Request) {
         where.parroquia.canton = { provinciaId: parseInt(provinciaId) };
       }
     }
-
     if (tamano) where.tamano = tamano;
     if (estado) where.estadoComercial = estado;
     if (sostenimientoId) where.sostenimientoId = parseInt(sostenimientoId);
-
     if (filtroVendedor === 'sin_asignar') {
       where.vendedorId = null;
     } else if (filtroVendedor) {
       where.vendedorId = filtroVendedor; 
     }
-
-    // 4. 🔥 MAGIA DE ALTO RENDIMIENTO: Contar y Buscar al mismo tiempo 🔥
-    // Prisma ejecuta esto directo en PostgreSQL. Solo viajan por la red los 15 registros.
     const [total, instituciones] = await Promise.all([
       prisma.institution.count({ where }),
       prisma.institution.findMany({
@@ -86,7 +71,6 @@ export async function GET(request: Request) {
         orderBy: { createdAt: 'desc' },
       })
     ]);
-    
     const dataFormateada = instituciones.map((inst) => ({
       id: inst.id,
       nombre: inst.nombre,
@@ -114,8 +98,6 @@ export async function GET(request: Request) {
       vendedorId: inst.vendedorId || null,
       vendedorNombre: inst.vendedor ? inst.vendedor.nombre : 'Sin Asignar'
     }));
-    
-    // Devolvemos el array de datos y el conteo total para dibujar los botones
     return NextResponse.json({
       data: dataFormateada,
       meta: {
@@ -140,7 +122,6 @@ export async function POST(request: Request) {
     const usuarioExiste = await prisma.usuario.findUnique({ where: { id: userId } });
     if (!usuarioExiste) return NextResponse.json({ error: 'Sesión caducada.' }, { status: 401 });
     const body = await request.json();
-    // Función auxiliar para auto-crear catálogos en memoria
     const getCatId = async (modelDelegate: any, nombre: string, cacheMap: Map<string, number>, extra: any = {}) => {
       const val = (nombre && String(nombre).trim() !== '') ? String(nombre).trim().toUpperCase() : 'NO DEFINIDO';
       const cacheKey = extra.parentId ? `${extra.parentId}_${val}` : val;
@@ -161,7 +142,6 @@ export async function POST(request: Request) {
     };
     if (body.isBulkUpdate) {
       if (userRol !== 'super_admin' && userRol !== 'administrador') return NextResponse.json({ error: 'Solo administradores.' }, { status: 403 });
-      
       const { instituciones } = body;
       const reglas = await prisma.reglaTamano.findMany();
       const cache = { provincia: new Map(), canton: new Map(), parroquia: new Map(), sostenimiento: new Map(), jornada: new Map(), nivel: new Map(), area: new Map(), regimen: new Map(), jurisdiccion: new Map(), modalidad: new Map(), acceso: new Map() };

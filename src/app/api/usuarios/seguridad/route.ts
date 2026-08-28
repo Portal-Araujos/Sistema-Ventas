@@ -1,29 +1,22 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import * as argon2 from 'argon2';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const prisma = new PrismaClient();
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
-
 export async function POST(request: Request) {
   try {
-    // 1. Solo Super Admin o Admin pueden hacer esto
     const cookieStore = await cookies();
     const token = cookieStore.get('session_token')?.value;
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.rol !== 'super_admin' && payload.rol !== 'administrador') {
       return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 });
     }
-
     const { action, usuarioId } = await request.json();
-
-    // 🚀 ACCIÓN A: RESETEAR CONTRASEÑA Y DESBLOQUEAR
     if (action === 'reset_password') {
-      const tempPassword = 'Sistemas2026*'; // Contraseña temporal estándar
+      const tempPassword = 'Sistemas2026*'; 
       const hash = await argon2.hash(tempPassword);
       
       await prisma.usuario.update({
@@ -32,13 +25,11 @@ export async function POST(request: Request) {
           passwordHash: hash, 
           bloqueado: false, 
           intentosFallidos: 0,
-          tokenSesionActual: null // Expulsa al usuario de cualquier sesión activa
+          tokenSesionActual: null 
         }
       });
       return NextResponse.json({ success: true, message: `Clave reseteada a: ${tempPassword}` });
     }
-
-    // 🚀 ACCIÓN B: BLOQUEAR / DESBLOQUEAR MANUALMENTE
     if (action === 'toggle_bloqueo') {
       const user = await prisma.usuario.findUnique({ where: { id: usuarioId }});
       const nuevoEstado = !user?.bloqueado;

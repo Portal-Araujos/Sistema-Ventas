@@ -173,7 +173,6 @@ export default function VisitasPage() {
         <Table className={isRefreshing ? 'opacity-80' : ''}>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              {/* 🔥 CABECERA EDICIÓN PARA ADMIN 🔥 */}
               {catalogos?.userRol !== 'vendedor' && <TableHead className="font-semibold text-center w-80px">Edición</TableHead>}
               <TableHead className="font-semibold w-150px">Fecha y Hora</TableHead>
               <TableHead className="font-semibold w-220px">Gestión en Campo</TableHead>

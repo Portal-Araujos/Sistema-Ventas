@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/lib/prisma';
 import { jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const prisma = new PrismaClient();
+
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
 
 export async function GET(request: Request) {
@@ -58,32 +58,23 @@ export async function GET(request: Request) {
     todosLosDetalles.forEach((det: any) => {
       const ped = det.pedido;
       const instId = ped.institucionId;
-      
-      // 🔥 REGLA DE ORO DE OPERACIONES: Separamos por Escuela + Fecha de Lote 🔥
-      // Si la escuela envía lotes en fechas distintas, no se mezclarán nunca más.
       const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
       const grupoKey = `${instId}_${fr}`;
-
       const estPrenda = det.estadoOperacion || 'Pendiente en revision';
       const fConfeccion = det.fechaEstimadaConfeccion ? new Date(det.fechaEstimadaConfeccion) : null;
       const fUpdatedAt = new Date(det.updatedAt);
-      
       const esAtrasado = fConfeccion !== null && fConfeccion < hoy && estPrenda !== 'Despacho';
-
       if (estPrenda === 'Pendiente en revision') kpis.enRevision += det.cantidad;
       if (estPrenda === 'En produccion') kpis.enProduccion += det.cantidad;
       if (estPrenda === 'en empaque') kpis.enEmpaque += det.cantidad;
       if (estPrenda === 'Listos para el despacho') kpis.listosDespacho += det.cantidad;
-      
       if (estPrenda !== 'Despacho') {
         kpis.totalPendientes += det.cantidad;
         if (esAtrasado) kpis.atrasados += det.cantidad;
       }
-
       if (estPrenda === 'Despacho' && fUpdatedAt >= hoy && fUpdatedAt <= finHoy) {
         kpis.despachosHoy += det.cantidad;
       }
-
       let cumpleFiltro = true;
       if (estadoFiltro !== 'TODOS') {
         if (estadoFiltro === 'PENDIENTES') cumpleFiltro = estPrenda !== 'Despacho';
@@ -91,9 +82,7 @@ export async function GET(request: Request) {
         else if (estadoFiltro === 'HOY') cumpleFiltro = (estPrenda === 'Despacho' && fUpdatedAt >= hoy && fUpdatedAt <= finHoy);
         else cumpleFiltro = estPrenda === estadoFiltro;
       }
-
       if (!cumpleFiltro) return;
-
       if (!mapaEscuelas.has(grupoKey)) {
         mapaEscuelas.set(grupoKey, {
           id: grupoKey, 
@@ -111,7 +100,6 @@ export async function GET(request: Request) {
           pedidosAsociados: new Map()
         });
       }
-
       const escuela = mapaEscuelas.get(grupoKey);
       if (esAtrasado) escuela.esAtrasado = true;
       if (fConfeccion) {
@@ -119,9 +107,7 @@ export async function GET(request: Request) {
           escuela.fechaEstimadaConfeccionGlobal = fConfeccion;
         }
       }
-      
       escuela.estadosUnicosEscuela.add(estPrenda);
-
       if (!escuela.pedidosAsociados.has(ped.id)) {
         escuela.pedidosAsociados.set(ped.id, {
           id: ped.id,
@@ -134,10 +120,8 @@ export async function GET(request: Request) {
         });
         escuela.paquetesCantidad += 1;
       }
-
       const contrato = escuela.pedidosAsociados.get(ped.id);
       contrato.estadosUnicosContrato.add(estPrenda);
-      
       contrato.detalles.push({
         ...det,
         estadoOperacion: estPrenda,
@@ -156,13 +140,11 @@ export async function GET(request: Request) {
         estadoGlobalContrato: c.estadosUnicosContrato.size > 1 ? 'Varios Estados' : Array.from(c.estadosUnicosContrato)[0]
       }))
     }));
-
     return NextResponse.json({
       kpis,
       catalogos: { estados: estadosCatalogo },
       tabla: tablaRes
     });
-
   } catch (error) {
     console.error("Error Operaciones GET:", error);
     return NextResponse.json({ error: 'Error al consultar operaciones' }, { status: 500 });
@@ -175,24 +157,17 @@ export async function PUT(request: Request) {
     const { modo } = body;
     if (modo === 'asignacion_stock') {
       const { institucionId, stockAsignado, fechaEstimadaConfeccion } = body;
-      
-      // 🔥 EXTRACCIÓN SEGURA DE LA CAJA CERRADA 🔥
-      // Desarmamos el "grupoKey" para saber exactamente a qué lote aplicarle el stock.
       const realInstId = institucionId.split('_')[0];
       const frStr = institucionId.includes('_') ? institucionId.split('_')[1] : null;
-
       let fechaParseada = null;
       if (fechaEstimadaConfeccion) {
         const fechaLimpia = fechaEstimadaConfeccion.split('T')[0];
         fechaParseada = new Date(`${fechaLimpia}T12:00:00Z`);
       }
-
-      // Buscamos estrictamente en esa escuela y en esa fecha de lote
       const whereClause: any = {
         pedido: { institucionId: realInstId },
         estadoOperacion: 'Pendiente en revision'
       };
-
       if (frStr && frStr !== 'sin-fecha') {
         const startOfDay = new Date(`${frStr}T00:00:00.000Z`);
         const endOfDay = new Date(`${frStr}T23:59:59.999Z`);
@@ -200,15 +175,12 @@ export async function PUT(request: Request) {
       } else if (frStr === 'sin-fecha') {
         whereClause.pedido.fechaRequerida = null;
       }
-
       const prendasPendientes = await prisma.detallePedido.findMany({
         where: whereClause,
         orderBy: { pedidoId: 'asc' }
       });
-
       const personalizadas: any[] = [];
       const genericasPorContrato = new Map();
-
       for (const p of prendasPendientes) {
         const esPersonalizado = (p.observacion && p.observacion.trim() !== '');
         if (esPersonalizado) {
@@ -235,7 +207,6 @@ export async function PUT(request: Request) {
         for (const prenda of contrato.items) {
           const key = `${prenda.skuCodigo || 'S/N'}|${prenda.tipoRopa || 'Prenda'}|${prenda.color || '-'}|${prenda.talla || '-'}`;
           let stockDisponible = stockAsignado[key] ? parseInt(stockAsignado[key]) : 0;
-
           if (stockDisponible >= prenda.cantidad) {
             await prisma.detallePedido.update({
               where: { id: prenda.id },
@@ -250,7 +221,6 @@ export async function PUT(request: Request) {
               where: { id: prenda.id },
               data: { cantidad: stockDisponible, estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' }
             });
-
             const dataCreate: any = {
               pedidoId: prenda.pedidoId,
               skuCodigo: prenda.skuCodigo,
@@ -266,7 +236,6 @@ export async function PUT(request: Request) {
               estadoProduccion: 'Planificacion'
             };
             if (fechaParseada) dataCreate.fechaEstimadaConfeccion = fechaParseada;
-
             await prisma.detallePedido.create({ data: dataCreate });
             stockAsignado[key] = 0;
 
@@ -281,16 +250,11 @@ export async function PUT(request: Request) {
 
       return NextResponse.json({ success: true, message: 'Balance procesado exitosamente.' });
     }
-
-    // =========================================================
-    // LÓGICA TRADICIONAL (Para el modal individual)
-    // =========================================================
     const { prendaIds, nuevoEstado, fechaEstimadaConfeccion, observacionOperaciones } = body;
 
     if (!Array.isArray(prendaIds) || prendaIds.length === 0) {
       return NextResponse.json({ error: 'Debe seleccionar al menos una prenda.' }, { status: 400 });
     }
-
     const updateData: any = {};
     if (nuevoEstado) updateData.estadoOperacion = nuevoEstado;
     

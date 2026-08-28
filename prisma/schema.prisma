@@ -1,442 +1,519 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 model Provincia {
-  id       Int       @id @default(autoincrement())
-  nombre   String    @unique
-  activo   Boolean   @default(true) 
+  id       Int      @id @default(autoincrement())
+  nombre   String   @unique
+  activo   Boolean  @default(true)
   cantones Canton[]
+
   @@map("provincias")
 }
+
 model Canton {
   id          Int         @id @default(autoincrement())
   provinciaId Int         @map("provincia_id")
   nombre      String
-  activo      Boolean     @default(true) 
+  activo      Boolean     @default(true)
   provincia   Provincia   @relation(fields: [provinciaId], references: [id], onDelete: Cascade)
   parroquias  Parroquia[]
+
   @@map("cantones")
 }
+
 model Parroquia {
   id            Int           @id @default(autoincrement())
   cantonId      Int           @map("canton_id")
   nombre        String
-  activo        Boolean       @default(true) 
+  activo        Boolean       @default(true)
   canton        Canton        @relation(fields: [cantonId], references: [id], onDelete: Cascade)
   instituciones Institution[]
+
   @@map("parroquias")
 }
+
 model Sostenimiento {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
-  activo        Boolean       @default(true) 
+  activo        Boolean       @default(true)
   instituciones Institution[]
+
   @@map("sostenimientos")
 }
+
 model Jornada {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   activo        Boolean       @default(true)
   instituciones Institution[]
+
   @@map("jornadas")
 }
+
 model NivelEducativo {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   activo        Boolean       @default(true)
   instituciones Institution[]
+
   @@map("niveles_educativos")
 }
+
 model AreaEducativa {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
-  activo        Boolean       @default(true) 
+  activo        Boolean       @default(true)
   instituciones Institution[]
+
   @@map("areas_educativas")
 }
+
 model RegimenEscolar {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
-  activo        Boolean       @default(true) 
+  activo        Boolean       @default(true)
   instituciones Institution[]
+
   @@map("regimenes_escolares")
 }
+
 model Jurisdiccion {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   activo        Boolean       @default(true)
   instituciones Institution[]
+
   @@map("jurisdicciones")
 }
+
 model ModalidadEducativa {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
-  activo        Boolean       @default(true) 
+  activo        Boolean       @default(true)
   instituciones Institution[]
+
   @@map("modalidades_educativas")
 }
+
 model AccesoEdificio {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
-  activo        Boolean       @default(true) 
+  activo        Boolean       @default(true)
   instituciones Institution[]
+
   @@map("accesos_edificio")
 }
+
 model ReglaTamano {
-  id           Int      @id @default(autoincrement())
-  nombre       String   @unique
-  minDocentes  Int      @default(0) @map("min_docentes")
-  maxDocentes  Int      @default(9999) @map("max_docentes")
+  id          Int    @id @default(autoincrement())
+  nombre      String @unique
+  minDocentes Int    @default(0) @map("min_docentes")
+  maxDocentes Int    @default(9999) @map("max_docentes")
+
   @@map("reglas_tamano")
 }
+
 model Rol {
   id          Int       @id @default(autoincrement())
   nombre      String    @unique
   descripcion String?
   permisos    String?   @default("[]") // Guardará un JSON tipo ["ventas:ver", "instituciones:editar"]
   usuarios    Usuario[]
+
   @@map("roles")
 }
+
 model Permiso {
-  id        Int              @id @default(autoincrement())
-  nombre    String           @unique
-  modulo    String
-  usuarios  PermisoUsuario[]
+  id       Int              @id @default(autoincrement())
+  nombre   String           @unique
+  modulo   String
+  usuarios PermisoUsuario[]
+
   @@map("permisos")
 }
+
 model EstadoComercial {
   id            Int           @id @default(autoincrement())
   nombre        String        @unique
   activo        Boolean       @default(true)
   instituciones Institution[] @relation("EstadoToInst")
+
   @@map("estados_comerciales")
 }
+
 model PermisoUsuario {
-  usuarioId String   @map("usuario_id")
-  permisoId Int      @map("permiso_id")
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  permiso   Permiso  @relation(fields: [permisoId], references: [id], onDelete: Cascade)
+  usuarioId String  @map("usuario_id")
+  permisoId Int     @map("permiso_id")
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  permiso   Permiso @relation(fields: [permisoId], references: [id], onDelete: Cascade)
+
   @@id([usuarioId, permisoId])
   @@map("permisos_usuarios")
 }
+
 model Usuario {
-  id                             String           @id @default(uuid())
-  rolId                          Int              @map("rol_id")
-  nombre                         String
-  email                          String           @unique
-  passwordHash                   String           @map("password_hash")
-  activo                         Boolean          @default(true)
-  createdAt                      DateTime         @default(now()) @map("created_at")
-  rol                            Rol              @relation(fields: [rolId], references: [id])
-  intentosFallidos               Int              @default(0) @map("intentos_fallidos")
-  bloqueado                      Boolean          @default(false)
-  tokenSesionActual              String?          @map("token_sesion_actual") // Llave anti-clonación
-  permisos                       PermisoUsuario[]
-  institucionesCreadas           Institution[]    @relation("CreadoPor")
-  institucionesAsignadas         Institution[]   @relation("VendedorResponsable")
-  visitas                        VisitaAgenda[]
-  ventasRealizadas               Venta[]
-  metas                          MetaVendedor[]
-  pedidos                        Pedido[]
-  guiasDespacho                  GuiaDespacho[]
-  pedidosAsignados               Pedido[]         @relation("OperarioAsignadoPedido")
-  detallesAsignados              DetallePedido[]  @relation("OperarioAsignadoDetalle")
-  ticketsCreados                 TicketGestion[] @relation("TicketsCreados")
-  ticketsAsignados               TicketGestion[] @relation("TicketsAsignados")
-  mensajesTicket                 MensajeTicket[]
-  departamentoId                 Int?                 @map("departamento_id")
-  departamento                   DepartamentoEmpresa? @relation(fields: [departamentoId], references: [id])
+  id                     String               @id @default(uuid())
+  rolId                  Int                  @map("rol_id")
+  nombre                 String
+  email                  String               @unique
+  passwordHash           String               @map("password_hash")
+  activo                 Boolean              @default(true)
+  createdAt              DateTime             @default(now()) @map("created_at")
+  rol                    Rol                  @relation(fields: [rolId], references: [id])
+  intentosFallidos       Int                  @default(0) @map("intentos_fallidos")
+  bloqueado              Boolean              @default(false)
+  tokenSesionActual      String?              @map("token_sesion_actual") // Llave anti-clonación
+  permisos               PermisoUsuario[]
+  institucionesCreadas   Institution[]        @relation("CreadoPor")
+  institucionesAsignadas Institution[]        @relation("VendedorResponsable")
+  visitas                VisitaAgenda[]
+  ventasRealizadas       Venta[]
+  metas                  MetaVendedor[]
+  pedidos                Pedido[]
+  guiasDespacho          GuiaDespacho[]
+  pedidosAsignados       Pedido[]             @relation("OperarioAsignadoPedido")
+  detallesAsignados      DetallePedido[]      @relation("OperarioAsignadoDetalle")
+  ticketsCreados         TicketGestion[]      @relation("TicketsCreados")
+  ticketsAsignados       TicketGestion[]      @relation("TicketsAsignados")
+  mensajesTicket         MensajeTicket[]
+  departamentoId         Int?                 @map("departamento_id")
+  departamento           DepartamentoEmpresa? @relation(fields: [departamentoId], references: [id])
+  detallesRecibidos      DetallePedido[]      @relation("UsuarioReceptorDetalle")
+
   @@map("usuarios")
 }
+
 model Institution {
-  id                   String              @id @default(uuid())
-  nombre               String
-  sostenimientoId      Int                 @map("sostenimiento_id")
-  sostenimiento        Sostenimiento       @relation(fields: [sostenimientoId], references: [id])
-  jornadaId            Int                 @map("jornada_id")
-  jornada              Jornada             @relation(fields: [jornadaId], references: [id])
-  parroquiaId          Int                 @map("parroquia_id")
-  parroquia            Parroquia           @relation(fields: [parroquiaId], references: [id])
-  docentesHombres      Int                 @default(0) @map("docentes_hombres")
-  docentesMujeres      Int                 @default(0) @map("docentes_mujeres")
-  totalDocentes        Int                 @default(0) @map("total_docentes")
-  tamano               String              @default("Pequeña")
-  estadoComercialId    Int?                @map("estado_comercial_id")
-  estadoComercialRel   EstadoComercial?    @relation("EstadoToInst", fields: [estadoComercialId], references: [id])
-  estadoComercial      String              @default("No visitada") @map("estado_comercial")
-  nivelEducativoId     Int?                @map("nivel_educativo_id")
-  nivelEducativo       NivelEducativo?     @relation(fields: [nivelEducativoId], references: [id])
-  areaId               Int?                @map("area_id")
-  area                 AreaEducativa?      @relation(fields: [areaId], references: [id])
-  regimenId            Int?                @map("regimen_id")
-  regimen              RegimenEscolar?     @relation(fields: [regimenId], references: [id])
-  jurisdiccionId       Int?                @map("jurisdiccion_id")
-  jurisdiccion         Jurisdiccion?       @relation(fields: [jurisdiccionId], references: [id])
-  modalidadId          Int?                @map("modalidad_id")
-  modalidad            ModalidadEducativa? @relation(fields: [modalidadId], references: [id])
-  accesoEdificioId     Int?                @map("acceso_edificio_id")
-  accesoEdificio       AccesoEdificio?     @relation(fields: [accesoEdificioId], references: [id])
-  creadoPor            String              @map("creado_por")
-  usuarioCreador       Usuario             @relation("CreadoPor", fields: [creadoPor], references: [id])
-  vendedorId           String?             @map("vendedor_id")
-  vendedor             Usuario?            @relation("VendedorResponsable", fields: [vendedorId], references: [id], onDelete: SetNull)
-  createdAt            DateTime            @default(now()) @map("created_at")
-  visitas              VisitaAgenda[]
-  ventas               Venta[]
-  pedidos              Pedido[]
-  guiasDespacho        GuiaDespacho[]
-  tickets              TicketGestion[]
+  id                 String              @id @default(uuid())
+  nombre             String
+  sostenimientoId    Int                 @map("sostenimiento_id")
+  sostenimiento      Sostenimiento       @relation(fields: [sostenimientoId], references: [id])
+  jornadaId          Int                 @map("jornada_id")
+  jornada            Jornada             @relation(fields: [jornadaId], references: [id])
+  parroquiaId        Int                 @map("parroquia_id")
+  parroquia          Parroquia           @relation(fields: [parroquiaId], references: [id])
+  docentesHombres    Int                 @default(0) @map("docentes_hombres")
+  docentesMujeres    Int                 @default(0) @map("docentes_mujeres")
+  totalDocentes      Int                 @default(0) @map("total_docentes")
+  tamano             String              @default("Pequeña")
+  estadoComercialId  Int?                @map("estado_comercial_id")
+  estadoComercialRel EstadoComercial?    @relation("EstadoToInst", fields: [estadoComercialId], references: [id])
+  estadoComercial    String              @default("No visitada") @map("estado_comercial")
+  nivelEducativoId   Int?                @map("nivel_educativo_id")
+  nivelEducativo     NivelEducativo?     @relation(fields: [nivelEducativoId], references: [id])
+  areaId             Int?                @map("area_id")
+  area               AreaEducativa?      @relation(fields: [areaId], references: [id])
+  regimenId          Int?                @map("regimen_id")
+  regimen            RegimenEscolar?     @relation(fields: [regimenId], references: [id])
+  jurisdiccionId     Int?                @map("jurisdiccion_id")
+  jurisdiccion       Jurisdiccion?       @relation(fields: [jurisdiccionId], references: [id])
+  modalidadId        Int?                @map("modalidad_id")
+  modalidad          ModalidadEducativa? @relation(fields: [modalidadId], references: [id])
+  accesoEdificioId   Int?                @map("acceso_edificio_id")
+  accesoEdificio     AccesoEdificio?     @relation(fields: [accesoEdificioId], references: [id])
+  creadoPor          String              @map("creado_por")
+  usuarioCreador     Usuario             @relation("CreadoPor", fields: [creadoPor], references: [id])
+  vendedorId         String?             @map("vendedor_id")
+  vendedor           Usuario?            @relation("VendedorResponsable", fields: [vendedorId], references: [id], onDelete: SetNull)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  visitas            VisitaAgenda[]
+  ventas             Venta[]
+  pedidos            Pedido[]
+  guiasDespacho      GuiaDespacho[]
+  tickets            TicketGestion[]
+
   @@map("instituciones")
 }
+
 model VisitaAgenda {
-  id                   String      @id @default(uuid())
-  institucionId        String      @map("institucion_id")
-  usuarioId            String      @map("usuario_id")
-  fechaProgramada      DateTime    @map("fecha_programada") @db.Date
-  horaProgramada       String      @map("hora_programada")
-  tipoGestion          String      @map("tipo_gestion")
-  estadoGestion        String      @default("Pendiente") @map("estado_gestion")
-  resumenAcuerdos      String?     @map("resumen_acuerdos") @db.Text
-  fechaProximoContacto DateTime?   @map("fecha_proximo_contacto") @db.Date
-  latitud              Float?
-  longitud             Float?
-  createdAt            DateTime    @default(now()) @map("created_at")
-  institucion          Institution @relation(fields: [institucionId], references: [id], onDelete: Cascade)
-  usuario              Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  ventas               Venta[]
-  esVisitaLibre        Boolean  @default(false)
-  edicionFechaHabilitada Boolean  @default(false) @map("edicion_fecha_habilitada")
+  id                     String      @id @default(uuid())
+  institucionId          String      @map("institucion_id")
+  usuarioId              String      @map("usuario_id")
+  fechaProgramada        DateTime    @map("fecha_programada") @db.Date
+  horaProgramada         String      @map("hora_programada")
+  tipoGestion            String      @map("tipo_gestion")
+  estadoGestion          String      @default("Pendiente") @map("estado_gestion")
+  resumenAcuerdos        String?     @map("resumen_acuerdos") @db.Text
+  fechaProximoContacto   DateTime?   @map("fecha_proximo_contacto") @db.Date
+  latitud                Float?
+  longitud               Float?
+  createdAt              DateTime    @default(now()) @map("created_at")
+  institucion            Institution @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  usuario                Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  ventas                 Venta[]
+  esVisitaLibre          Boolean     @default(false)
+  edicionFechaHabilitada Boolean     @default(false) @map("edicion_fecha_habilitada")
+
   @@map("visitas_agenda")
 }
+
 model EstadoCliente {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique
-  activo    Boolean   @default(true)
-  ventas    Venta[]
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+  ventas Venta[]
+
   @@map("estados_clientes")
 }
+
 model EstadoContrato {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique
-  activo    Boolean   @default(true)
-  ventas    Venta[]
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+  ventas Venta[]
+
   @@map("estados_contratos")
 }
+
 model TipoCobro {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique
-  activo    Boolean   @default(true)
-  ventas    Venta[]
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+  ventas Venta[]
+
   @@map("tipos_cobro")
 }
+
 model Venta {
-  id                  String   @id @default(uuid())
-  fechaVenta          DateTime @default(now()) @map("fecha_venta")
-  institucionId       String   @map("institucion_id")
-  institucion         Institution @relation(fields: [institucionId], references: [id])
-  vendedorId          String   @map("vendedor_id")
-  vendedor            Usuario  @relation(fields: [vendedorId], references: [id])
-  visitaId            String?  @map("visita_id")
-  visita              VisitaAgenda? @relation(fields: [visitaId], references: [id])
-  numContrato         String   @map("num_contrato")
-  valorContrato       Float    @map("valor_contrato")
-  abono               Float    @default(0)
-  meses               Int
-  mesCobro            String   @map("mes_cobro") // Selector Enero - Diciembre
-  cuotaMensual        Float    @map("cuota_mensual")
-  estadoClienteId     Int?     @map("estado_cliente_id")
-  estadoCliente       EstadoCliente? @relation(fields: [estadoClienteId], references: [id])
-  estadoContratoId    Int?     @map("estado_contrato_id")
-  estadoContrato      EstadoContrato? @relation(fields: [estadoContratoId], references: [id])
-  tipoCobroId         Int?     @map("tipo_cobro_id")
-  tipoCobro           TipoCobro? @relation(fields: [tipoCobroId], references: [id])
-  observacionesFact   String?  @map("observaciones_facturacion")
-  verificacionFact    String?  @map("verificacion_facturacion") // Num validación
-  estadoTicket        String   @default("Pendiente Facturación") @map("estado_ticket") 
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
-  tipoClienteId       Int?          @map("tipo_cliente_id")
-  tieneCedula         Boolean  @default(false) @map("tiene_cedula")
-  tipoCliente         TipoCliente?  @relation(fields: [tipoClienteId], references: [id])
+  id                String          @id @default(uuid())
+  fechaVenta        DateTime        @default(now()) @map("fecha_venta")
+  institucionId     String          @map("institucion_id")
+  institucion       Institution     @relation(fields: [institucionId], references: [id])
+  vendedorId        String          @map("vendedor_id")
+  vendedor          Usuario         @relation(fields: [vendedorId], references: [id])
+  visitaId          String?         @map("visita_id")
+  visita            VisitaAgenda?   @relation(fields: [visitaId], references: [id])
+  numContrato       String          @map("num_contrato")
+  valorContrato     Float           @map("valor_contrato")
+  abono             Float           @default(0)
+  meses             Int
+  mesCobro          String          @map("mes_cobro") // Selector Enero - Diciembre
+  cuotaMensual      Float           @map("cuota_mensual")
+  estadoClienteId   Int?            @map("estado_cliente_id")
+  estadoCliente     EstadoCliente?  @relation(fields: [estadoClienteId], references: [id])
+  estadoContratoId  Int?            @map("estado_contrato_id")
+  estadoContrato    EstadoContrato? @relation(fields: [estadoContratoId], references: [id])
+  tipoCobroId       Int?            @map("tipo_cobro_id")
+  tipoCobro         TipoCobro?      @relation(fields: [tipoCobroId], references: [id])
+  observacionesFact String?         @map("observaciones_facturacion")
+  verificacionFact  String?         @map("verificacion_facturacion") // Num validación
+  estadoTicket      String          @default("Pendiente Facturación") @map("estado_ticket")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  tipoClienteId     Int?            @map("tipo_cliente_id")
+  tieneCedula       Boolean         @default(false) @map("tiene_cedula")
+  tipoCliente       TipoCliente?    @relation(fields: [tipoClienteId], references: [id])
+
   @@map("ventas")
 }
+
 model MetaVendedor {
-  id          String   @id @default(uuid())
-  vendedorId  String   @map("vendedor_id")
-  vendedor    Usuario  @relation(fields: [vendedorId], references: [id])
-  semanaAnio  String   @map("semana_anio") // Formato: "YYYY-WXX" o fecha del lunes "YYYY-MM-DD"
-  montoMeta   Float    @default(0) @map("monto_meta")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  @@unique    ([vendedorId, semanaAnio])
-  @@map       ("metas_vendedores")
+  id         String   @id @default(uuid())
+  vendedorId String   @map("vendedor_id")
+  vendedor   Usuario  @relation(fields: [vendedorId], references: [id])
+  semanaAnio String   @map("semana_anio") // Formato: "YYYY-WXX" o fecha del lunes "YYYY-MM-DD"
+  montoMeta  Float    @default(0) @map("monto_meta")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([vendedorId, semanaAnio])
+  @@map("metas_vendedores")
 }
+
 model TipoGestion {
-  id        Int      @id @default(autoincrement())
-  nombre    String   @unique
-  activo    Boolean  @default(true)
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+
   @@map("tipos_gestion")
 }
+
 model CatalogoSKU {
-  id          Int      @id @default(autoincrement())
-  codigo      String   @unique                 
-  tipoRopa    String                          
-  color       String                           
-  genero      String                          
-  talla       String                           
-  activo      Boolean  @default(true)
-  categoriaItem String @default("TEXTIL") @map("categoria_item")
+  id            Int     @id @default(autoincrement())
+  codigo        String  @unique
+  tipoRopa      String
+  color         String
+  genero        String
+  talla         String
+  activo        Boolean @default(true)
+  categoriaItem String  @default("TEXTIL") @map("categoria_item")
+
   @@map("catalogo_sku")
 }
+
 model Pedido {
-  id               String          @id @default(uuid())
-  institucionId    String          @map("institucion_id")
-  usuarioId        String          @map("usuario_id") // El vendedor que tomó el pedido
-  nombreCliente    String          @map("nombre_cliente") // Ej: Pepito Pérez
-  numContrato      String?         @map("num_contrato") // Ej: Contrato 1212
-  tipoPedido       String          @default("Pedido") @map("tipo_pedido") // Pedido o Reposición
-  operarioAsignadoId String?   @map("operario_asignado_id")
-  operarioAsignado   Usuario?  @relation("OperarioAsignadoPedido", fields: [operarioAsignadoId], references: [id], onDelete: SetNull)
-  fechaRequerida    DateTime?       @map("fecha_requerida") @db.Date // Cuándo lo prometió el vendedor
-  motivoCambioFecha String?         @map("motivo_cambio_fecha") @db.Text // Por qué Producción lo atrasó
-  fechaPedido      DateTime        @default(now()) @map("fecha_pedido")
-  estado           String          @default("Borrador") // Borrador, En Operaciones, En Taller, Entregado
-  observacion      String?         @db.Text
-  createdAt        DateTime        @default(now()) @map("created_at")
-  updatedAt        DateTime        @updatedAt @map("updated_at")
-  institucion      Institution     @relation(fields: [institucionId], references: [id], onDelete: Cascade)
-  usuario          Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  detalles         DetallePedido[]
+  id                 String          @id @default(uuid())
+  institucionId      String          @map("institucion_id")
+  usuarioId          String          @map("usuario_id") // El vendedor que tomó el pedido
+  nombreCliente      String          @map("nombre_cliente") // Ej: Pepito Pérez
+  numContrato        String?         @map("num_contrato") // Ej: Contrato 1212
+  tipoPedido         String          @default("Pedido") @map("tipo_pedido") // Pedido o Reposición
+  operarioAsignadoId String?         @map("operario_asignado_id")
+  operarioAsignado   Usuario?        @relation("OperarioAsignadoPedido", fields: [operarioAsignadoId], references: [id], onDelete: SetNull)
+  fechaRequerida     DateTime?       @map("fecha_requerida") @db.Date // Cuándo lo prometió el vendedor
+  motivoCambioFecha  String?         @map("motivo_cambio_fecha") @db.Text // Por qué Producción lo atrasó
+  fechaPedido        DateTime        @default(now()) @map("fecha_pedido")
+  estado             String          @default("Borrador") // Borrador, En Operaciones, En Taller, Entregado
+  observacion        String?         @db.Text
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  institucion        Institution     @relation(fields: [institucionId], references: [id], onDelete: Cascade)
+  usuario            Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  detalles           DetallePedido[]
   responsableEmpaque String?         @map("responsable_empaque")
   fechaInicioEmpaque DateTime?       @map("fecha_inicio_empaque")
   fechaFinEmpaque    DateTime?       @map("fecha_fin_empaque")
+
   @@map("pedidos")
 }
+
 model DetallePedido {
-  id                        String   @id @default(uuid())
-  pedidoId                  String   @map("pedido_id")
-  skuCodigo                 String   @map("sku_codigo") 
-  tipoRopa                  String   @map("tipo_ropa")  
-  color                     String
-  genero                    String   
-  talla                     String
-  cantidad                  Int      
-  bordado                   String?  @db.Text 
-  observacion               String?  @db.Text 
-  pedido                    Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-  estadoOperacion           String    @default("Pendiente en revision") @map("estado_operacion") 
-  fechaEstimadaConfeccion   DateTime? @map("fecha_estimada_confeccion")
-  observacionOperaciones    String?   @map("observacion_operaciones")
-  estadoProduccion          String    @default("Planificacion") @map("estado_produccion") 
-  operarioAsignadoId        String?   @map("operario_asignado_id")
-  operarioAsignado          Usuario?  @relation("OperarioAsignadoDetalle", fields: [operarioAsignadoId], references: [id], onDelete: SetNull)
-  estadoEmpaque             String    @default("Pendiente") @map("estado_empaque") 
-  guiaDespachoId            String?   @map("guia_despacho_id")
-  guiaDespacho              GuiaDespacho? @relation(fields: [guiaDespachoId], references: [id], onDelete: SetNull)
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updated_at                DateTime @updatedAt @default(now()) 
+  id                      String        @id @default(uuid())
+  pedidoId                String        @map("pedido_id")
+  skuCodigo               String        @map("sku_codigo")
+  tipoRopa                String        @map("tipo_ropa")
+  color                   String
+  genero                  String
+  talla                   String
+  cantidad                Int
+  bordado                 String?       @db.Text
+  observacion             String?       @db.Text
+  pedido                  Pedido        @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  estadoOperacion         String        @default("Pendiente en revision") @map("estado_operacion")
+  fechaEstimadaConfeccion DateTime?     @map("fecha_estimada_confeccion")
+  observacionOperaciones  String?       @map("observacion_operaciones")
+  estadoProduccion        String        @default("Planificacion") @map("estado_produccion")
+  operarioAsignadoId      String?       @map("operario_asignado_id")
+  operarioAsignado        Usuario?      @relation("OperarioAsignadoDetalle", fields: [operarioAsignadoId], references: [id], onDelete: SetNull)
+  estadoEmpaque           String        @default("Pendiente") @map("estado_empaque")
+  guiaDespachoId          String?       @map("guia_despacho_id")
+  guiaDespacho            GuiaDespacho? @relation(fields: [guiaDespachoId], references: [id], onDelete: SetNull)
+  recibidoPorVendedor     Boolean       @default(false) @map("recibido_por_vendedor")
+  fechaRecepcion          DateTime?     @map("fecha_recepcion")
+  usuarioReceptorId       String?       @map("usuario_receptor_id")
+  usuarioReceptor         Usuario?      @relation("UsuarioReceptorDetalle", fields: [usuarioReceptorId], references: [id], onDelete: SetNull)
+  createdAt               DateTime      @default(now()) @map("created_at")
+  updated_at              DateTime      @default(now()) @updatedAt
+
   @@map("detalles_pedido")
 }
+
 model EstadoOperacion {
-  id       Int      @id @default(autoincrement())
-  nombre   String   @unique
-  activo   Boolean  @default(true)
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+
   @@map("estados_operacion")
 }
+
 model EstadoProduccion {
-  id       Int      @id @default(autoincrement())
-  nombre   String   @unique
-  activo   Boolean  @default(true)
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+
   @@map("estados_produccion")
 }
+
 model GuiaDespacho {
-  id                String   @id @default(uuid())
-  codigoGuia        String   @map("codigo_guia") // Ej: SERVIENTREGA-9912
-  institucionId     String   @map("institucion_id")
-  vendedorId        String?  @map("vendedor_id")
-  responsable       String   @map("responsable") // Quien despachó / Bodeguero
-  fechaDespacho     DateTime @default(now()) @map("fecha_despacho")
-  observacion       String?  @db.Text
-  institucion       Institution   @relation(fields: [institucionId], references: [id])
-  vendedor          Usuario?      @relation(fields: [vendedorId], references: [id])
+  id                 String          @id @default(uuid())
+  codigoGuia         String          @map("codigo_guia") // Ej: SERVIENTREGA-9912
+  institucionId      String          @map("institucion_id")
+  vendedorId         String?         @map("vendedor_id")
+  responsable        String          @map("responsable") // Quien despachó / Bodeguero
+  fechaDespacho      DateTime        @default(now()) @map("fecha_despacho")
+  observacion        String?         @db.Text
+  institucion        Institution     @relation(fields: [institucionId], references: [id])
+  vendedor           Usuario?        @relation(fields: [vendedorId], references: [id])
   prendasDespachadas DetallePedido[] // Las prendas exactas que se fueron aquí
+
   @@map("guias_despacho")
 }
+
 model ConfiguracionSeguridad {
-  id               Int      @id @default(1) // Solo existirá 1 fila que actualizarás desde tu panel
-  ipOficina        String?  @map("ip_oficina") // La placa de tu internet actual
-  rolesBloqueados  String   @default("[]") @map("roles_bloqueados") // Ej: ["administrador", "bodeguero"]
-  encargadoBodegaTextilId  String?  @map("encargado_bodega_textil_id") 
+  id                       Int      @id @default(1) // Solo existirá 1 fila que actualizarás desde tu panel
+  ipOficina                String?  @map("ip_oficina") // La placa de tu internet actual
+  rolesBloqueados          String   @default("[]") @map("roles_bloqueados") // Ej: ["administrador", "bodeguero"]
+  encargadoBodegaTextilId  String?  @map("encargado_bodega_textil_id")
   encargadoBodegaElectroId String?  @map("encargado_bodega_electro_id")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
   @@map("configuracion_seguridad")
 }
 
 model BitacoraSeguridad {
   id                String    @id @default(uuid())
-  ip                String    // La IP de donde viene la acción o el ataque
-  evento            String    // Ej: "LOGIN_FALLIDO", "RATE_LIMIT_ACTIVADO", "DESCARGA_EXCEL"
+  ip                String // La IP de donde viene la acción o el ataque
+  evento            String // Ej: "LOGIN_FALLIDO", "RATE_LIMIT_ACTIVADO", "DESCARGA_EXCEL"
   emailIntentado    String?   @map("email_intentado")
   usuarioId         String?   @map("usuario_id") // Por si fue un usuario logueado (ej: al descargar Excel)
   nivelBloqueo      Int       @default(0) @map("nivel_bloqueo") // 0: Ninguno | 1: 15m | 2: 30m | 3: 24h
   fechaBloqueoHasta DateTime? @map("fecha_bloqueo_hasta") // El reloj del castigo
   createdAt         DateTime  @default(now()) @map("created_at")
+
   @@map("bitacora_seguridad")
 }
+
 model TipoCliente {
-  id        Int       @id @default(autoincrement())
-  nombre    String
-  activo    Boolean   @default(true)
-  
+  id     Int     @id @default(autoincrement())
+  nombre String
+  activo Boolean @default(true)
+
   // Relación con tu tabla Venta
-  ventas    Venta[]   
+  ventas Venta[]
 
   @@map("tipos_cliente")
 }
+
 model TicketGestion {
-  id              Int       @id @default(autoincrement())
-  codigo          String    @unique // Ej: TKT-001, TKT-002
-  tipo            String    // Ej: Cobranza, Facturacion, Soporte
-  asunto          String
-  estado          String    @default("Abierto") // Abierto, En Proceso, Pendiente, Cerrado, Re-Abierto
-  prioridad       String    @default("Media")   // Baja, Media, Alta, Urgente
-  institucionId   String    // ID de la escuela vinculada
-  creadorId       String    // ID de la persona de oficina que lo creó
-  asignadoAId     String?   // ID del Vendedor en campo que debe resolverlo
-  fechaCierre     DateTime? // Se llena cuando pasa a Cerrado
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  mensajes        MensajeTicket[]
-  institucion     Institution @relation(fields: [institucionId], references: [id])
-  creador         Usuario     @relation("TicketsCreados", fields: [creadorId], references: [id])
-  asignado        Usuario?    @relation("TicketsAsignados", fields: [asignadoAId], references: [id])
+  id            Int             @id @default(autoincrement())
+  codigo        String          @unique // Ej: TKT-001, TKT-002
+  tipo          String // Ej: Cobranza, Facturacion, Soporte
+  asunto        String
+  estado        String          @default("Abierto") // Abierto, En Proceso, Pendiente, Cerrado, Re-Abierto
+  prioridad     String          @default("Media") // Baja, Media, Alta, Urgente
+  institucionId String // ID de la escuela vinculada
+  creadorId     String // ID de la persona de oficina que lo creó
+  asignadoAId   String? // ID del Vendedor en campo que debe resolverlo
+  fechaCierre   DateTime? // Se llena cuando pasa a Cerrado
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  mensajes      MensajeTicket[]
+  institucion   Institution     @relation(fields: [institucionId], references: [id])
+  creador       Usuario         @relation("TicketsCreados", fields: [creadorId], references: [id])
+  asignado      Usuario?        @relation("TicketsAsignados", fields: [asignadoAId], references: [id])
+
   @@map("tickets_gestion")
 }
+
 model MensajeTicket {
-  id              Int       @id @default(autoincrement())
-  ticketId        Int
-  remitenteId     String    
-  contenido       String    @db.Text
-  esSistema       Boolean   @default(false) 
-  adjuntoUrl      String?   
-  adjuntoTipo     String?   
-  adjuntoNombre   String?   
-  createdAt       DateTime  @default(now()) @map("created_at")
-  ticket          TicketGestion @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  remitente       Usuario       @relation(fields: [remitenteId], references: [id]) 
+  id            Int           @id @default(autoincrement())
+  ticketId      Int
+  remitenteId   String
+  contenido     String        @db.Text
+  esSistema     Boolean       @default(false)
+  adjuntoUrl    String?
+  adjuntoTipo   String?
+  adjuntoNombre String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  ticket        TicketGestion @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  remitente     Usuario       @relation(fields: [remitenteId], references: [id])
+
   @@map("mensajes_ticket")
 }
+
 model DepartamentoEmpresa {
-  id        Int       @id @default(autoincrement())
-  nombre    String    @unique
-  activo    Boolean   @default(true)
-  
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique
+  activo Boolean @default(true)
+
   // Relación con los empleados
-  usuarios  Usuario[]
+  usuarios Usuario[]
 
   @@map("departamentos_empresa")
 }
