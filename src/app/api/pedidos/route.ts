@@ -153,7 +153,7 @@ export async function GET(request: Request) {
         fechaRequerida: fechaValida, 
         operarioAsignadoId: ped.operarioAsignadoId || '',
         operarioAsignadoNombre: ped.operarioAsignado?.nombre || 'Auto-asignado', 
-        detalles: ped.detalles || [],
+        detalles: (ped.detalles || []).map((d: any) => ({ ...d, entregadoHoy: d.recibidoPorVendedor })),
         totalUnidadesContrato: unidadesEnEstePedido,
         estadoActualizadoOperaciones: estadoRealPedido,
         valorContrato: ventaAsociada?.valorContrato || 0,
@@ -274,7 +274,11 @@ export async function PUT(request: Request) {
           updateData.detalles = {
             create: detalles.map((d: any) => ({
               skuCodigo: d.skuCodigo || 'S/N', tipoRopa: d.tipoRopa || 'Prenda', color: d.color || '',
-              genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1, bordado: d.bordado || null, observacion: d.observacion || null
+              genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1, bordado: d.bordado || null, observacion: d.observacion || null,
+              estadoOperacion: d.entregadoHoy ? 'Entregado' : 'Pendiente en revision',
+              recibidoPorVendedor: d.entregadoHoy ? true : false,
+              fechaRecepcion: d.entregadoHoy ? new Date() : null,
+              usuarioReceptorId: d.entregadoHoy ? vendedorFinalId : null
             }))
           };
         }
@@ -364,7 +368,11 @@ export async function POST(request: Request) {
         detalles: {
           create: (body.detalles || []).map((d: any) => ({
             skuCodigo: d.skuCodigo || 'S/N', tipoRopa: d.tipoRopa || 'Prenda', color: d.color || '',
-            genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1, bordado: d.bordado || null, observacion: d.observacion || null
+            genero: d.genero || 'UNISEX', talla: d.talla || 'M', cantidad: parseInt(d.cantidad) || 1, bordado: d.bordado || null, observacion: d.observacion || null,
+            estadoOperacion: d.entregadoHoy ? 'Entregado' : 'Pendiente en revision',
+            recibidoPorVendedor: d.entregadoHoy ? true : false,
+            fechaRecepcion: d.entregadoHoy ? new Date() : null,
+            usuarioReceptorId: d.entregadoHoy ? vendedorFinalId : null
           }))
         }
       }

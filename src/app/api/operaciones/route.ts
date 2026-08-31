@@ -23,7 +23,8 @@ export async function GET(request: Request) {
     finHoy.setHours(23, 59, 59, 999);
 
     const whereBase: any = {
-      pedido: { estado: { not: 'Borrador' } }
+      pedido: { estado: { not: 'Borrador' } },
+      estadoOperacion: { not: 'Entregado' } 
     };
 
     if (fechaInicio || fechaFin) {

@@ -1,10 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, Trash2, Shirt, Edit, AlertCircle, CheckCircle2, Monitor } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Edit, AlertCircle, CheckCircle2, Monitor } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 interface ContratoVentaFormProps {
@@ -36,29 +35,34 @@ export default function ContratoVentaForm({
       const m = parseInt(newData.meses) || 12;
       newData.cuotaMensual = m > 0 ? ((v - a) / m).toFixed(2) : "0.00";
     }
+
+    if (campo === 'estadoClienteId') {
+      const estadoSel = catalogos?.estadosCliente?.find((e: any) => e.id.toString() === valor?.toString());
+      const nombreEst = estadoSel?.nombre?.toLowerCase() || '';
+      
+      if (nombreEst.includes('entregado') && newData.prendas) {
+        newData.prendas = newData.prendas.map((p: any) => ({ ...p, entregadoHoy: true }));
+      }
+    }
+
     onChange(newData);
   };
 
-  // 🔥 VALIDACIÓN DINÁMICA SIN NADA QUEMADO 🔥
+  // 🔥 VALIDACIÓN DINÁMICA ESTRICTA 🔥
   const estadoSeleccionado = catalogos?.estadosCliente?.find((e: any) => e.id.toString() === data.estadoClienteId?.toString());
   const estadoNombre = estadoSeleccionado?.nombre?.toLowerCase() || '';
-  
-  const isPedidoElectro = estadoNombre.includes('pedido') && estadoNombre.includes('electro');
-  const isPedidoTextil = estadoNombre.includes('pedido') && !isPedidoElectro; // Si dice pedido y no es electro, es textil
-  const isEntregado = estadoNombre.includes('entregado');
-  const requierePedido = isPedidoTextil || isPedidoElectro;
-
-  // ==========================================
-  // LÓGICA DEL CATÁLOGO DE SKU TEXTIL
-  // ==========================================
+  const hasEstadoSeleccionado = estadoNombre.trim() !== '';
+  const isPedidoElectro = hasEstadoSeleccionado && estadoNombre.includes('electro');
+  const isPedidoTextil  = hasEstadoSeleccionado && estadoNombre.includes('textil'); 
+  const isEntregado     = hasEstadoSeleccionado && estadoNombre.includes('entregado');
+  const requierePedido  = isPedidoElectro || isPedidoTextil || isEntregado;
   const [allSkus, setAllSkus] = useState<any[]>([]);
   const [draftPrenda, setDraftPrenda] = useState({ 
-    skuCodigo: '', tipoRopa: '', color: '', genero: '', talla: '', cantidad: 1, bordado: '', observacion: '' 
+    skuCodigo: '', tipoRopa: '', color: '', genero: '', talla: '', cantidad: 1, bordado: '', observacion: '', entregadoHoy: isEntregado 
   });
   
-  // ESTADO BORRADOR PARA ELECTRO / TECNOLOGÍA
   const [draftElectro, setDraftElectro] = useState({
-    codigo: '', familia: '', marcaModelo: '', descripcion: '', garantia: '', cantidad: 1
+    codigo: '', familia: '', marcaModelo: '', descripcion: '', garantia: '', cantidad: 1, entregadoHoy: isEntregado
   });
   
   const [busquedaPrenda, setBusquedaPrenda] = useState('');
@@ -77,6 +81,11 @@ export default function ContratoVentaForm({
     };
     fetchSkus();
   }, []);
+
+  useEffect(() => {
+    setDraftPrenda(prev => ({ ...prev, entregadoHoy: isEntregado }));
+    setDraftElectro(prev => ({ ...prev, entregadoHoy: isEntregado }));
+  }, [isEntregado]);
 
   const tiposRopaDisp = Array.from(new Set(allSkus.map(s => s.tipoRopa))).filter(Boolean).sort();
   const coloresDisp = Array.from(new Set(allSkus.filter(s => s.tipoRopa === draftPrenda.tipoRopa).map(s => s.color))).filter(Boolean).sort();
@@ -114,7 +123,13 @@ export default function ContratoVentaForm({
     
     const prendasActuales = data.prendas || data.detalles || [];
     const yaExiste = prendasActuales.some((p: any) => 
-      p.tipoRopa === draftPrenda.tipoRopa && p.talla === draftPrenda.talla && p.color === draftPrenda.color && p.genero === draftPrenda.genero
+      p.tipoRopa === draftPrenda.tipoRopa && 
+      p.talla === draftPrenda.talla && 
+      p.color === draftPrenda.color && 
+      p.genero === draftPrenda.genero &&
+      (p.bordado || '') === (draftPrenda.bordado || '') &&
+      (p.observacion || '') === (draftPrenda.observacion || '') &&
+      !!p.entregadoHoy === !!draftPrenda.entregadoHoy
     );
 
     if (yaExiste) { showToast('error', '¡Atención! Esta prenda ya está en la lista.'); return; }
@@ -122,7 +137,7 @@ export default function ContratoVentaForm({
     const nuevaLista = [...prendasActuales, { ...draftPrenda, skuCodigo: draftPrenda.skuCodigo || 'S/N' }];
     onChange({ ...data, prendas: nuevaLista, detalles: nuevaLista });
     
-    setDraftPrenda({ skuCodigo: '', tipoRopa: '', color: '', genero: '', talla: '', cantidad: 1, bordado: '', observacion: '' });
+    setDraftPrenda({ skuCodigo: '', tipoRopa: '', color: '', genero: '', talla: '', cantidad: 1, bordado: '', observacion: '', entregadoHoy: isEntregado });
     setBusquedaPrenda(''); 
     showToast('exito', 'Prenda agregada al carrito.');
   };
@@ -141,13 +156,14 @@ export default function ContratoVentaForm({
       talla: 'N/A', 
       cantidad: draftElectro.cantidad,
       bordado: 'ELECTRO', 
-      observacion: draftElectro.descripcion
+      observacion: draftElectro.descripcion,
+      entregadoHoy: draftElectro.entregadoHoy
     };
 
     const prendasActuales = data.prendas || data.detalles || [];
     onChange({ ...data, prendas: [...prendasActuales, nuevoItem], detalles: [...prendasActuales, nuevoItem] });
     
-    setDraftElectro({ codigo: '', familia: '', marcaModelo: '', descripcion: '', garantia: '', cantidad: 1 });
+    setDraftElectro({ codigo: '', familia: '', marcaModelo: '', descripcion: '', garantia: '', cantidad: 1, entregadoHoy: isEntregado });
     showToast('exito', 'Equipo agregado al pedido.');
   };
 
@@ -205,7 +221,9 @@ export default function ContratoVentaForm({
                   className="w-full h-8 border border-gray-300 rounded-md px-1 text-[10px] bg-white outline-none font-medium mt-0.5"
                 >
                   <option value="">Seleccione...</option>
-                  {(catalogos?.tiposCliente || catalogos?.tipoCliente || []).map((t: any) => (
+                  {(catalogos?.tiposCliente || catalogos?.tipoCliente || [])
+                    .filter((t: any) => t.activo !== false && t.estado !== 'Inactivo')
+                    .map((t: any) => (
                     <option key={t.id} value={t.id}>{t.nombre}</option>
                   ))}
                 </select>
@@ -217,31 +235,25 @@ export default function ContratoVentaForm({
               <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Meses Plazo</Label><Input type="number" min="1" value={data.meses || '12'} onChange={e => handleDataChange('meses', e.target.value)} className="h-8 text-xs font-bold bg-white" /></div>
               <div><Label className="text-[10px] font-bold text-emerald-700 uppercase">Cuota Mensual</Label><Input disabled type="text" value={`$ ${data.cuotaMensual || '0.00'}`} className="h-8 text-xs font-black bg-emerald-50 text-emerald-800 border-emerald-200" /></div>
             </div>
-            
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-gray-200 pt-3">
               <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Mes Inicio Cobro</Label><select value={data.mesCobro || 'Enero'} onChange={e => handleDataChange('mesCobro', e.target.value)} className="w-full h-8 border border-gray-300 rounded-md px-1 text-[11px] bg-white outline-none font-medium"><option value="Enero">Enero</option><option value="Febrero">Febrero</option><option value="Marzo">Marzo</option><option value="Abril">Abril</option><option value="Mayo">Mayo</option><option value="Junio">Junio</option><option value="Julio">Julio</option><option value="Agosto">Agosto</option><option value="Septiembre">Septiembre</option><option value="Octubre">Octubre</option><option value="Noviembre">Noviembre</option><option value="Diciembre">Diciembre</option></select></div>
-              <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select value={data.tipoCobroId || ''} onChange={e => handleDataChange('tipoCobroId', e.target.value)} className="w-full h-8 border border-gray-300 rounded-md px-1 text-[10px] bg-white outline-none font-medium"><option value="">Seleccione...</option>{catalogos?.tiposCobro?.map((t:any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
+              <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select value={data.tipoCobroId || ''} onChange={e => handleDataChange('tipoCobroId', e.target.value)} className="w-full h-8 border border-gray-300 rounded-md px-1 text-[10px] bg-white outline-none font-medium"><option value="">Seleccione...</option>{catalogos?.tiposCobro?.filter((t:any) => t.activo !== false && t.estado !== 'Inactivo').map((t:any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
               
-              {/* 🔥 SELECTOR ORIGINAL MANTENIDO EXACTAMENTE IGUAL 🔥 */}
               <div>
                 <Label className="text-[10px] font-black text-emerald-800 uppercase">Est. Entrega Venta</Label>
                 <select value={data.estadoClienteId || ''} onChange={e => handleDataChange('estadoClienteId', e.target.value)} className="w-full h-8 border border-emerald-400 bg-emerald-50 text-emerald-900 rounded-md px-1 text-[10px] font-bold outline-none">
                   <option value="">Seleccione...</option>
-                  {catalogos?.estadosCliente?.map((t:any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                  {catalogos?.estadosCliente?.filter((t:any) => t.activo !== false && t.estado !== 'Inactivo').map((t:any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                 </select>
               </div>
 
-              <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Contrato</Label><select value={data.estadoContratoId || ''} onChange={e => handleDataChange('estadoContratoId', e.target.value)} className="w-full h-8 border border-gray-300 rounded-md px-1 text-[10px] bg-white outline-none font-medium"><option value="">Seleccione...</option>{catalogos?.estadosContrato?.map((t:any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
+              <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Est. Contrato</Label><select value={data.estadoContratoId || ''} onChange={e => handleDataChange('estadoContratoId', e.target.value)} className="w-full h-8 border border-gray-300 rounded-md px-1 text-[10px] bg-white outline-none font-medium"><option value="">Seleccione...</option>{catalogos?.estadosContrato?.filter((t:any) => t.activo !== false && t.estado !== 'Inactivo').map((t:any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
             </div>
             
             <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Observación del Contrato</Label><Input type="text" value={data.observacion || ''} onChange={e => handleDataChange('observacion', e.target.value)} className="h-8 text-xs bg-white" placeholder="Opcional..." /></div>
           </div>
         )}
       </div>
-
-      {/* ========================================================================= */}
-      {/* 👕 VISTA DE PEDIDO TEXTIL (ROPA) */}
-      {/* ========================================================================= */}
       {mostrarPrendas && isPedidoTextil && (
         <div className="border border-blue-200 pt-3 bg-blue-50/40 p-4 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 mt-3">
           <h4 className="text-sm font-black text-blue-900 flex items-center gap-2 mb-3"><ShoppingCart size={16}/> Armar Pedido Textil</h4>
@@ -268,21 +280,18 @@ export default function ContratoVentaForm({
                 </div>
               )}
             </div>
-            
             <div className="col-span-2 md:col-span-1">
               <Label className="text-[10px] font-bold uppercase text-gray-600">2. Color *</Label>
               <select disabled={!draftPrenda.tipoRopa} className="w-full h-8 border border-gray-300 rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100 disabled:opacity-50 outline-none uppercase font-bold" value={draftPrenda.color} onChange={e => handleDraftChange('color', e.target.value)}>
                 <option value="">Color...</option>{coloresDisp.map((c: any) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-
             <div className="col-span-2 md:col-span-1">
               <Label className="text-[10px] font-bold uppercase text-gray-600">3. Género *</Label>
               <select disabled={!draftPrenda.color} className="w-full h-8 border border-gray-300 rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100 disabled:opacity-50 outline-none uppercase font-bold" value={draftPrenda.genero} onChange={e => handleDraftChange('genero', e.target.value)}>
                 <option value="">Género...</option>{generosDisp.map((g: any) => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
-
             <div className="col-span-2 md:col-span-1">
               <Label className="text-[10px] font-bold uppercase text-gray-600">4. Talla *</Label>
               <select disabled={!draftPrenda.genero} className="w-full h-8 border border-blue-400 rounded px-1 text-[11px] bg-blue-50 text-blue-900 mt-1 disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400 outline-none uppercase font-black" value={draftPrenda.talla} onChange={e => handleDraftChange('talla', e.target.value)}>
@@ -303,10 +312,6 @@ export default function ContratoVentaForm({
           </div>
         </div>
       )}
-
-      {/* ========================================================================= */}
-      {/* 💻 VISTA DE PEDIDO ELECTRO (TECNOLOGÍA) */}
-      {/* ========================================================================= */}
       {mostrarPrendas && isPedidoElectro && (
         <div className="border border-purple-200 pt-3 bg-purple-50/40 p-4 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 mt-3">
           <h4 className="text-sm font-black text-purple-900 flex items-center gap-2 mb-3"><Monitor size={16}/> Armar Pedido (Tecnología / Equipos)</h4>
@@ -357,7 +362,7 @@ export default function ContratoVentaForm({
         <div className="p-4 bg-emerald-50 border border-dashed border-emerald-300 rounded-lg text-center flex flex-col items-center justify-center mt-3 animate-in zoom-in-95">
           <CheckCircle2 size={32} className="text-emerald-500 mb-2"/>
           <p className="text-sm font-black text-emerald-800 uppercase">Mercadería Entregada Directamente</p>
-          <p className="text-xs text-emerald-600 mt-1">Este contrato se registrará en Financiero pero no enviará órdenes a Bodega ni Producción.</p>
+          <p className="text-xs text-emerald-600 mt-1">Ingresa a continuación las prendas que sacaste del inventario móvil.</p>
         </div>
       )}
 
@@ -367,28 +372,50 @@ export default function ContratoVentaForm({
       {mostrarPrendas && requierePedido && (
         <>
           {prendasArray.length > 0 ? (
-            <div className="bg-white rounded border border-gray-200 overflow-x-auto shadow-sm">
+            <div className="bg-white rounded border border-gray-200 overflow-x-auto shadow-sm mt-3">
               <table className="w-full text-left">
                 <thead className="bg-gray-50 border-b text-[10px] text-gray-500 uppercase">
-                  <tr><th className="p-2 font-bold">Ítem / Artículo</th><th className="p-2 font-bold text-center">Cant.</th><th className="p-2 font-bold">Detalles Adicionales</th><th className="p-2 font-bold text-center">Acción</th></tr>
+                  <tr>
+                    <th className="p-2 font-bold">Ítem / Artículo</th>
+                    <th className="p-2 font-bold text-center">Cant.</th>
+                    <th className="p-2 font-bold text-center w-24">Entregado Hoy</th> 
+                    <th className="p-2 font-bold">Detalles Adicionales</th>
+                    <th className="p-2 font-bold text-center">Acción</th>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {prendasArray.map((p: any, pIndex: number) => {
                     const isElectro = p.bordado === 'ELECTRO'; 
                     return (
-                      <tr key={pIndex} className="hover:bg-gray-50">
+                      <tr key={pIndex} className={p.entregadoHoy ? 'bg-emerald-50/50 hover:bg-emerald-50' : 'hover:bg-gray-50'}>
                         <td className="p-2 text-[10px]">
                           <div className={`font-bold leading-tight uppercase ${isElectro ? 'text-purple-900' : 'text-blue-900'}`}>{p.tipoRopa} - {p.color}</div>
                           <div className="text-gray-500 uppercase">{isElectro ? `Garantía: ${p.genero}` : `${p.genero} • Talla: ${p.talla}`}</div>
                           <div className="text-[9px] text-gray-400 font-mono mt-0.5">{isElectro ? 'CÓD' : 'SKU'}: {p.skuCodigo || 'S/N'}</div>
                         </td>
                         <td className="p-2 text-center align-middle">
-                          <Input type="number" min="1" className="h-6 w-12 text-center text-xs font-bold mx-auto border-gray-300" value={p.cantidad} onChange={(e) => {
+                          <Input type="number" min="1" className="h-6 w-12 text-center text-xs font-bold mx-auto border-gray-300 bg-white" value={p.cantidad} onChange={(e) => {
                             const newLista = [...prendasArray];
                             newLista[pIndex].cantidad = parseInt(e.target.value) || 1;
                             onChange({ ...data, prendas: newLista, detalles: newLista });
                           }} />
                         </td>
+                        
+                        <td className="p-2 text-center align-middle">
+                          <div className="flex justify-center items-center">
+                            <input 
+                              type="checkbox"
+                              checked={p.entregadoHoy || false}
+                              onChange={(e) => {
+                                const newLista = [...prendasArray];
+                                newLista[pIndex].entregadoHoy = e.target.checked;
+                                onChange({ ...data, prendas: newLista, detalles: newLista });
+                              }}
+                              className="h-4 w-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
+                            />
+                          </div>
+                        </td>
+
                         <td className="p-2 text-[9px] text-gray-600">
                           {p.observacion && <div><span className="font-bold">{isElectro ? 'Desc:' : 'Obs:'}</span> {p.observacion}</div>}
                           {!isElectro && p.bordado && <div><span className="font-bold">Bordado:</span> {p.bordado}</div>}
@@ -402,13 +429,13 @@ export default function ContratoVentaForm({
                   <tr className="bg-gray-100 border-t-2 border-gray-200">
                     <td className="p-2 text-[10px] font-black text-right uppercase text-gray-800">Total Unidades:</td>
                     <td className="p-2 text-center font-black text-gray-900 text-sm">{prendasArray.reduce((sum: number, p: any) => sum + p.cantidad, 0)}</td>
-                    <td colSpan={2}></td>
+                    <td colSpan={3}></td>
                   </tr>
                 </tbody>
               </table>
             </div>
           ) : (
-            <div className="text-center py-4 bg-white rounded border border-dashed border-gray-300 text-gray-400 text-xs font-bold">
+            <div className="text-center py-4 bg-white rounded border border-dashed border-gray-300 text-gray-400 text-xs font-bold mt-3">
               Carrito vacío. Agrega los artículos arriba.
             </div>
           )}
