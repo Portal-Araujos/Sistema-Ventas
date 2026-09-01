@@ -14,10 +14,10 @@ interface ContratoVentaFormProps {
   isNuevo?: boolean;
   mostrarAdmin?: boolean;
   onToggleAdmin?: () => void;
+  bloquearEstadoEntrega?: boolean;
 }
-
 export default function ContratoVentaForm({ 
-  data, onChange, catalogos, mostrarPrendas = true, isNuevo, mostrarAdmin, onToggleAdmin 
+  data, onChange, catalogos, mostrarPrendas = true, isNuevo, mostrarAdmin, onToggleAdmin , bloquearEstadoEntrega = false
 }: ContratoVentaFormProps) {
   
   const [toast, setToast] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
@@ -47,8 +47,6 @@ export default function ContratoVentaForm({
 
     onChange(newData);
   };
-
-  // 🔥 VALIDACIÓN DINÁMICA ESTRICTA 🔥
   const estadoSeleccionado = catalogos?.estadosCliente?.find((e: any) => e.id.toString() === data.estadoClienteId?.toString());
   const estadoNombre = estadoSeleccionado?.nombre?.toLowerCase() || '';
   const hasEstadoSeleccionado = estadoNombre.trim() !== '';
@@ -240,8 +238,13 @@ export default function ContratoVentaForm({
               <div><Label className="text-[10px] font-bold text-gray-700 uppercase">Tipo Cobro *</Label><select value={data.tipoCobroId || ''} onChange={e => handleDataChange('tipoCobroId', e.target.value)} className="w-full h-8 border border-gray-300 rounded-md px-1 text-[10px] bg-white outline-none font-medium"><option value="">Seleccione...</option>{catalogos?.tiposCobro?.filter((t:any) => t.activo !== false && t.estado !== 'Inactivo').map((t:any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
               
               <div>
-                <Label className="text-[10px] font-black text-emerald-800 uppercase">Est. Entrega Venta</Label>
-                <select value={data.estadoClienteId || ''} onChange={e => handleDataChange('estadoClienteId', e.target.value)} className="w-full h-8 border border-emerald-400 bg-emerald-50 text-emerald-900 rounded-md px-1 text-[10px] font-bold outline-none">
+                <Label className={`text-[10px] font-black uppercase ${bloquearEstadoEntrega ? 'text-gray-400' : 'text-emerald-800'}`}>Est. Entrega Venta</Label>
+                <select 
+                  disabled={bloquearEstadoEntrega}
+                  value={data.estadoClienteId || ''} 
+                  onChange={e => handleDataChange('estadoClienteId', e.target.value)} 
+                  className={`w-full h-8 border rounded-md px-1 text-[10px] font-bold outline-none ${bloquearEstadoEntrega ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : 'border-emerald-400 bg-emerald-50 text-emerald-900'}`}
+                >
                   <option value="">Seleccione...</option>
                   {catalogos?.estadosCliente?.filter((t:any) => t.activo !== false && t.estado !== 'Inactivo').map((t:any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                 </select>
@@ -354,10 +357,6 @@ export default function ContratoVentaForm({
           </div>
         </div>
       )}
-
-      {/* ========================================================================= */}
-      {/* ✅ VISTA DE ENTREGADO DIRECTO */}
-      {/* ========================================================================= */}
       {mostrarPrendas && isEntregado && (
         <div className="p-4 bg-emerald-50 border border-dashed border-emerald-300 rounded-lg text-center flex flex-col items-center justify-center mt-3 animate-in zoom-in-95">
           <CheckCircle2 size={32} className="text-emerald-500 mb-2"/>
@@ -365,10 +364,6 @@ export default function ContratoVentaForm({
           <p className="text-xs text-emerald-600 mt-1">Ingresa a continuación las prendas que sacaste del inventario móvil.</p>
         </div>
       )}
-
-      {/* ========================================================================= */}
-      {/* 🛒 TABLA DEL CARRITO COMPARTIDO (TEXTIL Y ELECTRO) */}
-      {/* ========================================================================= */}
       {mostrarPrendas && requierePedido && (
         <>
           {prendasArray.length > 0 ? (

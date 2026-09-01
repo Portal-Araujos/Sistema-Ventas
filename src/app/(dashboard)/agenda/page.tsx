@@ -303,14 +303,14 @@ export default function AgendaPage() {
                           <MapPin size={12} className="text-primary shrink-0" /> {item.canton} <br/> {item.parroquia}
                         </div>
                       </TableCell>
-                      
-                      {/* 🔥 CELDA DINÁMICA E INTELIGENTE 🔥 */}
                       <TableCell>
                         {tabActiva === 'ruta' && (
                           <>
                             <p className="text-[10px] font-black text-gray-500 uppercase">Visita Programada / Rango Activo</p>
-                            <p className="text-xs font-bold text-primary flex items-center gap-1"><Clock size={12}/> Programada: {item.fechaProgramada}</p>
-                            {item.fechaProximoContacto && item.fechaProximoContacto !== item.fechaProgramada && (
+                            <p className="text-xs font-bold text-primary flex items-center gap-1">
+                              <Clock size={12}/> Programada: {item.fechaProgramada} {item.horaProgramada ? `a las ${item.horaProgramada}` : ''}
+                            </p>
+                            {item.fechaProximoContacto && item.fechaProximoContacto !== item.fechaProgramada && item.estadoComercial !== 'Seguimiento' && (
                               <p className="text-[10px] text-amber-600 font-bold mt-0.5">⏳ Fecha Límite Rango: {item.fechaProximoContacto}</p>
                             )}
                           </>
@@ -334,7 +334,7 @@ export default function AgendaPage() {
                             <p className="text-[10px] font-black text-gray-500 uppercase">Próxima Visita Futura</p>
                             <p className="text-xs text-gray-800 line-clamp-2">{item.resumenAcuerdos || 'Acuerdo de recontacto futuro'}</p>
                             <p className="text-[11px] text-blue-700 font-black flex items-center gap-1 mt-1">
-                              <Calendar size={12}/> Fecha Programada / Próx: {item.fechaProximoContacto || item.fechaProgramada}
+                              <Calendar size={12}/> Programada: {item.fechaProgramada} {item.horaProgramada ? `a las ${item.horaProgramada}` : ''}
                             </p>
                           </>
                         )}
@@ -343,7 +343,7 @@ export default function AgendaPage() {
                             <p className="text-[10px] font-black text-red-600 uppercase">⚠️ Atención Urgente</p>
                             <p className="text-xs text-gray-800">Debiste contactar a esta escuela y no se registró la visita.</p>
                             <p className="text-[11px] text-red-700 font-black flex items-center gap-1 mt-1">
-                              <AlertTriangle size={12}/> Vencida desde: {item.fechaProximoContacto || item.fechaProgramada}
+                              <AlertTriangle size={12}/> Vencida desde: {item.fechaProgramada} {item.horaProgramada ? `a las ${item.horaProgramada}` : ''}
                             </p>
                           </>
                         )}

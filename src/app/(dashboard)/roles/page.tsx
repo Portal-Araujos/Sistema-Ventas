@@ -44,6 +44,13 @@ const MODULOS_PERMISOS = [
 
     ]
   },
+    { 
+    modulo: 'Mesa de Ayuda (Tickets)', 
+    permisos: [
+      { id: 'tickets:ver', label: 'Ver los ticket creados' },
+
+    ]
+  },
   { 
     modulo: 'Configuraciones', 
     permisos: [

@@ -19,19 +19,22 @@ export async function GET(request: Request) {
     const esAdmin = userRol === 'super_admin' || userRol === 'administrador';
     const targetUserId = (esAdmin && vendedorId) ? vendedorId : (!esAdmin ? userIdSession : null);
     
-    // Fechas en hora Ecuador
     const hoy = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
     hoy.setHours(0,0,0,0);
     const start = fechaDesde ? new Date(`${fechaDesde}T00:00:00-05:00`) : hoy;
     const end = fechaHasta ? new Date(`${fechaHasta}T23:59:59.999-05:00`) : new Date(hoy.getTime() + 24 * 60 * 60 * 1000 - 1);
+    
     const baseWhereVisita: any = {};
     if (targetUserId) baseWhereVisita.usuarioId = targetUserId;
 
     const estadosPendientes = ['Pendiente', 'No Visitada', 'No visitada'];
+    
+    // Obtenemos TODAS las realizadas para validar si hay promesas rotas
     const todasRealizadas = await prisma.visitaAgenda.findMany({
       where: { ...baseWhereVisita, estadoGestion: { notIn: estadosPendientes } },
       select: { institucionId: true, createdAt: true }
     });
+    
     const lastVisitMap = new Map<string, Date>();
     todasRealizadas.forEach(v => {
        const existing = lastVisitMap.get(v.institucionId);
@@ -39,24 +42,32 @@ export async function GET(request: Request) {
            lastVisitMap.set(v.institucionId, v.createdAt);
        }
     });
+
+    // 🔥 NUEVA LÓGICA DE VALIDACIÓN 🔥
     const isNotFulfilled = (v: any) => {
         const lastVisit = lastVisitMap.get(v.institucionId);
         if (!lastVisit) return true;
+        // Si esta visita ES la última realizada, su promesa futura de contacto sigue viva
+        if (v.createdAt.getTime() >= lastVisit.getTime()) return true;
+        
+        // Si es una visita vieja, verificamos si su fecha prometida aún es válida
         const fechaTarget = v.fechaProximoContacto ? new Date(v.fechaProximoContacto) : new Date(v.fechaProgramada);
-        return fechaTarget > new Date(lastVisit);
+        return fechaTarget > lastVisit;
     };
+
+    // 🔥 RUTA RAW (Con nueva inteligencia y ORDEN POR HORA) 🔥
     const rutaRaw = await prisma.visitaAgenda.findMany({
       where: { 
         ...baseWhereVisita, 
-        estadoGestion: { in: estadosPendientes }, 
         OR: [
-          { fechaProgramada: { gte: start, lte: end } },
-          { AND: [{ fechaProgramada: { lte: end } }, { fechaProximoContacto: { gte: hoy } }] }
+          { estadoGestion: { in: estadosPendientes }, fechaProgramada: { gte: start, lte: end } },
+          { estadoGestion: { notIn: estadosPendientes }, fechaProximoContacto: { gte: start, lte: end } }
         ]
       },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
-      orderBy: { fechaProgramada: 'asc' }
+      orderBy: [{ fechaProgramada: 'asc' }, { horaProgramada: 'asc' }]
     });
+
     const visitadas = await prisma.visitaAgenda.findMany({
       where: { 
         ...baseWhereVisita, 
@@ -66,55 +77,62 @@ export async function GET(request: Request) {
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
       orderBy: { createdAt: 'desc' }
     });
+
+    // 🔥 PRÓXIMAS RAW 🔥
     const proximasRaw = await prisma.visitaAgenda.findMany({
       where: { 
         ...baseWhereVisita, 
-        estadoGestion: { in: estadosPendientes },
         OR: [
-          { fechaProgramada: { gt: end } },
-          { fechaProximoContacto: { gt: end } }
+          { estadoGestion: { in: estadosPendientes }, fechaProgramada: { gt: end } },
+          { estadoGestion: { notIn: estadosPendientes }, fechaProximoContacto: { gt: end } }
         ]
       },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
-      orderBy: { fechaProgramada: 'asc' }
+      orderBy: [{ fechaProgramada: 'asc' }, { horaProgramada: 'asc' }]
     });
+
+    // 🔥 VENCIDAS RAW 🔥
     const vencidasRaw = await prisma.visitaAgenda.findMany({
       where: { 
         ...baseWhereVisita, 
-        estadoGestion: { in: estadosPendientes },
         OR: [
-          { AND: [{ fechaProximoContacto: null }, { fechaProgramada: { lt: hoy } }] },
-          { fechaProximoContacto: { lt: hoy } }
+          { estadoGestion: { in: estadosPendientes }, fechaProgramada: { lt: hoy } },
+          { estadoGestion: { notIn: estadosPendientes }, fechaProximoContacto: { lt: hoy } }
         ]
       },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
-      orderBy: { fechaProgramada: 'desc' }
+      orderBy: [{ fechaProgramada: 'desc' }, { horaProgramada: 'desc' }]
     });
+
     const ruta = rutaRaw.filter(isNotFulfilled);
+    
     const proximasMap = new Map();
     proximasRaw.filter(isNotFulfilled).forEach(v => { if(!proximasMap.has(v.institucionId)) proximasMap.set(v.institucionId, v); });
     const proximas = Array.from(proximasMap.values());
+    
     const vencidasMap = new Map();
     vencidasRaw.filter(isNotFulfilled).forEach(v => { if(!vencidasMap.has(v.institucionId)) vencidasMap.set(v.institucionId, v); });
     const vencidas = Array.from(vencidasMap.values());
+
     const sinAsignarEscuelas = await prisma.institution.findMany({
       where: { OR: [ { vendedorId: null }, { vendedorId: '' }, { visitas: { none: {} } } ] },
       include: { parroquia: { include: { canton: { include: { provincia: true } } } } },
       orderBy: { nombre: 'asc' }
     });
+
     const correcciones = await prisma.visitaAgenda.findMany({
       where: { ...baseWhereVisita, edicionFechaHabilitada: true },
       include: { institucion: { include: { parroquia: { include: { canton: { include: { provincia: true } } } } } } },
       orderBy: { createdAt: 'desc' }
     });
-    const instWhere = targetUserId 
-      ? { vendedorId: targetUserId } 
-      : { vendedorId: { not: null }, NOT: { vendedorId: '' } };
+
+    const instWhere = targetUserId ? { vendedorId: targetUserId } : { vendedorId: { not: null }, NOT: { vendedorId: '' } };
     const totalAsignadas = await prisma.institution.count({ where: instWhere });
     const visitadasCount = await prisma.institution.count({
       where: { ...instWhere, visitas: { some: { estadoGestion: { notIn: estadosPendientes } } } }
     });
     const porcentaje = totalAsignadas === 0 ? 0 : Math.round((visitadasCount / totalAsignadas) * 100);
+    
     const formatearFechaExacta = (fechaObj: any) => {
       if (!fechaObj) return null;
       const d = new Date(fechaObj);
@@ -123,17 +141,32 @@ export async function GET(request: Request) {
       }
       return d.toLocaleDateString("es-EC", { timeZone: "America/Guayaquil" });
     };
-    const mapVisita = (v: any) => ({
-      id: v.id, institucionId: v.institucionId, nombreInstitucion: v.institucion?.nombre || 'Desconocida',
-      provinciaId: v.institucion?.parroquia?.canton?.provincia?.id, cantonId: v.institucion?.parroquia?.canton?.id,
-      canton: v.institucion?.parroquia?.canton?.nombre, parroquia: v.institucion?.parroquia?.nombre,
-      estadoComercial: v.estadoGestion, 
-      fechaProgramada: formatearFechaExacta(v.fechaProgramada),
-      fechaVisitaReal: v.createdAt, 
-      fechaProximoContacto: formatearFechaExacta(v.fechaProximoContacto),
-      resumenAcuerdos: v.resumenAcuerdos || 'Sin registros', tipoGestion: v.tipoGestion,
-      edicionFechaHabilitada: v.edicionFechaHabilitada
-    });
+
+    // 🔥 TRADUCTOR DE ESTADOS PARA EL FRONTEND 🔥
+    const mapVisita = (v: any, forceRealState = false) => {
+      let estadoVirtual = v.estadoGestion;
+      let dateToShow = formatearFechaExacta(v.fechaProgramada);
+
+      // Si es un Seguimiento Futuro (Ya la visitó, pero prometió volver)
+      if (!forceRealState && !estadosPendientes.includes(v.estadoGestion) && v.fechaProximoContacto) {
+        estadoVirtual = 'Seguimiento';
+        dateToShow = formatearFechaExacta(v.fechaProximoContacto);
+      }
+
+      return {
+        id: v.id, institucionId: v.institucionId, nombreInstitucion: v.institucion?.nombre || 'Desconocida',
+        provinciaId: v.institucion?.parroquia?.canton?.provincia?.id, cantonId: v.institucion?.parroquia?.canton?.id,
+        canton: v.institucion?.parroquia?.canton?.nombre, parroquia: v.institucion?.parroquia?.nombre,
+        estadoComercial: estadoVirtual, 
+        fechaProgramada: dateToShow,
+        horaProgramada: v.horaProgramada || '', // <-- Aseguramos la hora
+        fechaVisitaReal: v.createdAt, 
+        fechaProximoContacto: formatearFechaExacta(v.fechaProximoContacto),
+        resumenAcuerdos: v.resumenAcuerdos || 'Sin registros', tipoGestion: v.tipoGestion,
+        edicionFechaHabilitada: v.edicionFechaHabilitada
+      };
+    };
+
     const mapSinAsignar = (inst: any) => ({
       id: inst.id, institucionId: inst.id, nombreInstitucion: inst.nombre,
       provinciaId: inst.parroquia?.canton?.provincia?.id, cantonId: inst.parroquia?.canton?.id,
@@ -143,10 +176,14 @@ export async function GET(request: Request) {
       resumenAcuerdos: 'Escuela libre / Sin vendedor ni visitas previas', tipoGestion: 'Prospección',
       edicionFechaHabilitada: false
     });
+
     return NextResponse.json({
-      ruta: ruta.map(mapVisita), visitadas: visitadas.map(mapVisita), 
-      proximas: proximas.map(mapVisita), vencidas: vencidas.map(mapVisita), 
-      sinAsignar: sinAsignarEscuelas.map(mapSinAsignar), correcciones: correcciones.map(mapVisita),
+      ruta: ruta.map(v => mapVisita(v, false)), 
+      visitadas: visitadas.map(v => mapVisita(v, true)), 
+      proximas: proximas.map(v => mapVisita(v, false)), 
+      vencidas: vencidas.map(v => mapVisita(v, false)), 
+      sinAsignar: sinAsignarEscuelas.map(mapSinAsignar), 
+      correcciones: correcciones.map(v => mapVisita(v, true)),
       cobertura: { asignadas: totalAsignadas, visitadas: visitadasCount, porcentaje }
     });
   } catch (error) {

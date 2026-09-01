@@ -90,10 +90,11 @@ export async function proxy(request: NextRequest) {
         '/operaciones': 'operaciones:ver',
         '/produccion': 'produccion:ver',
         '/empaque': 'empaque:ver',
-        '/hiatorial-despachos': 'historial-despachos:ver',
+        '/historial-despachos': 'historial-despachos:ver',
         '/indicadores': 'indicadores:ver',
         '/configuracion': 'configuracion:ver',
         '/usuarios': 'usuarios:gestionar',
+        '/tickets': 'tickets:ver',
         '/roles': 'super_admin_only'
       };
 

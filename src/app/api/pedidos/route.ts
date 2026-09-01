@@ -203,9 +203,8 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, cuotaMensual, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId, tipoClienteId,tieneCedula } = body;
+    const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, cuotaMensual, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId, tipoClienteId, tieneCedula, observacion } = body;
     
-    // 🔥 INYECCIÓN 3: MODO RECEPCIÓN PARA VENDEDOR 🔥
     if (modo === 'recepcion_vendedor') {
       const { prendasIds } = body;
       if (!prendasIds || prendasIds.length === 0) return NextResponse.json({ error: 'No se seleccionaron prendas' }, { status: 400 });
@@ -221,7 +220,6 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: true });
     }
 
-    // 🔥 INYECCIÓN 4: MODO DESBLOQUEO PARA SUPER ADMIN 🔥
     if (modo === 'desbloquear_recepcion') {
       const { prendaId } = body;
       if (!userRol.includes('admin')) return NextResponse.json({ error: 'Solo un administrador puede desbloquear esto.' }, { status: 403 });
@@ -264,6 +262,9 @@ export async function PUT(request: Request) {
         if (nombreCliente !== undefined) updateData.nombreCliente = nombreCliente;
         if (fechaRequerida !== undefined) updateData.fechaRequerida = fechaParseada;
         
+        // 🔥 AHORA SÍ GUARDAMOS LA OBSERVACIÓN GENERAL DEL CONTRATO 🔥
+        if (observacion !== undefined) updateData.observacion = observacion;
+        
         updateData.usuarioId = vendedorFinalId; 
 
         if (userRol === 'super_admin' && body.operarioAsignadoId !== undefined) {
@@ -284,13 +285,15 @@ export async function PUT(request: Request) {
         }
         await prisma.pedido.update({ where: { id }, data: updateData });
       }
+      
+      // 🔥 ESPEJO MAESTRO: BUSCAMOS LA VENTA CON EL CONTRATO VIEJO 🔥
       if (pedidoAntiguo) {
         const ventaExistente = await prisma.venta.findFirst({
           where: { institucionId: idEscuelaReal, numContrato: oldNumContrato }
         });
 
         const ventaData: any = {};
-        if (numContrato !== undefined) ventaData.numContrato = numContratoLimpio;
+        if (numContrato !== undefined) ventaData.numContrato = numContratoLimpio; // Le inyectamos el nuevo
         if (valorContrato !== undefined) ventaData.valorContrato = parseMoney(valorContrato);
         if (abono !== undefined) ventaData.abono = parseMoney(abono);
         if (cuotaMensual !== undefined) ventaData.cuotaMensual = parseMoney(cuotaMensual);

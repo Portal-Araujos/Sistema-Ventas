@@ -3,13 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  Home, Building2, CalendarDays, MapPin, BarChart2, User, Settings, 
-  ChevronLeft, ChevronRight, LogOut, DollarSign, Shield, Menu, X, 
+import { Home, Building2, CalendarDays, MapPin, BarChart2, User, Settings, 
+  ChevronLeft, ChevronRight, LogOut, DollarSign, Shield, Menu, X, Ticket, BookCheck,
   Factory, Barcode, Briefcase, Package, Scissors, Truck, ChevronDown, ChevronUp, FileUser
 } from 'lucide-react';
-
-// 🔥 ESTRUCTURA DEL MENÚ (Agrupado por Departamentos) 🔥
 const menuStructure = [
   { 
     label: 'Inicio', 
@@ -44,6 +41,14 @@ const menuStructure = [
     ]
   },
   {
+    label: 'TICKETS',
+    icon: Ticket,
+    isGroup: true,
+    items: [
+      { icon: BookCheck, label: 'Mesa Ayuda', href: '/tickets', permiso: 'tickets:ver' },
+    ]
+  },
+  {
     label: 'CONFIGURACIONES',
     icon: Settings,
     isGroup: true,
@@ -65,8 +70,9 @@ export function Sidebar() {
   // Estado para controlar qué acordeones están abiertos (Por defecto Ventas y Producción abiertos)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'VISITAS Y VENTAS': true,
-    'PRODUCCIÓN': true,
-    'CONFIGURACIONES': false
+    'PRODUCCIÓN': false,
+    'CONFIGURACIONES': false,
+    'TICKETS': false
   });
 
   useEffect(() => {

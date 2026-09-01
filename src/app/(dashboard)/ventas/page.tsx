@@ -12,6 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
+// 🔥 IMPORTAMOS TU FORMULARIO UNIVERSAL 🔥
+import ContratoVentaForm from '@/components/shared/ContratoVentaForm';
+
 const MESES_LISTA = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 export default function VentasPage() {
@@ -22,16 +25,13 @@ export default function VentasPage() {
   const [userRol, setUserRol] = useState<string>('vendedor');
   const [userPermisos, setUserPermisos] = useState<string[]>([]); 
 
-  // FILTROS DINÁMICOS Y BUSCADOR
   const [searchTerm, setSearchTerm] = useState('');
   const [filtros, setFiltros] = useState({ vendedorNombre: '', estadoContratoId: '', estadoClienteId: '', mesCobro: '' });
   const [filtroTarjeta, setFiltroTarjeta] = useState<'Todas' | 'Pendientes' | 'Novedades' | 'Aprobadas'>('Todas');
 
-  // PAGINACIÓN
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  // Notificación Flotante
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => {
     setToastMsg({ tipo, texto });
@@ -42,26 +42,17 @@ export default function VentasPage() {
   const [saving, setSaving] = useState(false);
   const [institucionesDisponibles, setInstitucionesDisponibles] = useState<any[]>([]);
 
-  // 🔥 NUEVO ESTADO: CATÁLOGO DE DEPARTAMENTOS Y TICKET MODAL 🔥
   const [departamentos, setDepartamentos] = useState<any[]>([]);
   const [ticketModal, setTicketModal] = useState({
-    open: false,
-    tipo: '',
-    institucionId: '',
-    asignadoAId: '',
-    prioridad: 'Media',
-    asunto: '',
-    mensajeInicial: '',
-    institucionNombre: '',
-    asignadoNombre: ''
+    open: false, tipo: '', institucionId: '', asignadoAId: '', prioridad: 'Media', asunto: '', mensajeInicial: '', institucionNombre: '', asignadoNombre: ''
   });
 
   const hoyStr = new Date().toISOString().split('T')[0];
   const initialFormVenta = {
-    id: '', cantonId: '', institucionId: '', fechaVenta: hoyStr, numContrato: '',
-    valorContrato: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '',
-    estadoClienteId: '', estadoContratoId: '', tipoCobroId: '',
-    observacionesFact: '', verificacionFact: ''
+    id: '', cantonId: '', institucionId: '', institucionNombre: '', fechaVenta: hoyStr, numContrato: '', nombreCliente: '',
+    valorContrato: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', abono: '',
+    estadoClienteId: '', estadoContratoId: '', tipoCobroId: '', tipoClienteId: '', tieneCedula: false,
+    observacionesFact: '', verificacionFact: '',  observacion: ''
   };
   const [formVenta, setFormVenta] = useState(initialFormVenta);
 
@@ -76,12 +67,8 @@ export default function VentasPage() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      // 🔥 AHORA CARGAMOS TAMBIÉN LOS DEPARTAMENTOS PARA EL TICKET 🔥
       const [resVentas, resCat, resInst, resDeptos] = await Promise.all([
-        fetch('/api/ventas'), 
-        fetch('/api/catalogos'),
-        fetch('/api/instituciones'),
-        fetch('/api/departamentos')
+        fetch('/api/ventas'), fetch('/api/catalogos'), fetch('/api/instituciones'), fetch('/api/departamentos')
       ]);
 
       const dataVentas = await resVentas.json();
@@ -104,21 +91,17 @@ export default function VentasPage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
       const wb = XLSX.read(bstr, { type: 'binary' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const data = XLSX.utils.sheet_to_json(ws);
-
       const encontrados: any[] = [];
       const noEncontrados: any[] = [];
-
       data.forEach((row: any) => {
         const contratoExcel = String(row.Contrato || row.contrato || '').trim();
         const ventaDB = ventas.find(v => v.numContrato === contratoExcel);
-
         if (ventaDB) {
           const verificacion = String(row.Verificacion || row.verificacion || '').trim();
           const observaciones = row.Observaciones || row.observaciones || '';
@@ -128,7 +111,6 @@ export default function VentasPage() {
           noEncontrados.push({ contratoExcel });
         }
       });
-
       setMasivoModal({ open: true, encontrados, noEncontrados });
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
@@ -157,17 +139,23 @@ export default function VentasPage() {
   const handleOpenEdit = (v: any) => {
     setFormVenta({
       id: v.id,
-      cantonId: v.cantonId.toString(),
-      institucionId: v.institucionId,
+      cantonId: v.cantonId?.toString() || '', 
+      institucionId: v.institucionId?.toString() || '',
+      institucionNombre: v.institucionNombre || '', // 🔥 FORZAMOS CARGA DE LA ESCUELA 🔥
       fechaVenta: hoyStr,
-      numContrato: v.numContrato,
-      valorContrato: v.valorContrato.toString(),
-      meses: v.meses.toString(),
+      numContrato: v.numContrato || '',
+      nombreCliente: v.nombreCliente || '',
+      valorContrato: v.valorContrato?.toString() || '',
+      abono: v.abono?.toString() || '',
+      meses: v.meses?.toString() || '12',
       mesCobro: v.mesCobro,
-      cuotaMensual: v.cuotaMensual.toString(),
+      cuotaMensual: v.cuotaMensual?.toString() || '',
       estadoClienteId: v.estadoClienteId?.toString() || '',
       estadoContratoId: v.estadoContratoId?.toString() || '',
       tipoCobroId: v.tipoCobroId?.toString() || '',
+      tipoClienteId: v.tipoClienteId?.toString() || '',
+      tieneCedula: !!v.tieneCedula,
+      observacion: v.observacion || '', // 🔥 YA CARGA LA OBSERVACIÓN GENERAL 🔥
       observacionesFact: v.observacionesFact === 'Sin observaciones' ? '' : (v.observacionesFact || ''),
       verificacionFact: v.verificacionFact === 'Sin validar' ? '' : (v.verificacionFact || '')
     });
@@ -176,6 +164,9 @@ export default function VentasPage() {
 
   const handleCrearVenta = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formVenta.institucionId) return showToast('error', 'Seleccione la escuela.');
+    if (!formVenta.numContrato) return showToast('error', 'Ingrese el N° de contrato.');
+    
     setSaving(true);
     try {
       const method = formVenta.id ? 'PUT' : 'POST';
@@ -203,18 +194,11 @@ export default function VentasPage() {
     } catch (e) { showToast('error', "Hubo un error al guardar la auditoría."); }
   };
 
-  // 🔥 LÓGICA DE APERTURA DE TICKET AUTOMATIZADO 🔥
   const handleOpenTicket = (v: any) => {
     setTicketModal({
-      open: true,
-      tipo: departamentos.length > 0 ? departamentos[0].nombre : '',
-      institucionId: v.institucionId,
-      asignadoAId: v.vendedorId, // ID auto capturado
-      prioridad: 'Alta',
-      asunto: `Revisión de Contrato N° ${v.numContrato}`, // Asunto auto-generado
-      mensajeInicial: '',
-      institucionNombre: v.institucionNombre, // Para la vista
-      asignadoNombre: v.vendedorNombre // Para la vista
+      open: true, tipo: departamentos.length > 0 ? departamentos[0].nombre : '', institucionId: v.institucionId,
+      asignadoAId: v.vendedorId, prioridad: 'Alta', asunto: `Revisión de Contrato N° ${v.numContrato}`,
+      mensajeInicial: '', institucionNombre: v.institucionNombre, asignadoNombre: v.vendedorNombre 
     });
   };
 
@@ -222,42 +206,17 @@ export default function VentasPage() {
     e.preventDefault();
     if (!ticketModal.tipo) return showToast('alerta', 'Selecciona el Área Responsable');
     if (!ticketModal.mensajeInicial) return showToast('alerta', 'Escribe las instrucciones de la novedad');
-    
     setSaving(true);
     try {
-      const payload = {
-        accion: 'crearTicket',
-        tipo: ticketModal.tipo,
-        institucionId: ticketModal.institucionId,
-        asignadoAId: ticketModal.asignadoAId,
-        prioridad: ticketModal.prioridad,
-        asunto: ticketModal.asunto,
-        mensajeInicial: ticketModal.mensajeInicial
-      };
-
-      const res = await fetch('/api/tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
+      const payload = { accion: 'crearTicket', ...ticketModal };
+      const res = await fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (res.ok) {
         setTicketModal(prev => ({ ...prev, open: false }));
         showToast('exito', '¡Ticket generado y asignado al vendedor!');
       } else {
         showToast('error', 'Error al crear el ticket');
       }
-    } catch (e) {
-      showToast('error', 'Error de conexión');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleValorOMesesChange = (valor: string, meses: string) => {
-    const valNum = parseFloat(valor) || 0;
-    const mesNum = parseInt(meses) || 1;
-    setFormVenta(prev => ({ ...prev, valorContrato: valor, meses, cuotaMensual: mesNum > 0 ? (valNum / mesNum).toFixed(2) : '0' }));
+    } catch (e) { showToast('error', 'Error de conexión'); } finally { setSaving(false); }
   };
 
   const puedeValidar = userPermisos.includes('ventas:validar') || userRol === 'super_admin' || userRol === 'administrador';
@@ -289,21 +248,14 @@ export default function VentasPage() {
   
   const exportarExcel = () => {
     const dataToExport = ventasFiltradas.map(v => ({
-      'N° Contrato': v.numContrato,
-      'Institución / Escuela': v.institucionNombre,
-      'Vendedor': v.vendedorNombre,
-      'Fecha de Venta': v.fechaVenta,
-      'Monto Contrato ($)': v.valorContrato,
-      'Meses Plazo': v.meses,
-      'Cuota Mensual ($)': v.cuotaMensual,
-      'Mes de Cobro': v.mesCobro,
-      'Tipo de Cobro': v.tipoCobroNombre,
-      'Estado del Cliente': v.estadoClienteNombre,
-      'Estado del Contrato': v.estadoContratoNombre,
+      'N° Contrato': v.numContrato, 'Institución / Escuela': v.institucionNombre, 'Vendedor': v.vendedorNombre,
+      'Fecha de Venta': v.fechaVenta, 'Monto Contrato ($)': v.valorContrato, 'Meses Plazo': v.meses,
+      'Cuota Mensual ($)': v.cuotaMensual, 'Mes de Cobro': v.mesCobro, 'Tipo de Cobro': v.tipoCobroNombre,
+      'Estado del Cliente': v.estadoClienteNombre, 'Estado del Contrato': v.estadoContratoNombre,
       'Verificación Facturación': v.verificacionFact !== 'Sin validar' ? v.verificacionFact : 'Pendiente',
-      'Observaciones / Novedades': v.observacionesFact !== 'Sin observaciones' ? v.observacionesFact : ''
+      'Observaciones / Novedades': v.observacionesFact !== 'Sin observaciones' ? v.observacionesFact : '',
+      'Entregó Cédula': v.tieneCedula ? 'SÍ' : 'NO'
     }));
-
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Base_Ventas");
@@ -337,6 +289,7 @@ export default function VentasPage() {
             </Button>
           </div>
         </div>
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div onClick={() => setFiltroTarjeta('Todas')} className={`p-4 rounded-xl border cursor-pointer transition-all ${filtroTarjeta === 'Todas' ? 'bg-blue-600 text-white shadow-md' : 'bg-white hover:border-blue-300'}`}>
             <p className={`text-[10px] font-bold uppercase ${filtroTarjeta === 'Todas' ? 'text-blue-100' : 'text-gray-500'}`}>📘 Total Ventas</p>
@@ -355,17 +308,13 @@ export default function VentasPage() {
             <h3 className="text-2xl font-extrabold mt-1">{kpiAprobadas}</h3>
           </div>
         </div>
+
         <div className={`bg-white p-4 rounded-xl border border-gray-200 shadow-sm grid grid-cols-1 gap-3 ${esAdmin ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
           <div className="relative">
             <Label className="text-[11px] font-bold text-gray-500">Buscar Contrato</Label>
             <div className="relative mt-1">
               <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
-              <Input 
-                placeholder="Ej: 100234" 
-                value={searchTerm} 
-                onChange={e => setSearchTerm(e.target.value)} 
-                className="pl-8 h-9 text-xs focus-visible:ring-blue-500" 
-              />
+              <Input placeholder="Ej: 100234" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-8 h-9 text-xs focus-visible:ring-blue-500" />
             </div>
           </div>
           {esAdmin && (
@@ -399,8 +348,9 @@ export default function VentasPage() {
             </select>
           </div>
         </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto flex flex-col">
-          <Table className="w-full table-fixed min-w-900px">
+          <Table className="w-full table-fixed min-w-1000px">
             <TableHeader className="bg-gray-50/80">
               <TableRow>
                 <TableHead className="font-semibold text-gray-700 w-44">Contrato / Escuela</TableHead>
@@ -410,12 +360,13 @@ export default function VentasPage() {
                 <TableHead className="font-semibold text-gray-700 text-center w-32">Estados</TableHead>
                 <TableHead className="font-semibold text-gray-700 text-center w-28">Verificación</TableHead>
                 <TableHead className="font-semibold text-gray-700 w-48">Observaciones</TableHead>
+                <TableHead className="font-semibold text-gray-700 text-center w-24">Cédula</TableHead> 
                 <TableHead className="font-semibold text-gray-700 text-center w-32">Acción</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? <TableRow><TableCell colSpan={8} className="text-center py-8">Cargando...</TableCell></TableRow>
-              : ventasPaginadas.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8">No hay ventas que coincidan con este filtro.</TableCell></TableRow>
+              {loading ? <TableRow><TableCell colSpan={9} className="text-center py-8">Cargando...</TableCell></TableRow>
+              : ventasPaginadas.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8">No hay ventas que coincidan con este filtro.</TableCell></TableRow>
               : ventasPaginadas.map(v => (
                 <TableRow key={v.id} className="hover:bg-gray-50">
                   <TableCell className="w-44">
@@ -444,25 +395,26 @@ export default function VentasPage() {
                     </span>
                   </TableCell>
                   <TableCell className="w-48 max-w-192px align-middle">
-                    <div 
-                      className={`text-[11px] font-medium italic wrap-break-word line-clamp-2 max-w-192px overflow-hidden ${v.observacionesFact !== 'Sin observaciones' && v.observacionesFact.trim() !== '' ? 'text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200' : 'text-gray-400'}`} 
-                      title={v.observacionesFact}
-                    >
+                    <div className={`text-[11px] font-medium italic overflow-wrap: break-word line-clamp-2 max-w-192px overflow-hidden ${v.observacionesFact !== 'Sin observaciones' && v.observacionesFact.trim() !== '' ? 'text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200' : 'text-gray-400'}`} title={v.observacionesFact}>
                       {v.observacionesFact}
                     </div>
                   </TableCell>
+                  
+                  {/* 🔥 COLUMNA CÉDULA AÑADIDA 🔥 */}
+                  <TableCell className="text-center w-24 align-middle">
+                    <Badge variant="outline" className={v.tieneCedula ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}>
+                      {v.tieneCedula ? 'SÍ' : 'NO'}
+                    </Badge>
+                  </TableCell>
+
                   <TableCell className="text-center w-32">
                     <div className="flex justify-center gap-1">
-                      
-                      {/* 🔥 BOTÓN DE CREAR TICKET 🔥 */}
                       <Button variant="outline" size="sm" className="h-8 w-8 text-amber-600 border-amber-200 hover:bg-amber-50 p-0" onClick={() => handleOpenTicket(v)} title="Crear Ticket de Novedad">
                         <Ticket size={14} />
                       </Button>
-
                       <Button variant="ghost" size="sm" className="h-8 w-8 text-blue-600 hover:bg-blue-50 p-0" onClick={() => handleOpenEdit(v)} title="Editar Contrato">
                         <Pencil size={14} />
                       </Button>
-
                       {puedeValidar && (
                         <Button variant="outline" size="sm" className="h-8 text-xs text-primary border-primary/30 px-2" onClick={() => { setFactData({ observacionesFact: v.observacionesFact === 'Sin observaciones' ? '' : v.observacionesFact, verificacionFact: v.verificacionFact === 'Sin validar' ? '' : v.verificacionFact }); setFactModal({ open: true, venta: v }); }}>
                           <Edit3 size={14} className="mr-1" /> Auditar
@@ -490,146 +442,44 @@ export default function VentasPage() {
             </div>
           )}
         </div>
-
-        {/* 🔥 MODAL DE CREACIÓN DE TICKET DESDE VENTAS 🔥 */}
-        <Dialog open={ticketModal.open} onOpenChange={val => setTicketModal({ ...ticketModal, open: val })}>
-          <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
-                <Ticket className="text-amber-600" /> Generar Ticket de Novedad
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCrearTicket} className="space-y-4 mt-2">
-              
-              <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
-                <div>
-                  <Label className="text-[10px] font-bold text-gray-500 uppercase">Institución Involucrada</Label>
-                  <div className="text-xs font-bold text-gray-800">{ticketModal.institucionNombre}</div>
-                </div>
-                <div>
-                  <Label className="text-[10px] font-bold text-gray-500 uppercase">Vendedor Asignado Automáticamente</Label>
-                  <div className="text-xs font-bold text-primary">{ticketModal.asignadoNombre}</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs font-bold text-gray-700">Área Responsable *</Label>
-                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none" value={ticketModal.tipo} onChange={e => setTicketModal({ ...ticketModal, tipo: e.target.value })}>
-                    {departamentos.map(d => <option key={d.id} value={d.nombre}>{d.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs font-bold text-gray-700">Urgencia</Label>
-                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none" value={ticketModal.prioridad} onChange={e => setTicketModal({ ...ticketModal, prioridad: e.target.value })}>
-                    <option value="Baja">🟢 Baja</option>
-                    <option value="Media">🟡 Media</option>
-                    <option value="Alta">🟠 Alta</option>
-                    <option value="Urgente">🔴 Urgente</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-xs font-bold text-gray-700">Asunto del Ticket *</Label>
-                <Input required value={ticketModal.asunto} onChange={e => setTicketModal({ ...ticketModal, asunto: e.target.value })} className="mt-1 h-10 font-bold bg-gray-50" />
-              </div>
-
-              <div>
-                <Label className="text-xs font-bold text-gray-700">Instrucciones / Novedad *</Label>
-                <textarea required className="w-full h-24 border rounded-md p-2 text-xs bg-white mt-1 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 resize-none" placeholder="Ej: Falta copia de cédula, por favor subir el documento corregido..." value={ticketModal.mensajeInicial} onChange={e => setTicketModal({ ...ticketModal, mensajeInicial: e.target.value })} />
-              </div>
-
-              <DialogFooter className="pt-2 flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setTicketModal({ ...ticketModal, open: false })}>Cancelar</Button>
-                <Button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-600 text-white font-bold">
-                  {saving ? 'Enviando...' : 'Crear y Asignar Ticket'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-
         <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-          <DialogContent className="sm:max-w-xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
+          <DialogContent className="sm:max-w-3xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-gray-900 flex items-center gap-2">
                 <DollarSign className="text-emerald-600" /> {formVenta.id ? 'Editar Contrato de Venta' : 'Registrar Contrato de Venta'}
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCrearVenta} className="space-y-4 mt-2">
+              
               <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200">
                 <div>
                   <Label className="text-xs font-bold text-gray-700">1. Selecciona Cantón *</Label>
-                  <select required className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1" value={formVenta.cantonId} onChange={e => setFormVenta({ ...formVenta, cantonId: e.target.value, institucionId: '' })}>
+                  <select required disabled={!!formVenta.id} className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 disabled:bg-gray-100 disabled:text-gray-500" value={formVenta.cantonId} onChange={e => setFormVenta({ ...formVenta, cantonId: e.target.value, institucionId: '' })}>
                     <option value="">Seleccione Cantón...</option>
                     {catalogos?.provincias?.flatMap((p: any) => p.cantones)?.map((c: any) => (<option key={c.id} value={c.id}>{c.nombre}</option>))}
                   </select>
                 </div>
                 <div>
                   <Label className="text-xs font-bold text-gray-700">2. Escuela / Institución *</Label>
-                  <select required disabled={!formVenta.cantonId} className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 disabled:bg-gray-100" value={formVenta.institucionId} onChange={e => setFormVenta({ ...formVenta, institucionId: e.target.value })}>
+                  <select required disabled={!!formVenta.id || !formVenta.cantonId} className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 disabled:bg-gray-100 disabled:text-gray-500" value={formVenta.institucionId} onChange={e => setFormVenta({ ...formVenta, institucionId: e.target.value })}>
                     <option value="">Seleccione Escuela...</option>
                     {escuelasDelCanton.map((i: any) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
+                    
+                    {/* 🔥 FALLBACK MAESTRO: Si por alguna razón no encuentra la escuela en la lista, la dibuja a la fuerza para que no quede en blanco 🔥 */}
+                    {!!formVenta.id && !escuelasDelCanton.some(i => i.id == formVenta.institucionId) && (
+                      <option value={formVenta.institucionId}>{formVenta.institucionNombre || 'Escuela Actual'}</option>
+                    )}
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold">Fecha del Día *</Label>
-                  <Input type="date" disabled value={formVenta.fechaVenta} className="bg-gray-100 font-bold" />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Número de Contrato (Solo Números) *</Label>
-                  <Input required type="text" pattern="[0-9]+" placeholder="Ej: 100234" value={formVenta.numContrato} onChange={e => setFormVenta({ ...formVenta, numContrato: e.target.value.replace(/\D/g, '') })} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
-                <div>
-                  <Label className="text-xs font-semibold">Valor Contrato ($) *</Label>
-                  <Input required type="number" step="0.01" min="0" placeholder="1200.00" value={formVenta.valorContrato} onChange={e => handleValorOMesesChange(e.target.value, formVenta.meses)} />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Meses Plazo *</Label>
-                  <Input required type="number" min="1" value={formVenta.meses} onChange={e => handleValorOMesesChange(formVenta.valorContrato, e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Cuota Mensual ($)</Label>
-                  <Input type="number" step="0.01" value={formVenta.cuotaMensual} onChange={e => setFormVenta({ ...formVenta, cuotaMensual: e.target.value })} className="font-bold text-emerald-800" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold">Mes de Cobro *</Label>
-                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white" value={formVenta.mesCobro} onChange={e => setFormVenta({ ...formVenta, mesCobro: e.target.value })}>
-                    {MESES_LISTA.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Estado Cliente</Label>
-                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white" value={formVenta.estadoClienteId} onChange={e => setFormVenta({ ...formVenta, estadoClienteId: e.target.value })}>
-                    <option value="">Seleccione...</option>
-                    {catalogos?.estadosCliente?.map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold">Estado Contrato</Label>
-                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white" value={formVenta.estadoContratoId} onChange={e => setFormVenta({ ...formVenta, estadoContratoId: e.target.value })}>
-                    <option value="">Seleccione...</option>
-                    {catalogos?.estadosContrato?.map((e: any) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Tipo de Cobro *</Label>
-                <select required className="w-full h-10 border rounded-md px-2 text-xs bg-white" value={formVenta.tipoCobroId} onChange={e => setFormVenta({ ...formVenta, tipoCobroId: e.target.value })}>
-                  <option value="">Seleccione...</option>
-                  {catalogos?.tiposCobro?.map((t: any) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-                </select>
-              </div>
+              <ContratoVentaForm 
+                data={formVenta}
+                onChange={(newData) => setFormVenta({ ...formVenta, ...newData })}
+                catalogos={catalogos}
+                mostrarPrendas={false} 
+                isNuevo={!formVenta.id}
+                bloquearEstadoEntrega={!!formVenta.id} 
+              />
 
               <div className={`p-4 rounded-xl border ${formVenta.observacionesFact ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
                 <span className={`text-[11px] font-bold uppercase 'block' mb-2 flex items-center gap-1 ${formVenta.observacionesFact ? 'text-amber-800' : 'text-gray-600'}`}>
@@ -638,39 +488,24 @@ export default function VentasPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                    <div className="md:col-span-1">
                       <Label className="text-[10px] font-bold text-gray-700 uppercase">Verificación (Aprobación)</Label>
-                      <Input
-                         type="text"
-                         readOnly={!puedeValidar}
-                         className={`h-9 text-xs mt-1 font-mono ${!puedeValidar ? 'bg-gray-100/80 cursor-not-allowed text-gray-500' : 'bg-white focus-visible:ring-amber-500 border-amber-300'}`}
-                         value={formVenta.verificacionFact}
-                         onChange={e => setFormVenta({...formVenta, verificacionFact: e.target.value.replace(/\D/g, '')})}
-                         placeholder="Ej: 100234"
-                      />
+                      <Input type="text" readOnly={!puedeValidar} className={`h-9 text-xs mt-1 font-mono ${!puedeValidar ? 'bg-gray-100/80 cursor-not-allowed text-gray-500' : 'bg-white focus-visible:ring-amber-500 border-amber-300'}`} value={formVenta.verificacionFact} onChange={e => setFormVenta({...formVenta, verificacionFact: e.target.value.replace(/\D/g, '')})} placeholder="Ej: 100234" />
                    </div>
                    <div className="md:col-span-2">
                       <Label className="text-[10px] font-bold text-gray-700 uppercase">Observaciones / Novedades</Label>
-                      <textarea
-                         readOnly={!puedeValidar}
-                         className={`w-full border rounded-md p-2 text-xs mt-1 min-h-60px outline-none ${!puedeValidar ? 'bg-gray-100/80 cursor-not-allowed text-gray-700 font-medium' : 'bg-white focus:ring-2 focus:ring-amber-500 border-amber-300 shadow-sm'}`}
-                         value={formVenta.observacionesFact}
-                         onChange={e => setFormVenta({...formVenta, observacionesFact: e.target.value})}
-                         placeholder={puedeValidar ? "Escribe aquí si hay errores en el contrato..." : "Sin observaciones aún..."}
-                      />
+                      <textarea readOnly={!puedeValidar} className={`w-full border rounded-md p-2 text-xs mt-1 min-h-60px outline-none ${!puedeValidar ? 'bg-gray-100/80 cursor-not-allowed text-gray-700 font-medium' : 'bg-white focus:ring-2 focus:ring-amber-500 border-amber-300 shadow-sm'}`} value={formVenta.observacionesFact} onChange={e => setFormVenta({...formVenta, observacionesFact: e.target.value})} placeholder={puedeValidar ? "Escribe aquí si hay errores..." : "Sin observaciones aún..."} />
                    </div>
                 </div>
               </div>
 
               <DialogFooter className="pt-2 flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setOpenCreate(false)}>Cancelar</Button>
-                <Button type="submit" disabled={saving} className="bg-emerald-600 text-white font-bold">
+                <Button type="submit" disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
                   {saving ? 'Guardando...' : 'Guardar Venta'}
                 </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
-
-        {/* MODAL EXCEL MASIVO */}
         <Dialog open={masivoModal.open} onOpenChange={val => setMasivoModal({ ...masivoModal, open: val })}>
           <DialogContent className="sm:max-w-2xl bg-white p-6 rounded-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle className="text-lg font-bold text-gray-900">Resultado de Importación Excel</DialogTitle></DialogHeader>
@@ -681,7 +516,6 @@ export default function VentasPage() {
                   {masivoModal.encontrados.map((n, i) => <div key={i}>Contrato N° {n.contrato}</div>)}
                 </div>
               </div>
-              
               {masivoModal.noEncontrados.length > 0 && (
                 <div className="bg-red-50 p-4 rounded-xl border border-red-100">
                   <h3 className="font-bold text-red-800 flex items-center gap-2"><AlertCircle size={18}/> {masivoModal.noEncontrados.length} Contratos NO Encontrados</h3>
@@ -706,7 +540,6 @@ export default function VentasPage() {
           </DialogContent>
         </Dialog>
 
-        {/* MODAL MANUAL: FACTURACION */}
         <Dialog open={factModal.open} onOpenChange={val => setFactModal({ ...factModal, open: val })}>
           <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
             <DialogHeader><DialogTitle className="text-base font-bold text-gray-900">Auditoría / Facturación</DialogTitle></DialogHeader>
@@ -723,9 +556,61 @@ export default function VentasPage() {
             <DialogFooter className="mt-4"><Button variant="outline" onClick={() => setFactModal({ open: false, venta: null })}>Cancelar</Button><Button className="bg-primary text-white font-bold" onClick={handleGuardarFacturacion}>Guardar</Button></DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={ticketModal.open} onOpenChange={val => setTicketModal({ ...ticketModal, open: val })}>
+          <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
+                <Ticket className="text-amber-600" /> Generar Ticket de Novedad
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleCrearTicket} className="space-y-4 mt-2">
+              <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
+                <div>
+                  <Label className="text-[10px] font-bold text-gray-500 uppercase">Institución Involucrada</Label>
+                  <div className="text-xs font-bold text-gray-800">{ticketModal.institucionNombre}</div>
+                </div>
+                <div>
+                  <Label className="text-[10px] font-bold text-gray-500 uppercase">Vendedor Asignado Automáticamente</Label>
+                  <div className="text-xs font-bold text-primary">{ticketModal.asignadoNombre}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-bold text-gray-700">Área Responsable *</Label>
+                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none" value={ticketModal.tipo} onChange={e => setTicketModal({ ...ticketModal, tipo: e.target.value })}>
+                    {departamentos.map(d => <option key={d.id} value={d.nombre}>{d.nombre}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs font-bold text-gray-700">Urgencia</Label>
+                  <select className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none" value={ticketModal.prioridad} onChange={e => setTicketModal({ ...ticketModal, prioridad: e.target.value })}>
+                    <option value="Baja">🟢 Baja</option>
+                    <option value="Media">🟡 Media</option>
+                    <option value="Alta">🟠 Alta</option>
+                    <option value="Urgente">🔴 Urgente</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-bold text-gray-700">Asunto del Ticket *</Label>
+                <Input required value={ticketModal.asunto} onChange={e => setTicketModal({ ...ticketModal, asunto: e.target.value })} className="mt-1 h-10 font-bold bg-gray-50" />
+              </div>
+              <div>
+                <Label className="text-xs font-bold text-gray-700">Instrucciones / Novedad *</Label>
+                <textarea required className="w-full h-24 border rounded-md p-2 text-xs bg-white mt-1 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 resize-none" placeholder="Ej: Falta copia de cédula..." value={ticketModal.mensajeInicial} onChange={e => setTicketModal({ ...ticketModal, mensajeInicial: e.target.value })} />
+              </div>
+              <DialogFooter className="pt-2 flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setTicketModal({ ...ticketModal, open: false })}>Cancelar</Button>
+                <Button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-600 text-white font-bold">
+                  {saving ? 'Enviando...' : 'Crear y Asignar Ticket'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* TOAST GLOBAL */}
       {toastMsg && (
         <div className={`fixed bottom-6 right-6 z-9999 px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 ${toastMsg.tipo === 'exito' ? 'bg-emerald-600 text-white' : toastMsg.tipo === 'alerta' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
           {toastMsg.tipo === 'exito' ? <CheckCircle2 size={20} className="text-emerald-100" /> : <AlertCircle size={20} className="text-white/90" />}
