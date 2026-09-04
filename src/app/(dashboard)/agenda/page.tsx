@@ -25,6 +25,15 @@ export default function AgendaPage() {
   const [vendedores, setVendedores] = useState<any[]>([]);
   const [userRol, setUserRol] = useState('vendedor');
   const [tabActiva, setTabActiva] = useState<TabType>('ruta');
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabURL = params.get('tab');
+      if (['ruta', 'visitadas', 'proximas', 'vencidas', 'sinAsignar', 'cobertura', 'correcciones'].includes(tabURL || '')) {
+        setTabActiva(tabURL as TabType);
+      }
+    }
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProvincia, setSelectedProvincia] = useState('');
   const [selectedCanton, setSelectedCanton] = useState('');

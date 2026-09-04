@@ -11,8 +11,6 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-
-// 🔥 IMPORTAMOS TU FORMULARIO UNIVERSAL 🔥
 import ContratoVentaForm from '@/components/shared/ContratoVentaForm';
 
 const MESES_LISTA = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -21,17 +19,22 @@ export default function VentasPage() {
   const [ventas, setVentas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [catalogos, setCatalogos] = useState<any>(null);
-  
   const [userRol, setUserRol] = useState<string>('vendedor');
   const [userPermisos, setUserPermisos] = useState<string[]>([]); 
-
   const [searchTerm, setSearchTerm] = useState('');
   const [filtros, setFiltros] = useState({ vendedorNombre: '', estadoContratoId: '', estadoClienteId: '', mesCobro: '' });
   const [filtroTarjeta, setFiltroTarjeta] = useState<'Todas' | 'Pendientes' | 'Novedades' | 'Aprobadas'>('Todas');
-
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tarjetaURL = params.get('tarjeta');
+      if (tarjetaURL === 'Todas' || tarjetaURL === 'Pendientes' || tarjetaURL === 'Novedades' || tarjetaURL === 'Aprobadas') {
+        setFiltroTarjeta(tarjetaURL);
+      }
+    }
+  }, []);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
-
   const [toastMsg, setToastMsg] = useState<{ tipo: 'exito' | 'error' | 'alerta'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error' | 'alerta', texto: string) => {
     setToastMsg({ tipo, texto });
@@ -41,7 +44,6 @@ export default function VentasPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [institucionesDisponibles, setInstitucionesDisponibles] = useState<any[]>([]);
-
   const [departamentos, setDepartamentos] = useState<any[]>([]);
   const [ticketModal, setTicketModal] = useState({
     open: false, tipo: '', institucionId: '', asignadoAId: '', prioridad: 'Media', asunto: '', mensajeInicial: '', institucionNombre: '', asignadoNombre: ''
@@ -141,7 +143,7 @@ export default function VentasPage() {
       id: v.id,
       cantonId: v.cantonId?.toString() || '', 
       institucionId: v.institucionId?.toString() || '',
-      institucionNombre: v.institucionNombre || '', // 🔥 FORZAMOS CARGA DE LA ESCUELA 🔥
+      institucionNombre: v.institucionNombre || '', 
       fechaVenta: hoyStr,
       numContrato: v.numContrato || '',
       nombreCliente: v.nombreCliente || '',
@@ -155,7 +157,7 @@ export default function VentasPage() {
       tipoCobroId: v.tipoCobroId?.toString() || '',
       tipoClienteId: v.tipoClienteId?.toString() || '',
       tieneCedula: !!v.tieneCedula,
-      observacion: v.observacion || '', // 🔥 YA CARGA LA OBSERVACIÓN GENERAL 🔥
+      observacion: v.observacion || '', 
       observacionesFact: v.observacionesFact === 'Sin observaciones' ? '' : (v.observacionesFact || ''),
       verificacionFact: v.verificacionFact === 'Sin validar' ? '' : (v.verificacionFact || '')
     });

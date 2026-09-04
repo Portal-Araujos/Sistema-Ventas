@@ -34,7 +34,6 @@ export async function GET(request: Request) {
     } else if (vendedorId) {
       visitaFilters.usuarioId = vendedorId;
     }
-
     const [visitas, ventas] = await Promise.all([
       prisma.visitaAgenda.findMany({
         where: visitaFilters,
@@ -51,7 +50,6 @@ export async function GET(request: Request) {
         }
       })
     ]);
-
     const dataConsolidada = visitas.map(v => {
       const dateVisitaEcuador = new Date(new Date(v.createdAt).toLocaleString("en-US", { timeZone: "America/Guayaquil" }));
       const ventasParaEstaVisita = ventas.filter(venta => venta.visitaId === v.id);
@@ -165,7 +163,7 @@ export async function POST(request: Request) {
         return prisma.venta.create({
           data: {
             institucionId, vendedorId: userId,
-            visitaId: nuevaVisita.id, // 🔥 ENLACE PERFECTO E INDIVIDUAL
+            visitaId: nuevaVisita.id, 
             numContrato: String(v.numContrato).trim(),
             valorContrato: valor, abono: abonoVal, meses: m,
             mesCobro: v.mesCobro || 'Enero', cuotaMensual: cuota,
@@ -196,7 +194,6 @@ export async function POST(request: Request) {
           if (userRol === 'super_admin' && body.operarioAsignadoId) {
             operarioLogistica = body.operarioAsignadoId; 
           }
-          
           return prisma.pedido.create({
             data: {
               institucionId, usuarioId: userId,
@@ -215,12 +212,10 @@ export async function POST(request: Request) {
             }
           });
         });
-        
       if (transaccionesPedidos.length > 0) {
         await Promise.all(transaccionesPedidos);
       }
     }
-
     await prisma.institution.update({
       where: { id: institucionId },
       data: { estadoComercial: huboVenta ? 'Visitada' : estadoGestion, vendedorId: userId }

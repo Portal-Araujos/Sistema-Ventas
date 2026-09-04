@@ -369,6 +369,7 @@ model Pedido {
   responsableEmpaque String?         @map("responsable_empaque")
   fechaInicioEmpaque DateTime?       @map("fecha_inicio_empaque")
   fechaFinEmpaque    DateTime?       @map("fecha_fin_empaque")
+  fechaEnvioOperaciones DateTime?   @map("fecha_envio_operaciones")
 
   @@map("pedidos")
 }
@@ -487,6 +488,7 @@ model TicketGestion {
   institucion   Institution     @relation(fields: [institucionId], references: [id])
   creador       Usuario         @relation("TicketsCreados", fields: [creadorId], references: [id])
   asignado      Usuario?        @relation("TicketsAsignados", fields: [asignadoAId], references: [id])
+  fechaLimite   DateTime?       @map("fecha_limite")
 
   @@map("tickets_gestion")
 }
