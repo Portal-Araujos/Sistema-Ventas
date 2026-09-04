@@ -84,6 +84,7 @@ export async function proxy(request: NextRequest) {
         '/inicio': 'inicio:ver',
         '/instituciones': 'instituciones:ver',
         '/ventas': 'ventas:ver',
+        '/cobranzas': 'cobranzas:ver',
         '/agenda': 'agenda:ver',
         '/visitas': 'visitas:ver',
         '/seguimientos': 'seguimientos:ver',

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Building2, CalendarDays, MapPin, BarChart2, User, Settings, 
   ChevronLeft, ChevronRight, LogOut, DollarSign, Shield, Menu, X, Ticket, BookCheck,
-  Factory, Barcode, Briefcase, Package, Scissors, Truck, ChevronDown, ChevronUp, FileUser
+  Factory, Barcode, Briefcase, Package, Scissors, Truck, ChevronDown, ChevronUp, FileUser, HandCoins, Landmark
 } from 'lucide-react';
 const menuStructure = [
   { 
@@ -25,6 +25,14 @@ const menuStructure = [
       { icon: DollarSign, label: 'Ventas', href: '/ventas', permiso: 'ventas:ver' },
       { icon: MapPin, label: 'Seguimientos', href: '/visitas', permiso: 'visitas:ver' },
       { icon: BarChart2, label: 'Indicadores', href: '/indicadores', permiso: 'indicadores:ver' }
+    ]
+  },
+  {
+    label: 'GESTIÓN DE COBRANZAS',
+    icon: Landmark,
+    isGroup: true,
+    items: [
+      { icon: HandCoins, label: 'Cobranzas', href: '/cobranzas', permiso: 'cobranzas:ver' },
     ]
   },
   {
@@ -71,6 +79,7 @@ export function Sidebar() {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'VISITAS Y VENTAS': true,
     'PRODUCCIÓN': false,
+    'GESTIÓN DE COBRANZAS': false,
     'CONFIGURACIONES': false,
     'TICKETS': false
   });
@@ -91,8 +100,6 @@ export function Sidebar() {
       window.location.href = '/login';
     } catch (e) {}
   };
-
-  // 🔥 LÓGICA DE PERMISOS: Solo retorna los grupos que tengan ítems permitidos 🔥
   const checkPerm = (perm: string) => {
     if (userRol === 'super_admin') return true;
     if (perm === 'super_admin_only') return false;

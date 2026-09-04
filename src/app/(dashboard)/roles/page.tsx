@@ -8,8 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-
-// 🔥 MATRIZ DEFINITIVA ALINEADA CON EL SIDEBAR ACORDEÓN 🔥
 const MODULOS_PERMISOS = [
   { 
     modulo: 'Panel Principal', 
@@ -29,6 +27,13 @@ const MODULOS_PERMISOS = [
       { id: 'ventas:validar', label: 'Auditar Campos de Facturación' },
       { id: 'visitas:ver', label: 'Ver Seguimientos y Rutas GPS' },
       { id: 'indicadores:ver', label: 'Ver Indicadores y KPIs de Ventas' }
+    ]
+  },
+    { 
+    modulo: 'Gestión de Cobranzas', 
+    permisos: [
+      { id: 'cobranzas:ver', label: 'Ver gestión de cobranzas' }
+
     ]
   },
   { 
