@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Factory, Search, Filter, Calendar, Eye, ChevronLeft, ChevronRight, 
-  CheckCircle2, AlertCircle, AlertTriangle, PackageSearch, Calculator, Box
+  Factory, Search, Calendar, Eye, ChevronLeft, ChevronRight, 
+  CheckCircle2, AlertCircle, AlertTriangle, Edit2,PackageSearch, Calculator, Box
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,13 +45,51 @@ export default function OperacionesPage() {
   const [stockInputs, setStockInputs] = useState<Record<string, number>>({});
   const [prendasCustomCount, setPrendasCustomCount] = useState(0);
   const [fechaStockProduccion, setFechaStockProduccion] = useState('');
-
   const [saving, setSaving] = useState(false);
-
   const [toast, setToast] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error', texto: string) => {
     setToast({ tipo, texto });
     setTimeout(() => setToast(null), 4000);
+  };
+  // 🔥 ESTADOS PARA MODAL DE REPROGRAMAR FECHA MASIVA 🔥
+  const [modalFechaOpen, setModalFechaOpen] = useState(false);
+  const [pedidoIdsReq, setPedidoIdsReq] = useState<string[]>([]);
+  const [nuevaFechaReq, setNuevaFechaReq] = useState('');
+  const [motivoFechaReq, setMotivoFechaReq] = useState('');
+
+  const abrirModalFechaMasiva = () => {
+    if (!grupoDetalle || !grupoDetalle.pedidosAsociados) return;
+    
+    // Extraemos todos los IDs de los contratos de este grupo
+    const ids = Array.from(grupoDetalle.pedidosAsociados.values()).map((p: any) => p.id);
+    setPedidoIdsReq(ids);
+    
+    // Tomamos la fecha del primer contrato como referencia
+    const primerPedido = Array.from(grupoDetalle.pedidosAsociados.values())[0] as any;
+    setNuevaFechaReq(primerPedido?.fechaRequerida ? new Date(primerPedido.fechaRequerida).toISOString().split('T')[0] : '');
+    setMotivoFechaReq('');
+    setModalFechaOpen(true);
+  };
+
+  const handleGuardarFechaReq = async () => {
+    if (!nuevaFechaReq) return showToast('error', 'Seleccione la nueva fecha.');
+    if (motivoFechaReq.trim().length < 10) return showToast('error', 'Justificación muy corta. Explique el motivo (mínimo 10 letras).');
+    
+    setSaving(true);
+    try {
+      const res = await fetch('/api/operaciones', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modo: 'cambiar_fecha_requerida', pedidoIds: pedidoIdsReq, nuevaFecha: nuevaFechaReq, motivo: motivoFechaReq })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      showToast('exito', 'Fechas de entrega reprogramadas en todos los contratos.');
+      setModalFechaOpen(false);
+      await cargarDatos();
+    } catch (e: any) {
+      showToast('error', e.message || 'Error al guardar.');
+    } finally { setSaving(false); }
   };
 
   const cargarDatos = async () => {
@@ -113,12 +151,13 @@ export default function OperacionesPage() {
         const ropa = det.tipoRopa || 'Prenda';
         const color = det.color || '-';
         const talla = det.talla || '-';
+        const genero = det.genero || '-';
         
         // 🔥 AQUÍ ESTABA EL ERROR: Se corrigió el símbolo separador a un simple pipe "|" 🔥
-        const key = `${sku}|${ropa}|${color}|${talla}`;
+        const key = `${sku}|${ropa}|${color}|${talla}|${genero}`;
 
         if (!mapaGenericas.has(key)) {
-          mapaGenericas.set(key, { key, sku, prenda: ropa, color, talla, totalSolicitado: 0 });
+          mapaGenericas.set(key, { key, sku, prenda: ropa, color, talla,genero, totalSolicitado: 0 });
         }
         mapaGenericas.get(key).totalSolicitado += det.cantidad;
       });
@@ -130,6 +169,7 @@ export default function OperacionesPage() {
     if (arrayStock.length === 0) {
       return showToast('error', 'No hay prendas en "Pendiente en revisión" para balancear.');
     }
+    arrayStock.sort((a: any, b: any) => a.sku.localeCompare(b.sku));
 
     setResumenStock(arrayStock);
     const initInputs: Record<string, number> = {};
@@ -410,7 +450,6 @@ export default function OperacionesPage() {
               </div>
             
             )}
-            {/* 🔥 NUEVO CAMPO: FECHA DE PRODUCCIÓN 🔥 */}
             <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 mb-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
                 <Label className="text-xs font-black text-purple-900 uppercase">Fecha Est. Confección (Para Taller)</Label>
@@ -431,9 +470,9 @@ export default function OperacionesPage() {
                     <tr className="bg-gray-100 border-b border-gray-200 text-gray-600 uppercase">
                       <th className="p-3 font-bold">Código SKU</th>
                       <th className="p-3 font-bold">Prenda</th>
-                      <th className="p-3 text-center font-bold">Talla/Color</th>
+                      <th className="p-3 text-center font-bold">Talla/Color/ Genero</th>
                       <th className="p-3 text-center font-black">Total Solicitado</th>
-                      <th className="p-3 text-center font-bold bg-amber-50/50 border-l border-amber-100 w-32">📦 En Stock</th>
+                      <th className="p-3 text-center font-bold bg-amber-50/50 border-l border-amber-100 w-32">En Stock</th>
                       <th className="p-3 text-center font-bold text-red-600 bg-red-50/50">A Producción</th>
                     </tr>
                   </thead>
@@ -445,7 +484,7 @@ export default function OperacionesPage() {
                         <tr key={row.key} className="hover:bg-gray-50">
                           <td className="p-3 font-mono font-bold text-blue-600">{row.sku}</td>
                           <td className="p-3 font-bold text-gray-800">{row.prenda}</td>
-                          <td className="p-3 text-center text-gray-600">{row.talla} ({row.color})</td>
+                          <td className="p-3 text-center text-gray-600">{row.talla} ({row.color}) ({row.genero})</td>
                           <td className="p-3 text-center font-black text-gray-900 text-sm">{row.totalSolicitado}</td>
                           <td className="p-2 border-l border-amber-50 bg-amber-50/30 text-center">
                             <Input 
@@ -495,19 +534,38 @@ export default function OperacionesPage() {
               <div><span className="text-gray-400 block font-bold uppercase">VENDEDOR</span><span className="font-extrabold text-gray-800">{grupoDetalle?.vendedorNombre}</span></div>
               <div><span className="text-gray-400 block font-bold uppercase">PAQUETES</span><span className="font-extrabold text-gray-800">{grupoDetalle?.paquetesCantidad}</span></div>
             </div>
+            <div className="mt-3 mb-2 bg-blue-50 border border-blue-200 p-3 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1"><Calendar size={12}/> Entrega Prometida Global:</p>
+                <p className={`text-sm font-black ${grupoDetalle?.esAtrasado ? 'text-red-600' : 'text-gray-900'}`}>
+                  {grupoDetalle?.fechaRequeridaTexto || 'No asignada'}
+                </p>
+              </div>
+              <Button size="sm" variant="outline" className="text-blue-700 bg-white border-blue-300 hover:bg-blue-100 font-bold shadow-sm" onClick={abrirModalFechaMasiva}>
+                <Edit2 size={14} className="mr-2"/> Reprogramar Entrega Completa
+              </Button>
+            </div>
+
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">Desglose por Contrato y Prendas:</p>
             <div className="space-y-3">
               {grupoDetalle?.pedidosAsociados?.map((ped: any) => {
                 const isExpanded = contratoExpandido === ped.id;
                 return (
                   <div key={ped.id} className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs">
-                    <div className="p-3.5 flex justify-between items-center bg-gray-50/80">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="font-black text-blue-700 bg-blue-50 border-blue-200">Contrato #{ped.numContrato}</Badge>
-                        <span className="text-xs font-bold text-gray-800">{ped.nombreCliente}</span>
-                        <Badge className={`ml-2 text-[10px] ${getEstadoColor(ped.estadoGlobalContrato)}`}>{ped.estadoGlobalContrato}</Badge>
+                    <div className="p-3.5 flex justify-between items-center bg-gray-50/80 border-b border-gray-100">
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="font-black text-blue-700 bg-blue-50 border-blue-200">Contrato #{ped.numContrato}</Badge>
+                          <span className="text-xs font-bold text-gray-800">{ped.nombreCliente}</span>
+                          <Badge className={`ml-2 text-[10px] ${getEstadoColor(ped.estadoGlobalContrato)}`}>{ped.estadoGlobalContrato}</Badge>
+                        </div>
+                        {ped.motivoCambioFecha && (
+                          <p className="text-[10px] text-red-700 font-bold mt-1 flex items-center gap-1">
+                            <AlertTriangle size={12}/> Motivo de reprogramación: {ped.motivoCambioFecha}
+                          </p>
+                        )}
                       </div>
-                      <Button size="sm" variant="ghost" className="text-xs font-bold text-primary flex items-center gap-1" onClick={() => setContratoExpandido(isExpanded ? null : ped.id)}>
+                      <Button size="sm" variant="ghost" className="text-xs font-bold text-primary flex items-center gap-1 shrink-0" onClick={() => setContratoExpandido(isExpanded ? null : ped.id)}>
                         <Eye size={14} /> {isExpanded ? 'Ocultar' : 'Ver Prendas'}
                       </Button>
                     </div>
@@ -527,7 +585,7 @@ export default function OperacionesPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {ped.detalles.map((p: any) => (
+                            {[...ped.detalles].sort((a: any, b: any) => (a.skuCodigo || '').localeCompare(b.skuCodigo || '')).map((p: any) => (
                               <tr key={p.id} className="hover:bg-white">
                                 <td className="p-2 text-center"><input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer" checked={prendasSeleccionadas.includes(p.id)} onChange={() => toggleSeleccionPrenda(p.id)} /></td>
                                 <td className="p-2 font-mono font-bold text-blue-600">{p.skuCodigo || 'S/N'}</td>
@@ -584,6 +642,39 @@ export default function OperacionesPage() {
           <DialogFooter className="mt-5 flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => setModalGestionOpen(false)}>Cancelar</Button>
             <Button size="sm" className="bg-primary text-white font-bold" disabled={saving} onClick={handleGuardarGestion}>{saving ? 'Guardando...' : 'Guardar Cambios'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* 🔥 MODAL PARA REPROGRAMAR FECHA REQUERIDA 🔥 */}
+      <Dialog open={modalFechaOpen} onOpenChange={setModalFechaOpen}>
+        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
+          <DialogHeader><DialogTitle className="text-lg font-black text-gray-900 border-b pb-2">Reprogramar Fecha de Entrega</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-xs text-red-800 font-medium leading-relaxed">
+              Al cambiar la fecha, el vendedor visualizará este cambio en su panel. <br/><b>Debes justificar el motivo obligatoriamente para fines de auditoría.</b>
+            </div>
+            <div>
+              <Label className="text-xs font-bold text-gray-700">Nueva Fecha de Entrega Prometida *</Label>
+              <Input type="date" className="h-10 text-xs font-bold bg-white mt-1 border-gray-300" value={nuevaFechaReq} onChange={e => setNuevaFechaReq(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs font-bold text-gray-700">Motivo del Cambio / Retraso (Auditoría) *</Label>
+              <textarea 
+                className="w-full h-24 border border-gray-300 rounded-lg p-3 text-xs bg-white mt-1 outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400 resize-none" 
+                placeholder="Ej: Retraso por falta de tela del proveedor, o error en bordados..." 
+                value={motivoFechaReq} 
+                onChange={e => setMotivoFechaReq(e.target.value)} 
+              />
+              <p className={`text-[10px] font-bold mt-1 ${motivoFechaReq.length >= 10 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                {motivoFechaReq.length}/10 caracteres mínimos.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="mt-5 flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setModalFechaOpen(false)}>Cancelar</Button>
+            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white font-bold" disabled={saving || motivoFechaReq.trim().length < 10} onClick={handleGuardarFechaReq}>
+              {saving ? 'Guardando...' : 'Confirmar Cambio'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

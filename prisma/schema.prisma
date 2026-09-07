@@ -481,14 +481,13 @@ model TicketGestion {
   prioridad     String          @default("Media") // Baja, Media, Alta, Urgente
   institucionId String // ID de la escuela vinculada
   creadorId     String // ID de la persona de oficina que lo creó
-  asignadoAId   String? // ID del Vendedor en campo que debe resolverlo
   fechaCierre   DateTime? // Se llena cuando pasa a Cerrado
+  asignados     Usuario[]       @relation("TicketsAsignados")
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
   mensajes      MensajeTicket[]
   institucion   Institution     @relation(fields: [institucionId], references: [id])
   creador       Usuario         @relation("TicketsCreados", fields: [creadorId], references: [id])
-  asignado      Usuario?        @relation("TicketsAsignados", fields: [asignadoAId], references: [id])
   fechaLimite   DateTime?       @map("fecha_limite")
 
   @@map("tickets_gestion")

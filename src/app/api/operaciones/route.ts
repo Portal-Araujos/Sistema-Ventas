@@ -116,6 +116,7 @@ export async function GET(request: Request) {
           nombreCliente: ped.nombreCliente || 'Sin Cliente',
           estado: ped.estado,
           fechaRequerida: ped.fechaRequerida,
+          motivoCambioFecha: ped.motivoCambioFecha,
           estadosUnicosContrato: new Set(),
           detalles: []
         });
@@ -156,6 +157,29 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { modo } = body;
+    // 🔥 NUEVO MODO: REPROGRAMACIÓN DE FECHA MASIVA 🔥
+    if (modo === 'cambiar_fecha_requerida') {
+      const { pedidoIds, nuevaFecha, motivo } = body;
+      
+      if (!motivo || motivo.trim().length < 10) {
+        return NextResponse.json({ error: 'La justificación es obligatoria (Mínimo 10 letras).' }, { status: 400 });
+      }
+
+      if (!Array.isArray(pedidoIds) || pedidoIds.length === 0) {
+        return NextResponse.json({ error: 'No hay pedidos para actualizar.' }, { status: 400 });
+      }
+
+      const fechaLimpia = nuevaFecha.split('T')[0];
+      await prisma.pedido.updateMany({
+        where: { id: { in: pedidoIds } },
+        data: {
+          fechaRequerida: new Date(`${fechaLimpia}T12:00:00Z`),
+          motivoCambioFecha: motivo.trim()
+        }
+      });
+
+      return NextResponse.json({ success: true, message: 'Fechas de entrega reprogramadas masivamente.' });
+    }
     if (modo === 'asignacion_stock') {
       const { institucionId, stockAsignado, fechaEstimadaConfeccion } = body;
       const realInstId = institucionId.split('_')[0];
