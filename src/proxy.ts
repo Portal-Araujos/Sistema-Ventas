@@ -8,8 +8,6 @@ export async function proxy(request: NextRequest) {
   const token = request.cookies.get('session_token')?.value;
   const lastActivity = request.cookies.get('last_activity')?.value;
   const { pathname } = request.nextUrl;
-
-  // Dejamos pasar los recursos del sistema y las rutas públicas
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/login') ||
@@ -22,10 +20,6 @@ export async function proxy(request: NextRequest) {
   if (!token) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
-
-  // ==========================================
-  // ⏱️ 1. CIERRE POR INACTIVIDAD (30 MINUTOS)
-  // ==========================================
   const ahora = Date.now();
   const TIEMPO_INACTIVIDAD_MAX = 30 * 60 * 1000; // 30 Minutos en milisegundos
 
@@ -46,15 +40,8 @@ export async function proxy(request: NextRequest) {
     const permisos = (payload.permisos as string[]) || [];
     const sessionId = payload.sessionId as string; // La llave anti-clon
     const userId = payload.id as string;
-
-    // Capturamos la IP de donde se está conectando
     const forwardedFor = request.headers.get('x-forwarded-for');
     const ip = forwardedFor ? forwardedFor.split(',')[0] : '127.0.0.1';
-
-    // ==========================================
-    // 🛡️ 2. VERIFICAR CLONACIÓN Y FILTRO DE IP
-    // ==========================================
-    // Llamamos a nuestro "Puesto de Control" interno para validar la BD
     const verifyRes = await fetch(new URL('/api/auth/verify-session', request.url), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -71,10 +58,6 @@ export async function proxy(request: NextRequest) {
         return response;
       }
     }
-
-    // ==========================================
-    // 🚦 3. MATRIZ DE RUTAS Y PERMISOS
-    // ==========================================
     let response = NextResponse.next();
 
     if (rol !== 'super_admin') {
@@ -104,7 +87,7 @@ export async function proxy(request: NextRequest) {
       for (const ruta of rutasOrdenadas) {
         if (pathname.startsWith(ruta)) {
           if (ruta === '/instituciones' && pathname !== '/instituciones' && !pathname.startsWith('/instituciones/nueva')) {
-            break; // Lo dejamos pasar a submódulos de instituciones
+            break; 
           }
 
           const permisoRequerido = rutasProtegidas[ruta];
@@ -116,14 +99,9 @@ export async function proxy(request: NextRequest) {
         }
       }
     }
-
-    // ==========================================
-    // 🔄 4. REINICIAR EL RELOJ DE INACTIVIDAD
-    // ==========================================
-    // Cada vez que el usuario hace un clic y carga una página, le damos otros 30 minutos
     response.cookies.set('last_activity', ahora.toString(), {
       path: '/',
-      maxAge: 60 * 60 * 8, // 8 horas máximo de jornada
+      maxAge: 60 * 60 * 8,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -142,7 +120,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Se ejecuta en todas las pantallas EXCEPTO en la API y archivos estáticos
     '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 };

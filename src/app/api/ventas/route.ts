@@ -34,7 +34,8 @@ export async function GET(request: Request) {
     const mesCobro = searchParams.get('mesCobro');
     const where: any = {};
     
-    if (userRol !== 'super_admin' && userRol !== 'administrador') {
+    // 🔥 AQUÍ ESTÁ LA MAGIA: Solo el vendedor tiene restricciones 🔥
+    if (userRol === 'vendedor') {
       where.vendedorId = userId;
     }
 
@@ -65,8 +66,7 @@ export async function GET(request: Request) {
       },
       orderBy: { createdAt: 'desc' }
     });
-
-    // 🔥 BUSCAMOS LOS PEDIDOS PARA CRUZAR EL NOMBRE Y LA OBSERVACIÓN 🔥
+    
     const numContratos = ventas.map(v => v.numContrato).filter(Boolean);
     const instIds = ventas.map(v => v.institucionId).filter(Boolean);
     
@@ -95,8 +95,6 @@ export async function GET(request: Request) {
         meses: v.meses,
         mesCobro: v.mesCobro,
         cuotaMensual: v.cuotaMensual,
-        
-        // 🔥 AQUÍ INYECTAMOS EL NOMBRE Y LA OBSERVACIÓN CRUZADA 🔥
         nombreCliente: ped?.nombreCliente || '',
         observacion: ped?.observacion || '',
         
@@ -165,8 +163,6 @@ export async function POST(request: Request) {
         estadoTicket: 'Pendiente Facturación'
       }
     });
-
-    // 🔥 SINCRONIZAMOS CON EL PEDIDO EN CASO DE QUE EXISTA 🔥
     await prisma.pedido.updateMany({
       where: { institucionId, numContrato: String(numContrato).trim() },
       data: { nombreCliente: nombreCliente || '', observacion: observacion || '' }
@@ -232,9 +228,9 @@ export async function PUT(request: Request) {
       if (verifLimpia === '') {
         nuevoEstadoTicket = updateData.observacionesFact ? 'Observado ⚠️ - Pendiente Vendedor' : 'Pendiente Facturación';
       } else if (verifLimpia === String(contratoAComparar).trim()) {
-        nuevoEstadoTicket = 'Validado ✅';
+        nuevoEstadoTicket = 'Validado ';
       } else {
-        nuevoEstadoTicket = 'Rechazado ❌ - Número no coincide';
+        nuevoEstadoTicket = 'Rechazado  - Número no coincide';
       }
     } else if (observacionesFact !== undefined && (!ventaDb.verificacionFact || ventaDb.verificacionFact === 'Sin validar')) {
       nuevoEstadoTicket = observacionesFact ? 'Observado ⚠️ - Pendiente Vendedor' : 'Pendiente Facturación';

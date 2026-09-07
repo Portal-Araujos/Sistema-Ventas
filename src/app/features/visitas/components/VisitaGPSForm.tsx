@@ -44,9 +44,11 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
     tipoGestion: 'Presencial',
     estadoGestion: 'Visitada',
     resumenAcuerdos: '',
-    fechaProximoContacto: ''
+    fechaProximoContacto: '',
+    horaProximoContacto: ''
   });
   const [huboVenta, setHuboVenta] = useState(false);
+  const [esBorradorVenta, setEsBorradorVenta] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number>(0);
   const [ventasItem, setVentasItem] = useState<any[]>([]);
 
@@ -60,7 +62,6 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
     if (huboVenta && ventasItem.length === 0) {
       setVentasItem([{ numContrato: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero', cuotaMensual: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '', prendas: [] }]);
       setExpandedIndex(0);
-      setFormData(prev => ({ ...prev, estadoGestion: 'Visitada' }));
     }
   }, [huboVenta]);
 
@@ -83,9 +84,10 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
       setBusqueda('');
       setResultadosBusqueda([]);
       setHuboVenta(false);
+      setEsBorradorVenta(false); // 🔥 NUEVO
       setVentasItem([]);
       setDraftPrenda({ tipoRopa: '', color: '', genero: '', talla: '', cantidad: 1, bordado: '', observacion: '' });
-      setFormData({ institucionId: '', tipoGestion: 'Presencial', estadoGestion: 'Visitada', resumenAcuerdos: '', fechaProximoContacto: '' });
+      setFormData({ institucionId: '', tipoGestion: 'Presencial', estadoGestion: 'Visitada', resumenAcuerdos: '', fechaProximoContacto: '', horaProximoContacto: '' }); // 🔥 NUEVO
     }
   }, [open]);
 
@@ -190,7 +192,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
     if (!formData.institucionId) { showToast('alerta', "Selecciona una institución válida."); return; }
     if (formData.tipoGestion === 'Presencial' && !coordenadas.lat) { showToast('alerta', "¡OBLIGATORIO! Captura tu ubicación GPS para visitas físicas."); return; }
     
-    if (huboVenta) {
+    if (huboVenta && !esBorradorVenta) {
       for (const v of ventasItem) {
         if (!v.numContrato || !v.valorContrato || !v.tipoCobroId) {
           showToast('alerta', "Revisa los contratos. N° Contrato, Monto y Tipo Cobro son obligatorios."); return;
@@ -209,7 +211,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formData, latitud: coordenadas.lat, longitud: coordenadas.lng, huboVenta, ventas: huboVenta ? ventasItem : []
+          ...formData, latitud: coordenadas.lat, longitud: coordenadas.lng, huboVenta, esBorradorVenta, ventas: huboVenta ? ventasItem : []
         })
       });
       
@@ -290,7 +292,7 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-bold text-primary">Resultado de la Visita *</Label>
-              <select className="w-full h-10 border rounded-md px-3 text-sm font-semibold bg-white" value={formData.estadoGestion} onChange={e => setFormData({ ...formData, estadoGestion: e.target.value })} disabled={huboVenta}>
+              <select className="w-full h-10 border rounded-md px-3 text-sm font-semibold bg-white" value={formData.estadoGestion} onChange={e => setFormData({ ...formData, estadoGestion: e.target.value })}>
                 <option value="">Seleccione resultado...</option>
                 {estadosComerciales.filter(e => e.activo).map(e => (<option key={e.id} value={e.nombre}>{e.nombre}</option>))}
               </select>
@@ -302,57 +304,67 @@ export default function VisitaGPSForm({ onSuccess, isOpen, onOpenChange, isLibre
           </div>
           <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl">
             <Label className="text-xs font-bold text-amber-800 flex items-center gap-1"><Clock size={14}/> Agendar Próximo Contacto (Opcional)</Label>
-            <Input type="date" className="h-9 text-xs mt-2 bg-white" value={formData.fechaProximoContacto} onChange={e => setFormData({ ...formData, fechaProximoContacto: e.target.value })} />
-            <p className="text-[10px] text-amber-700/70 mt-1 leading-tight">Si colocas una fecha, la escuela seguirá en tu ruta pendiente ("Seguimiento").</p>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <Input type="date" className="h-9 text-xs bg-white" value={formData.fechaProximoContacto} onChange={e => setFormData({ ...formData, fechaProximoContacto: e.target.value })} />
+              <Input type="time" className="h-9 text-xs bg-white" value={formData.horaProximoContacto} onChange={e => setFormData({ ...formData, horaProximoContacto: e.target.value })} />
+            </div>
+            <p className="text-[10px] text-amber-700/70 mt-1 leading-tight">Si colocas una fecha y hora, la escuela seguirá en tu ruta pendiente ("Seguimiento").</p>
           </div>
           <div className="border-t border-gray-200 pt-3 mt-4">
             <label className="flex items-center gap-2 cursor-pointer mb-2 bg-emerald-50 p-3 rounded-xl border border-emerald-200 hover:bg-emerald-100 transition-colors shadow-sm">
               <input type="checkbox" checked={huboVenta} onChange={(e) => { setHuboVenta(e.target.checked); if (!e.target.checked) setVentasItem([]); }} className="w-5 h-5 text-emerald-600 rounded cursor-pointer accent-emerald-600" />
               <span className="text-sm font-extrabold text-emerald-800 uppercase tracking-wide">¿Se concretó una venta en esta visita?</span>
             </label>
-            
             {huboVenta && (
               <div className="space-y-4 mt-3">
-                {ventasItem.map((venta, index) => {
-                  const isExpanded = expandedIndex === index;
-                  const estadoNombre = estadosCliente.find(e => e.id.toString() === venta.estadoClienteId)?.nombre?.toLowerCase() || '';
-                  const isPedido = estadoNombre.includes('pedido');
-                  return (
-                    <div key={index} className={`rounded-xl border transition-all overflow-hidden ${isExpanded ? 'bg-emerald-50/40 border-emerald-400 shadow-md' : 'bg-white border-gray-200 hover:border-emerald-200'}`}>
-                      <div className="p-3 flex justify-between items-center cursor-pointer bg-white" onClick={() => setExpandedIndex(isExpanded ? -1 : index)}>
-                        <div className="flex items-center gap-2">
-                          <span className={`font-bold text-xs ${isExpanded ? 'text-emerald-800' : 'text-gray-700'}`}> Contrato {venta.numContrato ? `#${venta.numContrato}` : (index + 1)}</span>
-                          {venta.valorContrato && <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">${parseFloat(venta.valorContrato).toFixed(2)}</span>}
-                          {isPedido && <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded flex items-center gap-1"><ShoppingCart size={10}/> Pedido: {(venta.prendas || []).length} pz</span>}
+                <label className="flex items-center gap-2 cursor-pointer bg-blue-50 p-3 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm">
+                  <input type="checkbox" checked={esBorradorVenta} onChange={(e) => setEsBorradorVenta(e.target.checked)} className="w-4 h-4 text-blue-600 rounded cursor-pointer accent-blue-600" />
+                  <span className="text-xs font-bold text-blue-800"> Marcar como Borrador(Llenar detalles luego)</span>
+                </label>
+                {!esBorradorVenta && (
+                  <div className="space-y-4">
+                    {ventasItem.map((venta, index) => {
+                      const isExpanded = expandedIndex === index;
+                      const estadoNombre = estadosCliente.find(e => e.id.toString() === venta.estadoClienteId)?.nombre?.toLowerCase() || '';
+                      const isPedido = estadoNombre.includes('pedido');
+                      return (
+                        <div key={index} className={`rounded-xl border transition-all overflow-hidden ${isExpanded ? 'bg-emerald-50/40 border-emerald-400 shadow-md' : 'bg-white border-gray-200 hover:border-emerald-200'}`}>
+                          <div className="p-3 flex justify-between items-center cursor-pointer bg-white" onClick={() => setExpandedIndex(isExpanded ? -1 : index)}>
+                            <div className="flex items-center gap-2">
+                              <span className={`font-bold text-xs ${isExpanded ? 'text-emerald-800' : 'text-gray-700'}`}> Contrato {venta.numContrato ? `#${venta.numContrato}` : (index + 1)}</span>
+                              {venta.valorContrato && <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">${parseFloat(venta.valorContrato).toFixed(2)}</span>}
+                              {isPedido && <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded flex items-center gap-1"><ShoppingCart size={10}/> Pedido: {(venta.prendas || []).length} pz</span>}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {ventasItem.length > 1 && <button type="button" onClick={(e) => { e.stopPropagation(); removeContrato(index); }} className="text-gray-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>}
+                              {isExpanded ? <ChevronUp size={16} className="text-emerald-600"/> : <ChevronDown size={16} className="text-gray-400"/>}
+                            </div>
+                          </div>
+                          {isExpanded && (
+                            <div className="p-4 pt-4 border-t border-emerald-100 bg-emerald-50/10">
+                              <ContratoVentaForm 
+                                data={venta} 
+                                catalogos={{ tiposCobro, estadosCliente, estadosContrato, tiposCliente }}
+                                onChange={(newData) => {
+                                  const nuevasVentas = [...ventasItem];
+                                  nuevasVentas[index] = newData;
+                                  setVentasItem(nuevasVentas);
+                                }}
+                              />
+                            </div>
+                          )}
                         </div>
-                        <div className="flex items-center gap-3">
-                          {ventasItem.length > 1 && <button type="button" onClick={(e) => { e.stopPropagation(); removeContrato(index); }} className="text-gray-400 hover:text-red-600 transition-colors"><Trash2 size={16} /></button>}
-                          {isExpanded ? <ChevronUp size={16} className="text-emerald-600"/> : <ChevronDown size={16} className="text-gray-400"/>}
-                        </div>
-                      </div>
-                      {isExpanded && (
-                        <div className="p-4 pt-4 border-t border-emerald-100 bg-emerald-50/10">
-                          <ContratoVentaForm 
-                            data={venta} 
-                            catalogos={{ tiposCobro, estadosCliente, estadosContrato, tiposCliente }} // 🔥 PASAMOS LA SEÑAL AQUÍ
-                            onChange={(newData) => {
-                              const nuevasVentas = [...ventasItem];
-                              nuevasVentas[index] = newData;
-                              setVentasItem(nuevasVentas);
-                            }}
-                          />
-
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                <Button type="button" variant="outline" onClick={addContrato} className="w-full border-dashed border-emerald-400 text-emerald-700 hover:bg-emerald-50 bg-white text-xs h-9 font-bold">
-                  <Plus size={14} className="mr-1" /> Agregar otro contrato
-                </Button>
+                      );
+                    })}
+                    <Button type="button" variant="outline" onClick={addContrato} className="w-full border-dashed border-emerald-400 text-emerald-700 hover:bg-emerald-50 bg-white text-xs h-9 font-bold">
+                      <Plus size={14} className="mr-1" /> Agregar otro contrato
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
+          
           <Button type="submit" disabled={loading || (formData.tipoGestion === 'Presencial' && !coordenadas.lat)} className="w-full h-11 bg-primary hover:bg-primary/90 text-white text-base mt-2 shadow-md font-bold uppercase tracking-wider">
             <Save size={18} className="mr-2" /> {loading ? 'Enviando Reporte...' : 'Subir Reporte de Gestión'}
           </Button>

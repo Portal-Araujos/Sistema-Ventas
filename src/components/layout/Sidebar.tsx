@@ -16,7 +16,7 @@ const menuStructure = [
     isGroup: false 
   },
   {
-    label: 'VISITAS Y VENTAS',
+    label: 'DIRECCIÓN COMERCIAL',
     icon: Briefcase,
     isGroup: true,
     items: [
@@ -24,19 +24,12 @@ const menuStructure = [
       { icon: CalendarDays, label: 'Agenda', href: '/agenda', permiso: 'agenda:ver' },
       { icon: DollarSign, label: 'Ventas', href: '/ventas', permiso: 'ventas:ver' },
       { icon: MapPin, label: 'Seguimientos', href: '/visitas', permiso: 'visitas:ver' },
-      { icon: BarChart2, label: 'Indicadores', href: '/indicadores', permiso: 'indicadores:ver' }
-    ]
-  },
-  {
-    label: 'GESTIÓN DE COBRANZAS',
-    icon: Landmark,
-    isGroup: true,
-    items: [
+      { icon: BarChart2, label: 'Indicadores', href: '/indicadores', permiso: 'indicadores:ver' },
       { icon: HandCoins, label: 'Cobranzas', href: '/cobranzas', permiso: 'cobranzas:ver' },
     ]
   },
   {
-    label: 'PRODUCCIÓN',
+    label: 'OPERACIONES',
     icon: Factory,
     isGroup: true,
     items: [
@@ -49,11 +42,11 @@ const menuStructure = [
     ]
   },
   {
-    label: 'TICKETS',
+    label: 'MESA DE AYUDA',
     icon: Ticket,
     isGroup: true,
     items: [
-      { icon: BookCheck, label: 'Mesa Ayuda', href: '/tickets', permiso: 'tickets:ver' },
+      { icon: BookCheck, label: 'TICKETS', href: '/tickets', permiso: 'tickets:ver' },
     ]
   },
   {
@@ -74,12 +67,9 @@ export function Sidebar() {
   const [userPermisos, setUserPermisos] = useState<string[]>([]);
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
-  // Estado para controlar qué acordeones están abiertos (Por defecto Ventas y Producción abiertos)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    'VISITAS Y VENTAS': true,
-    'PRODUCCIÓN': false,
-    'GESTIÓN DE COBRANZAS': false,
+    'DIRECCIÓN COMERCIAL': true,
+    'OPERACIONES': false,
     'CONFIGURACIONES': false,
     'TICKETS': false
   });

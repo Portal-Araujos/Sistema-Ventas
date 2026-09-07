@@ -241,6 +241,7 @@ model VisitaAgenda {
   estadoGestion          String      @default("Pendiente") @map("estado_gestion")
   resumenAcuerdos        String?     @map("resumen_acuerdos") @db.Text
   fechaProximoContacto   DateTime?   @map("fecha_proximo_contacto") @db.Date
+  horaProximoContacto    String?     @map("hora_proximo_contacto")
   latitud                Float?
   longitud               Float?
   createdAt              DateTime    @default(now()) @map("created_at")

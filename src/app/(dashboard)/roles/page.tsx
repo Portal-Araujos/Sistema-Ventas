@@ -16,7 +16,7 @@ const MODULOS_PERMISOS = [
     ] 
   },
   { 
-    modulo: 'Visitas y Ventas', 
+    modulo: 'DIRECCIÓN COMERCIAL', 
     permisos: [
       { id: 'instituciones:ver', label: 'Ver Base de Instituciones' },
       { id: 'instituciones:crear', label: 'Registrar Nuevas Instituciones' },
@@ -26,18 +26,13 @@ const MODULOS_PERMISOS = [
       { id: 'ventas:crear', label: 'Crear Contratos / Ventas' },
       { id: 'ventas:validar', label: 'Auditar Campos de Facturación' },
       { id: 'visitas:ver', label: 'Ver Seguimientos y Rutas GPS' },
-      { id: 'indicadores:ver', label: 'Ver Indicadores y KPIs de Ventas' }
-    ]
-  },
-    { 
-    modulo: 'Gestión de Cobranzas', 
-    permisos: [
+      { id: 'indicadores:ver', label: 'Ver Indicadores y KPIs de Ventas' },
       { id: 'cobranzas:ver', label: 'Ver gestión de cobranzas' }
-
     ]
   },
+    
   { 
-    modulo: 'Cadena de Producción', 
+    modulo: 'Cadena de Operaciones', 
     permisos: [
       { id: 'skus:ver', label: 'Ver Catálogo SKU' },
       { id: 'skus:gestionar', label: 'Subir Excel y Editar SKUs' },

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Ticket, Search, Plus, AlertCircle, CheckCircle2, Clock, Inbox, ChevronRight, User, RefreshCw,Briefcase } from 'lucide-react';
+import { Ticket, Search, Plus, AlertCircle, CheckCircle2, Clock,Trash2,HardDrive, Inbox, ChevronRight, User, RefreshCw,Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -16,17 +16,43 @@ export default function TicketsPage() {
   const [departamentos, setDepartamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState({ id: '', rol: '', departamento: 'General', esSuperAdmin: false });
-
   const [tabActiva, setTabActiva] = useState('General');
   const [searchTerm, setSearchTerm] = useState('');
-  
   const [chatOpen, setChatOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
-
   const [nuevoModalOpen, setNuevoModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [modalMantenimientoOpen, setModalMantenimientoOpen] = useState(false);
+  const [mesesLimpieza, setMesesLimpieza] = useState('6');
+  const [limpiando, setLimpiando] = useState(false);
+
+  const ejecutarLimpiezaMasiva = async () => {
+    if (!confirm(`¿Estás seguro de borrar todos los archivos físicos más antiguos de ${mesesLimpieza} meses? Esta acción no se puede deshacer.`)) return;
+    
+    setLimpiando(true);
+    try {
+      const res = await fetch('/api/tickets/mantenimiento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meses: parseInt(mesesLimpieza) })
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        alert(` Mantenimiento exitoso: Se eliminaron ${data.borrados} archivos del servidor para liberar espacio.`);
+        setModalMantenimientoOpen(false);
+        cargarDatos();
+      } else {
+        alert(data.error || "Error al limpiar el servidor");
+      }
+    } catch (e) {
+      alert("Error de conexión al servidor");
+    } finally {
+      setLimpiando(false);
+    }
+  };
+
   
-  // 🔥 CORRECCIÓN: El tipo inicia vacío para obligar a elegir 🔥
   const [nuevoTicket, setNuevoTicket] = useState({
     tipo: '', 
     institucionId: '',
@@ -134,7 +160,6 @@ export default function TicketsPage() {
       });
       if (res.ok) {
         setNuevoModalOpen(false);
-        // Reseteamos el formulario
         setNuevoTicket({ tipo: '', institucionId: '', asignadoAId: '', prioridad: 'Media', asunto: '', mensajeInicial: '' });
         setBusquedaInst('');
         setBusquedaUser('');
@@ -193,9 +218,16 @@ export default function TicketsPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">Control de requerimientos y tickets operativos.</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/90 text-white shadow-md font-bold h-10 px-5 w-full sm:w-auto" onClick={() => setNuevoModalOpen(true)}>
-          <Plus size={18} className="mr-2" /> Nuevo Ticket
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          {currentUser.esSuperAdmin && (
+            <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 font-bold h-10 shadow-sm" onClick={() => setModalMantenimientoOpen(true)}>
+              <HardDrive size={18} className="mr-2" /> Mantenimiento
+            </Button>
+          )}
+          <Button className="bg-primary hover:bg-primary/90 text-white shadow-md font-bold h-10 px-5 flex-1 sm:flex-none" onClick={() => setNuevoModalOpen(true)}>
+            <Plus size={18} className="mr-2" /> Nuevo Ticket
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -338,7 +370,7 @@ export default function TicketsPage() {
             </div>
 
             <div className="space-y-2 relative">
-              <Label className="text-[11px] font-bold text-gray-700 uppercase">Institución Involucrada *</Label>
+              <Label className="text-[11px] font-bold text-gray-700 uppercase">Institución*</Label>
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-3.5 text-gray-400" />
                 <Input className="pl-9 h-11 text-sm bg-white border-gray-300" placeholder="Escribe para buscar escuela..." value={busquedaInst} onChange={(e) => handleBuscarEscuela(e.target.value)} />
@@ -356,13 +388,13 @@ export default function TicketsPage() {
             </div>
 
             <div className="space-y-2 relative">
-              <Label className="text-[11px] font-bold text-gray-700 uppercase">Asignar a (Opcional)</Label>
+              <Label className="text-[11px] font-bold text-gray-700 uppercase">Asignar a (Obligatorio)</Label>
               <div className="relative">
                 <User size={16} className="absolute left-3 top-3.5 text-gray-400" />
                 <Input className="pl-9 h-11 text-sm bg-white border-gray-300" placeholder="Buscar empleado o vendedor..." value={busquedaUser} onChange={(e) => handleBuscarUsuario(e.target.value)} onFocus={() => { if(!busquedaUser) handleBuscarUsuario(' '); }} />
               </div>
               {dropdownUser && (
-                <ul className="absolute z-[9999 w-full bg-white border border-gray-200 shadow-2xl rounded-lg mt-1 max-h-48 overflow-y-auto">
+                <ul className="absolute z-9999 w-full bg-white border border-gray-200 shadow-2xl rounded-lg mt-1 max-h-48 overflow-y-auto">
                   <li className="px-4 py-2 hover:bg-red-50 cursor-pointer border-b border-gray-50 text-red-600 text-sm font-bold" onClick={() => { setNuevoTicket({...nuevoTicket, asignadoAId: ''}); setBusquedaUser('Sin asignar / Cualquiera'); setDropdownUser(false); }}>
                     Dejar sin asignar
                   </li>
@@ -396,6 +428,40 @@ export default function TicketsPage() {
             <Button variant="outline" onClick={() => setNuevoModalOpen(false)} className="w-full sm:w-auto h-11 font-bold order-2 sm:order-1">Cancelar</Button>
             <Button className="w-full sm:w-auto h-11 bg-primary hover:bg-primary/90 text-white font-bold order-1 sm:order-2" disabled={saving} onClick={handleCrearTicket}>
               {saving ? 'Generando...' : 'Crear e Iniciar Chat'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* 🔥 MODAL DE MANTENIMIENTO DE SERVIDOR 🔥 */}
+      <Dialog open={modalMantenimientoOpen} onOpenChange={setModalMantenimientoOpen}>
+        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl border-t-4 border-red-500">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-red-600 flex items-center gap-2">
+              <HardDrive size={20}/> Limpieza de Almacenamiento
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-2">
+            <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-xs text-red-800 font-medium">
+              Esta herramienta destruirá físicamente del servidor los archivos e imágenes de los tickets antiguos para evitar que el disco duro colapse. <br/><br/>
+              <b>El texto y la auditoría se mantendrán intactos.</b>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-gray-700">Eliminar archivos más antiguos de:</Label>
+              <select className="w-full h-11 border border-gray-300 rounded-lg px-3 text-sm font-bold bg-white outline-none" value={mesesLimpieza} onChange={e => setMesesLimpieza(e.target.value)}>
+                <option value="3">Hace 3 Meses</option>
+                <option value="6">Hace 6 Meses (Recomendado)</option>
+                <option value="9">Hace 9 Meses</option>
+                <option value="12">Hace 1 Año</option>
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-6 flex gap-2">
+            <Button variant="outline" onClick={() => setModalMantenimientoOpen(false)} disabled={limpiando}>Cancelar</Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white font-bold" onClick={ejecutarLimpiezaMasiva} disabled={limpiando}>
+              {limpiando ? 'Eliminando...' : <><Trash2 size={16} className="mr-2"/> Ejecutar Limpieza</>}
             </Button>
           </DialogFooter>
         </DialogContent>
