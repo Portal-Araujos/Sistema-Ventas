@@ -99,29 +99,31 @@ export async function POST(request: Request) {
     const { accion } = body; 
     if (accion === 'crearTicket') {
       const { tipo, asunto, prioridad, institucionId, asignadoAId, mensajeInicial } = body;
-      
-      // 🔥 LA SOLUCIÓN: Buscar estrictamente el último ticket "TKT-" (ignorando los COB) 🔥
-      const ultimoTicket = await prisma.ticketGestion.findFirst({ 
+      const ticketsTKT = await prisma.ticketGestion.findMany({
         where: { codigo: { startsWith: 'TKT-' } },
-        orderBy: { id: 'desc' } 
+        select: { codigo: true }
       });
-      
-      let nextNumber = 1;
-      if (ultimoTicket) {
-        // Extraemos el número (Ej: de "TKT-015" saca 15)
-        const numeroExtraido = parseInt(ultimoTicket.codigo.replace('TKT-', ''));
-        if (!isNaN(numeroExtraido)) {
-          nextNumber = numeroExtraido + 1;
+      let maxNumber = 0;
+      ticketsTKT.forEach(t => {
+        const numero = parseInt(t.codigo.replace('TKT-', ''));
+        if (!isNaN(numero) && numero > maxNumber) {
+          maxNumber = numero;
         }
-      }
-      
-      const nuevoCodigo = `TKT-${nextNumber.toString().padStart(3, '0')}`;
+      });
 
+      let nextNumber = maxNumber + 1;
+      let nuevoCodigo = `TKT-${nextNumber.toString().padStart(3, '0')}`;
+      let existe = await prisma.ticketGestion.findUnique({ where: { codigo: nuevoCodigo } });
+      while (existe) {
+        nextNumber++;
+        nuevoCodigo = `TKT-${nextNumber.toString().padStart(3, '0')}`;
+        existe = await prisma.ticketGestion.findUnique({ where: { codigo: nuevoCodigo } });
+      }
       const nuevoTicket = await prisma.ticketGestion.create({
         data: {
           codigo: nuevoCodigo,
           tipo: tipo || 'General',
-          asunto, 
+          asunto,
           prioridad: prioridad || 'Media',
           institucionId,
           creadorId: userId,
