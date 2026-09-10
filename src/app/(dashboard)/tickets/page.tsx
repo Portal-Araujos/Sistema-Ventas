@@ -443,8 +443,6 @@ export default function TicketsPage() {
                 </ul>
               )}
             </div>
-
-            {/* 🔥 SLA: CALENDARIO DE FECHA LÍMITE 🔥 */}
             <div className="space-y-2 border-t border-gray-100 pt-3">
               <Label className="text-[11px] font-bold text-gray-700 uppercase flex items-center gap-1"><Clock size={12}/> Fecha Límite de Resolución (Obligatorio)</Label>
               <Input type="date" className="h-11 bg-white border-gray-300 text-sm font-bold text-red-600" value={nuevoTicket.fechaLimite} onChange={e => setNuevoTicket({...nuevoTicket, fechaLimite: e.target.value})} min={new Date().toISOString().split('T')[0]} />
@@ -468,8 +466,6 @@ export default function TicketsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* MODAL MANTENIMIENTO */}
       <Dialog open={modalMantenimientoOpen} onOpenChange={setModalMantenimientoOpen}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl border-t-4 border-red-500">
           <DialogHeader><DialogTitle className="text-lg font-black text-red-600 flex items-center gap-2"><HardDrive size={20}/> Limpieza de Almacenamiento</DialogTitle></DialogHeader>

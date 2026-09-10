@@ -67,6 +67,7 @@ export async function proxy(request: NextRequest) {
         '/inicio': 'inicio:ver',
         '/instituciones': 'instituciones:ver',
         '/ventas': 'ventas:ver',
+        '/base_consultas': 'base_consultas:ver',
         '/cobranzas': 'cobranzas:ver',
         '/agenda': 'agenda:ver',
         '/visitas': 'visitas:ver',

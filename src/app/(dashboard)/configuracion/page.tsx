@@ -20,6 +20,7 @@ const MENU_OPCIONES = [
   { id: 'regimen', icon: <Layers size={18} />, label: 'Régimen Escolar' },
   { id: 'jurisdiccion', icon: <Layers size={18} />, label: 'Jurisdicción' },
   { id: 'modalidad', icon: <BookOpen size={18} />, label: 'Modalidad' },
+  { id: 'modalidadLaboral', icon: <BookOpen size={18} />, label: 'Modalidad Laboral' },
   { id: 'acceso', icon: <Map size={18} />, label: 'Acceso Edificio' },
   { id: 'estadoComercial', icon: <Layers size={18} />, label: 'Estados Com.(Visitas)' },
   { id: 'estadoCliente', icon: <Layers size={18} />, label: 'Estados de Cli. (Ventas)' },
@@ -87,6 +88,7 @@ export default function ConfiguracionPage() {
       case 'tipoGestion': return catalogos.tiposGestion || [];
       case 'estadoOperacion': return catalogos.estadosOperacion || [];
       case 'estadoProduccion': return catalogos.estadosProduccion || [];
+      case 'modalidadLaboral': return catalogos.modalidadesLaborales || [];
       default: return [];
     }
   };
@@ -344,7 +346,7 @@ export default function ConfiguracionPage() {
             )}
             <div className="space-y-2">
               <Label className="text-sm font-semibold text-gray-700">Nombre de la nueva opción</Label>
-              <Input placeholder="Ej. Visita por Zoom" value={createModal.nombre} onChange={e => setCreateModal({...createModal, nombre: e.target.value})} className="h-11" />
+              <Input placeholder="Ej. Visita " value={createModal.nombre} onChange={e => setCreateModal({...createModal, nombre: e.target.value})} className="h-11" />
             </div>
           </div>
           <DialogFooter className="mt-6 flex gap-3 justify-end">

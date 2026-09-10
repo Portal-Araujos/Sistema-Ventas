@@ -51,7 +51,6 @@ export default function OperacionesPage() {
     setToast({ tipo, texto });
     setTimeout(() => setToast(null), 4000);
   };
-  // 🔥 ESTADOS PARA MODAL DE REPROGRAMAR FECHA MASIVA 🔥
   const [modalFechaOpen, setModalFechaOpen] = useState(false);
   const [pedidoIdsReq, setPedidoIdsReq] = useState<string[]>([]);
   const [nuevaFechaReq, setNuevaFechaReq] = useState('');
@@ -129,7 +128,6 @@ export default function OperacionesPage() {
   const handleOpenDetalle = (grupo: any) => {
     setGrupoDetalle(grupo); setContratoExpandido(null); setPrendasSeleccionadas([]); setModalDetalleOpen(true);
   };
-  // 🔥 NUEVA FUNCIÓN: CONSOLIDADOR DE STOCK (CORREGIDA) 🔥
   const handleOpenStock = (grupo: any) => {
     setGrupoStock(grupo);
     let customCount = 0;
@@ -152,12 +150,13 @@ export default function OperacionesPage() {
         const color = det.color || '-';
         const talla = det.talla || '-';
         const genero = det.genero || '-';
+        const observacion = det.observacion || '-';
+        const bordado = det.bordado || '-';
         
-        // 🔥 AQUÍ ESTABA EL ERROR: Se corrigió el símbolo separador a un simple pipe "|" 🔥
-        const key = `${sku}|${ropa}|${color}|${talla}|${genero}`;
+        const key = `${sku}|${ropa}|${color}|${talla}|${genero}|${observacion}|${bordado}`;
 
         if (!mapaGenericas.has(key)) {
-          mapaGenericas.set(key, { key, sku, prenda: ropa, color, talla,genero, totalSolicitado: 0 });
+          mapaGenericas.set(key, { key, sku, prenda: ropa, color, talla,genero, observacion, bordado,  totalSolicitado: 0 });
         }
         mapaGenericas.get(key).totalSolicitado += det.cantidad;
       });
@@ -261,12 +260,8 @@ export default function OperacionesPage() {
     if (isFantasmaA && !isFantasmaB) return 1;
     if (!isFantasmaA && isFantasmaB) return -1;
     if (isFantasmaA && isFantasmaB) return 0;
-
-    // Priorizar atrasados
     if (a.esAtrasado && !b.esAtrasado) return -1;
     if (!a.esAtrasado && b.esAtrasado) return 1;
-
-    // Convertir DD/MM/YYYY a Fecha Real para restar y ordenar
     const parseDate = (dStr: string) => {
       if (!dStr) return new Date(8640000000000000).getTime();
       if (dStr.includes('-')) return new Date(dStr).getTime();
@@ -421,8 +416,6 @@ export default function OperacionesPage() {
           )}
         </div>
       )}
-
-      {/* 🔥 MODAL NUEVO: CALCULADORA Y BALANCE DE STOCK 🔥 */}
       <Dialog open={modalStockOpen} onOpenChange={setModalStockOpen}>
         <DialogContent className="sm:max-w-4xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
           <DialogHeader>
@@ -470,7 +463,8 @@ export default function OperacionesPage() {
                     <tr className="bg-gray-100 border-b border-gray-200 text-gray-600 uppercase">
                       <th className="p-3 font-bold">Código SKU</th>
                       <th className="p-3 font-bold">Prenda</th>
-                      <th className="p-3 text-center font-bold">Talla/Color/ Genero</th>
+                      <th className="p-3 text-center font-bold">Talla/Color/Genero</th>
+                      <th className="p-3">Bordado/Obs</th>
                       <th className="p-3 text-center font-black">Total Solicitado</th>
                       <th className="p-3 text-center font-bold bg-amber-50/50 border-l border-amber-100 w-32">En Stock</th>
                       <th className="p-3 text-center font-bold text-red-600 bg-red-50/50">A Producción</th>
@@ -485,6 +479,10 @@ export default function OperacionesPage() {
                           <td className="p-3 font-mono font-bold text-blue-600">{row.sku}</td>
                           <td className="p-3 font-bold text-gray-800">{row.prenda}</td>
                           <td className="p-3 text-center text-gray-600">{row.talla} ({row.color}) ({row.genero})</td>
+                          <td className="p-3 text-[10px]">
+                          <div className="font-bold text-purple-700">{row.bordado || 'Sin bordado'}</div>
+                          <div className="text-gray-500 italic mt-0.5">{row.observacion || 'Sin obs.'}</div>
+                        </td>
                           <td className="p-3 text-center font-black text-gray-900 text-sm">{row.totalSolicitado}</td>
                           <td className="p-2 border-l border-amber-50 bg-amber-50/30 text-center">
                             <Input 

@@ -183,15 +183,10 @@ export default function UsuariosPage() {
           </button>
         </div>
       </div>
-
-      {/* ========================================================================= */}
-      {/* 🧑‍💻 PESTAÑA: PERSONAL DEL SISTEMA */}
-      {/* ========================================================================= */}
       {activeTab === 'personal' && (
         <div className="animate-in fade-in duration-300">
           
           <div className="flex gap-3 justify-end mb-4">
-            {/* 🔥 BOTÓN PARA GESTIONAR ÁREAS 🔥 */}
             <Button variant="outline" onClick={() => setModalDeptoOpen(true)} className="font-bold border-gray-300 text-gray-700 shadow-sm">
               <Briefcase size={16} className="mr-2" /> Áreas / Departamentos
             </Button>
@@ -272,9 +267,6 @@ export default function UsuariosPage() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 🛡️ PESTAÑA: SEGURIDAD Y BITÁCORA */}
-      {/* ========================================================================= */}
       {activeTab === 'seguridad' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in zoom-in-95 duration-300">
           
@@ -365,9 +357,6 @@ export default function UsuariosPage() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 🔥 NUEVO MODAL: GESTIONAR ÁREAS / DEPARTAMENTOS 🔥 */}
-      {/* ========================================================================= */}
       <Dialog open={modalDeptoOpen} onOpenChange={setModalDeptoOpen}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
           <DialogHeader>
@@ -403,9 +392,6 @@ export default function UsuariosPage() {
           </div>
         </DialogContent>
       </Dialog>
-
-
-      {/* MODAL CREAR/EDITAR USUARIO */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -437,7 +423,6 @@ export default function UsuariosPage() {
                 </select>
               </div>
 
-              {/* 🔥 NUEVO: Asignar Departamento 🔥 */}
               <div>
                 <Label className="text-xs font-bold text-gray-600 uppercase">Área Operativa *</Label>
                 <select className="w-full h-10 border border-gray-300 rounded-lg px-2 text-sm mt-1 outline-none" value={formUser.departamentoId} onChange={e => setFormUser({ ...formUser, departamentoId: e.target.value })}>

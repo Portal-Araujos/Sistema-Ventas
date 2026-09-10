@@ -22,6 +22,7 @@ export async function GET() {
     const regimenes = await prisma.regimenEscolar.findMany({ orderBy: { nombre: 'asc' } });
     const jurisdicciones = await prisma.jurisdiccion.findMany({ orderBy: { nombre: 'asc' } });
     const modalidades = await prisma.modalidadEducativa.findMany({ orderBy: { nombre: 'asc' } });
+    const modalidadesLaborales = await prisma.modalidadLaboral.findMany({ orderBy: { nombre: 'asc' } });
     const accesos = await prisma.accesoEdificio.findMany({ orderBy: { nombre: 'asc' } });
     const sostenimientos = await prisma.sostenimiento.findMany({ orderBy: { nombre: 'asc' } });
     const jornadas = await prisma.jornada.findMany({ orderBy: { nombre: 'asc' } });
@@ -78,7 +79,7 @@ export async function GET() {
       modalidades, accesos, sostenimientos, jornadas, reglasTamano, estadosComerciales,
       estadosCliente, estadosContrato, tiposCobro, tiposCliente, tiposGestion,
       estadosOperacion, estadosProduccion,
-      configSeguridad, usuarios 
+      configSeguridad, usuarios ,modalidadesLaborales
     });
   } catch (error) {
     return NextResponse.json({ error: 'Error al cargar catálogos' }, { status: 500 });
@@ -116,6 +117,7 @@ export async function POST(request: Request) {
       case 'tipoGestion': return NextResponse.json(await prisma.tipoGestion.create({ data: { nombre, activo: true } }), { status: 201 });
       case 'estadoOperacion': return NextResponse.json(await prisma.estadoOperacion.create({ data: { nombre, activo: true } }), { status: 201 });
       case 'estadoProduccion': return NextResponse.json(await prisma.estadoProduccion.create({ data: { nombre, activo: true } }), { status: 201 });
+      case 'modalidadLaboral': return NextResponse.json(await prisma.modalidadLaboral.create({ data: { nombre, activo: true } }), { status: 201 });
       default: return NextResponse.json({ error: 'Tipo de catálogo no válido' }, { status: 400 });
     }
   } catch (error) {
@@ -183,6 +185,7 @@ export async function PUT(request: Request) {
       case 'tipoGestion': item = await prisma.tipoGestion.update({ where: { id: numericId }, data: dataUpdate }); break;
       case 'estadoOperacion': item = await prisma.estadoOperacion.update({ where: { id: numericId }, data: dataUpdate }); break;
       case 'estadoProduccion': item = await prisma.estadoProduccion.update({ where: { id: numericId }, data: dataUpdate }); break;
+      case 'modalidadLaboral': item = await prisma.modalidadLaboral.update({ where: { id: numericId }, data: dataUpdate }); break;
       default: return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 });
     }
     return NextResponse.json(item);

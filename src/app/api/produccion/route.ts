@@ -83,10 +83,11 @@ export async function GET(request: Request) {
           id: grupoKey,
           institucionId: instId,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
-          codigoOP: `PED-${ped.id.slice(0, 6).toUpperCase()}`, // 🔥 ESTANDARIZADO A PED-XXXXXX
+          codigoOP: `PED-${ped.id.slice(0, 6).toUpperCase()}`, 
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaInicioTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
           fechaCompromisoTexto: fConfeccion ? fConfeccion.toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'Sin Asignar',
+          fechaRequeridaTexto: ped.fechaRequerida ? new Date(ped.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : null,
           esAtrasado: esVencido,
           paquetesCantidad: 0,
           totalPrendas: 0,
@@ -107,6 +108,7 @@ export async function GET(request: Request) {
           id: ped.id,
           numContrato: ped.numContrato || 'S/N',
           nombreCliente: ped.nombreCliente || 'Sin Cliente',
+          fechaRequerida: ped.fechaRequerida,
           detalles: []
         });
         escuela.paquetesCantidad += 1;

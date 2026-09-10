@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Package, Search, Calendar, Eye, CheckCircle2, AlertCircle, PackageCheck, Truck, Clock, Printer, ChevronLeft, ChevronRight, Save, Send, Lock } from 'lucide-react';
+import { Package, Search, Calendar, Eye, CheckCircle2, AlertCircle, PackageCheck, Truck, Clock,ArrowUpDown,FileSpreadsheet, ArrowUp, ArrowDown,  Printer, ChevronLeft, ChevronRight, Save, Send, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,18 @@ export default function EmpaquePage() {
   const [fechaHasta, setFechaHasta] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | null }>({ key: '', direction: null });
+
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (columnName: string) => {
+    if (sortConfig.key !== columnName) return <ArrowUpDown size={14} className="text-gray-400 shrink-0" />;
+    return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="text-primary shrink-0" /> : <ArrowDown size={14} className="text-primary shrink-0" />;
+  };
 
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
   const [grupoDetalle, setGrupoDetalle] = useState<any>(null);
@@ -30,6 +42,7 @@ export default function EmpaquePage() {
   const [contratoSel, setContratoSel] = useState<any>(null);
   const [responsable, setResponsable] = useState('');
   const [prendasChecklist, setPrendasChecklist] = useState<any[]>([]);
+  const [codigoEscaneado, setCodigoEscaneado] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [modalGuiaOpen, setModalGuiaOpen] = useState(false);
@@ -73,12 +86,65 @@ export default function EmpaquePage() {
     setContratoSel(contrato);
     setResponsable(contrato.responsableEmpaque !== 'Sin Asignar' ? contrato.responsableEmpaque : '');
     const prendasSeguras = contrato.detallesCompletos || contrato.detalles || [];
-    setPrendasChecklist(JSON.parse(JSON.stringify(prendasSeguras)));
+    
+    // 🔥 INICIALIZAMOS EL CONTADOR DE ESCANEOS AL ABRIR EL MODAL 🔥
+    const checklistConContador = prendasSeguras.map((p: any) => ({
+      ...p,
+      escaneadas: p.estadoEmpaque === 'Preparado' ? p.cantidad : 0
+    }));
+
+    setPrendasChecklist(JSON.parse(JSON.stringify(checklistConContador)));
     setModalEmpacarOpen(true);
   };
 
   const handleCambiarEstadoPrenda = (id: string, nuevoEstado: string) => {
-    setPrendasChecklist(prev => prev.map(p => p.id === id ? { ...p, estadoEmpaque: nuevoEstado } : p));
+    setPrendasChecklist(prev => prev.map(p => {
+      if (p.id === id) {
+        // 🔥 Si usan el selector manual, autocompletamos el contador de golpe 🔥
+        const nuevasEscaneadas = nuevoEstado === 'Preparado' ? p.cantidad : 0;
+        return { ...p, estadoEmpaque: nuevoEstado, escaneadas: nuevasEscaneadas };
+      }
+      return p;
+    }));
+  };
+
+  // 🔥 EL CEREBRO DEL PISTOLEO (Lee el "Enter" de la pistola USB) 🔥
+  const procesarEscaneo = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const sku = codigoEscaneado.trim().toUpperCase();
+      if (!sku) return;
+
+      let prendaEncontrada = false;
+      let checklistActualizada = [...prendasChecklist];
+
+      for (let i = 0; i < checklistActualizada.length; i++) {
+        const p = checklistActualizada[i];
+        const estOp = (p.estadoOperacion || '').toLowerCase();
+        const llegoAEmpaque = estOp.includes('empaque') || estOp.includes('listos') || estOp.includes('despacho');
+
+        // Buscamos una fila que coincida con el SKU y que no esté completa aún
+        if (p.skuCodigo?.toUpperCase() === sku && llegoAEmpaque && p.guiaDespachoId === null) {
+          if (p.escaneadas < p.cantidad) {
+            prendaEncontrada = true;
+            p.escaneadas += 1;
+            
+            // Si con este escaneo completamos la cantidad requerida...
+            if (p.escaneadas === p.cantidad) {
+              p.estadoEmpaque = 'Preparado';
+            }
+            break; // Rompemos el ciclo para sumar de 1 en 1
+          }
+        }
+      }
+
+      if (!prendaEncontrada) {
+        showToast('error', `SKU ${sku} no encontrado o ya está completo.`);
+      }
+
+      setPrendasChecklist(checklistActualizada);
+      setCodigoEscaneado(''); // Limpiamos el input muy rápido para el siguiente "Beep"
+    }
   };
 
   const handleGuardarChecklist = async () => {
@@ -167,7 +233,6 @@ export default function EmpaquePage() {
       const prendaNombre = p.tipoRopa || 'Prenda';
       const color = p.color || '-';
       const talla = p.talla || '-';
-      
       const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
       const key = `${sku}_${prendaColorTalla}`;
       if (!mapaTotales[key]) mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
@@ -239,43 +304,117 @@ export default function EmpaquePage() {
     `);
     printWindow.document.close();
   };
+  const exportarMasterChecklistExcel = (grupo: any) => {
+    if (!grupo || !grupo.pedidosAsociados) return;
 
+    let prendasAImprimir: any[] = [];
+    grupo.pedidosAsociados.forEach((ped: any) => {
+      const listaPrendas = ped.detallesCompletos || ped.detalles || [];
+      listaPrendas.forEach((d: any) => {
+        prendasAImprimir.push({...d, numContrato: ped.numContrato, nombreCliente: ped.nombreCliente});
+      });
+    });
+
+    if (prendasAImprimir.length === 0) return showToast('error', 'No hay prendas para exportar.');
+
+    const wsData: any[][] = [];
+    wsData.push([`MASTER CHECKLIST GLOBAL - ${grupo.institucionNombre}`]);
+    wsData.push([`Vendedor: ${grupo.vendedorNombre}`, `Generado: ${new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })}`]);
+    wsData.push([]);
+    wsData.push(["Código Pedido", "N° Contrato", "Cliente", "SKU", "Prenda", "Color", "Sexo", "Talla", "Cant.", "Bordado", "Observación", "Estado Actual", "Guía"]);
+
+    const mapaTotales: Record<string, { sku: string; prendaColorTalla: string; cantidadTotal: number }> = {};
+
+    prendasAImprimir.forEach(p => {
+      const sku = p.skuCodigo || 'S/N';
+      const prendaNombre = p.tipoRopa || 'Prenda';
+      const color = p.color || '-';
+      const talla = p.talla || '-';
+      const genero = p.genero || 'UNISEX';
+
+      wsData.push([
+        grupo.codigoOP, p.numContrato, p.nombreCliente, sku, prendaNombre, color, genero, talla,
+        p.cantidad, p.bordado || '-', p.observacion || '-', 
+        p.guiaDespachoId ? 'DESPACHADO' : p.estadoOperacion,
+        p.guiaDespachoId ? 'Guía Registrada' : '-'
+      ]);
+
+      const prendaColorTalla = `${prendaNombre} (${color}, ${talla}, ${genero})`;
+      const key = `${sku}_${prendaColorTalla}`;
+      if (!mapaTotales[key]) mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
+      mapaTotales[key].cantidadTotal += (p.cantidad || 1);
+    });
+
+    wsData.push([]); wsData.push(["========================================="]);
+    wsData.push(["TOTALES Y RESUMEN DE CORTE (MASTER)"]);
+    wsData.push(["SKU", "Prenda (Color, Talla, Género)", "Cantidad Total"]);
+    Object.values(mapaTotales).forEach(item => { 
+      wsData.push([item.sku, item.prendaColorTalla, item.cantidadTotal]); 
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Checklist Empaque");
+    XLSX.writeFile(wb, `Checklist_Empaque_${grupo.codigoOP}.xlsx`);
+  };
+
+  // 🔥 LÓGICA DE FILTRADO, ORDENAMIENTO DINÁMICO Y PAGINACIÓN 🔥
   const getBarColor = (avance: number) => {
     if (avance === 100) return 'bg-emerald-500';
     if (avance > 0) return 'bg-amber-500';
     return 'bg-gray-300';
   };
 
-  // 🔥 FILTRO ADAPTADO AL ID REAL DE LA ESCUELA 🔥
+  const getEstadoColor = (estado: string) => {
+    const e = estado?.toLowerCase() || '';
+    if (e.includes('varios')) return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+    if (e.includes('preparado') || e.includes('listos')) return 'bg-teal-100 text-teal-800 border-teal-200';
+    if (e.includes('despacho') || e.includes('completado')) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    return 'bg-gray-100 text-gray-800 border-gray-200';
+  };
+
   const filteredData = data.filter(g => {
     const matchSearch = g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) || g.codigoOP?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchInst = selectedInstFilter ? g.institucionId === selectedInstFilter : true;
-    return matchSearch && matchInst;
+    let matchKpi = true;
+    if (kpiFilter === 'Pendiente') matchKpi = g.estadoGlobal !== 'Completado' && g.estadoGlobal !== 'En Preparación';
+    if (kpiFilter === 'En Preparación') matchKpi = g.estadoGlobal === 'En Preparación';
+    if (kpiFilter === 'Completado') matchKpi = g.estadoGlobal === 'Completado';
+    return matchSearch && matchInst && matchKpi;
   });
-  
-  const sortedData = [...filteredData].sort((a, b) => {
-    const isFantasmaA = !a.fechaRequeridaTexto || a.fechaRequeridaTexto.includes('1969') || a.fechaRequeridaTexto.includes('1970');
-    const isFantasmaB = !b.fechaRequeridaTexto || b.fechaRequeridaTexto.includes('1969') || b.fechaRequeridaTexto.includes('1970');
 
-    if (isFantasmaA && !isFantasmaB) return 1;
-    if (!isFantasmaA && isFantasmaB) return -1;
-    if (isFantasmaA && isFantasmaB) return 0;
+  const sortedData = React.useMemo(() => {
+    let sortableItems = [...filteredData];
+    if (sortConfig.key !== '') {
+      sortableItems.sort((a, b) => {
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
 
-    if (a.esAtrasado && !b.esAtrasado) return -1;
-    if (!a.esAtrasado && b.esAtrasado) return 1;
+        if (sortConfig.key === 'fechaRequeridaTexto') {
+          const parseDate = (dStr: string) => {
+            if (!dStr || dStr.includes('1969') || dStr.includes('1970')) return sortConfig.direction === 'asc' ? Infinity : -Infinity;
+            if (dStr.includes('-')) return new Date(dStr).getTime();
+            const p = dStr.split('/');
+            return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : new Date(dStr).getTime();
+          };
+          aValue = parseDate(aValue);
+          bValue = parseDate(bValue);
+        }
 
-    const parseDate = (dStr: string) => {
-      if (!dStr) return new Date(8640000000000000).getTime();
-      if (dStr.includes('-')) return new Date(dStr).getTime();
-      const p = dStr.split('/');
-      return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : new Date(dStr).getTime();
-    };
+        if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+        if (typeof bValue === 'string') bValue = bValue.toLowerCase();
 
-    return parseDate(a.fechaRequerida || a.fechaRequeridaTexto) - parseDate(b.fechaRequerida || b.fechaRequeridaTexto);
-  });
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [filteredData, sortConfig]);
 
   const totalPages = Math.max(1, Math.ceil(sortedData.length / itemsPerPage));
   const paginatedData = sortedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  
   
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
@@ -343,15 +482,29 @@ export default function EmpaquePage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
           <div className="overflow-auto max-h-[65vh] w-full">
             <table className="w-full text-left border-collapse text-xs min-w-800px">
-              <thead className="sticky top-0 z-20 bg-gray-100 shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
+              <thead className="sticky top-0 z-20 bg-gray-100 shadow-[0_1px_2px_rgba(0,0,0,0.1)] select-none">
                 <tr className="text-gray-600 font-black uppercase border-b border-gray-300">
-                  <th className="p-3.5">Código Pedido</th>
-                  <th className="p-3.5">Institución</th>
-                  <th className="p-3.5">Vendedor</th>
-                  <th className="p-3.5 text-center">Contratos</th>
-                  <th className="p-3.5">Avance de Bodega</th>
-                  <th className="p-3.5 text-center">Estado General</th>
-                  <th className="p-3.5 text-center">Fecha Requerida</th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('codigoOP')}>
+                    <div className="flex items-center gap-1">Código Pedido {getSortIcon('codigoOP')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('institucionNombre')}>
+                    <div className="flex items-center gap-1">Institución {getSortIcon('institucionNombre')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('vendedorNombre')}>
+                    <div className="flex items-center gap-1">Vendedor {getSortIcon('vendedorNombre')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('paquetesCantidad')}>
+                    <div className="flex items-center justify-center gap-1">Contratos {getSortIcon('paquetesCantidad')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('avanceGlobal')}>
+                    <div className="flex items-center gap-1">Avance de Bodega {getSortIcon('avanceGlobal')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('estadoGlobal')}>
+                    <div className="flex items-center justify-center gap-1">Estado General {getSortIcon('estadoGlobal')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('fechaRequeridaTexto')}>
+                    <div className="flex items-center justify-center gap-1">Fecha Requerida {getSortIcon('fechaRequeridaTexto')}</div>
+                  </th>
                   <th className="p-3.5 text-center">Acciones</th>
                 </tr>
               </thead>
@@ -359,7 +512,6 @@ export default function EmpaquePage() {
                 {paginatedData.map((item) => {
                   const isFantasma = !item.fechaRequeridaTexto || item.fechaRequeridaTexto.includes('1969') || item.fechaRequeridaTexto.includes('1970');
                   const fechaReqCorregida = isFantasma ? 'No asignada' : item.fechaRequeridaTexto;
-
                   return (
                     <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
                       <td className="p-3.5 font-mono font-black text-purple-700">{item.codigoOP}</td>
@@ -371,7 +523,6 @@ export default function EmpaquePage() {
                           Tot: {item.totalPrendasEscuela} | Desp: {item.despachadasHistoricasEscuela} | <span className="text-red-500">Saldo: {item.saldoPendienteEscuela}</span> | <span className="text-blue-600">Listo: {item.preparadasSinDespacharEscuela}</span>
                         </div>
                       </td>
-                      
                       <td className="p-3.5">
                         <div className="flex items-center gap-2">
                           <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
@@ -381,23 +532,23 @@ export default function EmpaquePage() {
                         </div>
                         <div className="text-[9px] text-gray-500 mt-1">{item.preparadasSinDespacharEscuela + item.despachadasHistoricasEscuela} de {item.totalPrendasEscuela} prendas listas/despachadas</div>
                       </td>
-
                       <td className="p-3.5 text-center">
                         <Badge className={item.estadoGlobal === 'Completado' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : item.estadoGlobal === 'En Preparación' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200'}>
                           {item.estadoGlobal}
                         </Badge>
                       </td>
-
                       <td className="p-3.5 text-center">
                         <span className={`font-bold px-2 py-1 rounded border ${item.esAtrasado ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
                           {fechaReqCorregida}
                         </span>
                       </td>
-
                       <td className="p-3.5 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <Button size="icon" variant="ghost" title="Imprimir Master Checklist Global" className="h-8 w-8 text-gray-700 hover:bg-gray-100" onClick={() => imprimirMasterChecklist(item)}>
+                          <Button size="icon" variant="ghost" title="Imprimir Global (PDF)" className="h-8 w-8 text-gray-700 hover:bg-gray-100" onClick={() => imprimirMasterChecklist(item)}>
                             <Printer size={16} />
+                          </Button>
+                          <Button size="icon" variant="ghost" title="Descargar (Excel)" className="h-8 w-8 text-emerald-600 hover:bg-emerald-50" onClick={() => exportarMasterChecklistExcel(item)}>
+                            <FileSpreadsheet size={16} />
                           </Button>
                           <Button size="sm" variant="outline" className="h-8 text-xs font-bold text-primary border-primary/30" onClick={() => handleOpenDetalle(item)}>
                             <Eye size={14} className="mr-1" /> Panel Pedido
@@ -410,7 +561,6 @@ export default function EmpaquePage() {
               </tbody>
             </table>
           </div>
-          
           {totalPages > 1 && (
             <div className="sticky bottom-0 z-20 p-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-3 bg-white/95 backdrop-blur-sm shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
               <span className="text-xs text-gray-500 font-medium">Página {currentPage} de {totalPages}</span>
@@ -422,8 +572,6 @@ export default function EmpaquePage() {
           )}
         </div>
       )}
-
-      {/* 👁️ MODAL NIVEL 2: EL GRAN PANEL DE AUDITORÍA */}
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
         <DialogContent className="sm:max-w-5xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[90vh]">
           <DialogHeader>
@@ -509,6 +657,24 @@ export default function EmpaquePage() {
                 <Input className="h-9 text-xs mt-1 border-gray-300 bg-white" placeholder="Ej: Juan Perez" value={responsable} onChange={e => setResponsable(e.target.value)} />
               </div>
             </div>
+            {/* 🔥 PANEL DEL LECTOR DE CÓDIGOS DE BARRAS 🔥 */}
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 mt-2 flex flex-col sm:flex-row items-center gap-4 shadow-inner">
+              <div className="bg-emerald-100 p-2.5 rounded-lg shrink-0"><PackageCheck className="text-emerald-600" size={24}/></div>
+              <div className="flex-1 w-full">
+                <Label className="text-xs font-black text-emerald-800 uppercase tracking-wide">🔫 Pistoleo Rápido (Lector USB)</Label>
+                <Input 
+                  className="h-11 border-emerald-300 focus:ring-emerald-500 font-mono font-black uppercase mt-1 bg-white text-emerald-900 shadow-sm" 
+                  placeholder="Haz clic aquí y pistolea el código SKU..." 
+                  value={codigoEscaneado}
+                  onChange={(e) => setCodigoEscaneado(e.target.value)}
+                  onKeyDown={procesarEscaneo}
+                  autoFocus
+                />
+              </div>
+              <div className="w-full sm:w-1/3 text-[10px] text-emerald-700 leading-tight font-medium bg-emerald-100/50 p-2 rounded">
+                * Cada "BEEP" sumará <b>1 unidad</b>. Cuando el contador alcance la cantidad solicitada, la fila se marcará como <b>Preparada</b> automáticamente.
+              </div>
+            </div>
 
             <div className="border border-gray-200 rounded-xl overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse min-w-850px">
@@ -535,7 +701,14 @@ export default function EmpaquePage() {
                         <td className="p-3 font-mono font-bold text-blue-600">{p.skuCodigo || 'S/N'}</td>
                         <td className="p-3 font-bold text-gray-800">{p.tipoRopa}</td>
                         <td className="p-3 text-gray-600">{p.talla} / {p.color || '-'} / {p.genero}</td>
-                        <td className="p-3 text-center font-black text-sm">{p.cantidad}</td>
+                        <td className="p-3 text-center">
+                          <span className="font-black text-sm block">{p.cantidad}</span>
+                          {!aunEnTaller && !yaDespachado && (
+                            <Badge variant="outline" className={`mt-1 text-[10px] font-bold ${p.escaneadas === p.cantidad ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-amber-50 text-amber-700 border-amber-300'}`}>
+                              Escaneadas: {p.escaneadas || 0}
+                            </Badge>
+                          )}
+                        </td>
                         <td className="p-3 text-[10px]">
                           <div className="font-bold text-purple-700">{p.bordado || 'Sin bordado'}</div>
                           <div className="text-gray-500 italic mt-0.5">{p.observacion || p.observacionOperaciones || 'Sin obs.'}</div>

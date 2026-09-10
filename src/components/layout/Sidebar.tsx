@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Building2, CalendarDays, MapPin, BarChart2, User, Settings, 
   ChevronLeft, ChevronRight, LogOut, DollarSign, Shield, Menu, X, Ticket, BookCheck,
-  Factory, Barcode, Briefcase, Package, Scissors, Truck, ChevronDown, ChevronUp, FileUser, HandCoins, Landmark
+  Factory, Barcode, Briefcase, Package, Scissors, Truck, ChevronDown, ChevronUp,Badge, FileUser, HandCoins, Bell
 } from 'lucide-react';
 const menuStructure = [
   { 
@@ -60,7 +60,6 @@ const menuStructure = [
     ]
   }
 ];
-
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userRol, setUserRol] = useState<string>('vendedor');
@@ -73,6 +72,54 @@ export function Sidebar() {
     'CONFIGURACIONES': false,
     'TICKETS': false
   });
+  const [unreadTicketsCount, setUnreadTicketsCount] = useState(0);
+  const [recentTickets, setRecentTickets] = useState<any[]>([]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Element;
+      if (
+        notificationsRef.current && 
+        !notificationsRef.current.contains(target) &&
+        !target.closest('#mobile-notif-panel') 
+      ) {
+        setIsNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const fetchNotificacionesTickets = async () => {
+      try {
+        const res = await fetch('/api/tickets?alertas=true');
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setRecentTickets(data);
+          const vistos = JSON.parse(localStorage.getItem('ticketsVistos') || '{}');
+          let noLeidos = 0;
+          
+          data.forEach((t: any) => {
+            const fechaVisto = vistos[t.id];
+            const fechaActualizacion = new Date(t.updatedAt).getTime();
+            if (!fechaVisto || fechaActualizacion > fechaVisto) {
+              noLeidos++;
+            }
+          });
+          
+          setUnreadTicketsCount(noLeidos);
+        }
+      } catch (e) {
+        console.error("Error buscando notificaciones", e);
+      }
+    };
+
+    fetchNotificacionesTickets();
+    const intervalId = setInterval(fetchNotificacionesTickets, 30000); 
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     fetch('/api/catalogos')
@@ -83,6 +130,19 @@ export function Sidebar() {
       })
       .catch(err => console.error(err));
   }, []);
+  const handleToggleNotificaciones = () => {
+    const nuevoEstado = !isNotificationsOpen;
+    setIsNotificationsOpen(nuevoEstado);
+    
+    if (nuevoEstado) {
+      const vistos = JSON.parse(localStorage.getItem('ticketsVistos') || '{}');
+      recentTickets.forEach(t => {
+        vistos[t.id] = new Date(t.updatedAt).getTime();
+      });
+      localStorage.setItem('ticketsVistos', JSON.stringify(vistos));
+      setUnreadTicketsCount(0); 
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -124,8 +184,8 @@ export function Sidebar() {
           {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
 
-        <div className="flex h-20 items-center justify-center border-b border-border px-4 shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="flex h-20 items-center justify-between border-b border-border px-4 shrink-0">
+          <div className="flex items-center gap-2">
             <img src="/logo.png" alt="Logo" className="h-10 w-10 object-contain shrink-0" />
             {!isCollapsed && (
               <div className="flex flex-col overflow-hidden">
@@ -134,12 +194,66 @@ export function Sidebar() {
               </div>
             )}
           </div>
+          {!isCollapsed && (
+            <div className="relative" ref={notificationsRef}>
+              <button 
+                onClick={handleToggleNotificaciones} 
+                className="relative p-2 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded-full transition-colors"
+                title="Tickets Asignados"
+              >
+                <Bell size={20} />
+                {unreadTicketsCount > 0 && (
+                  <span className="absolute top-0 right-0 h-4 w-4 bg-red-500 text-white text-[9px] font-black flex items-center justify-center rounded-full border-2 border-white animate-in zoom-in">
+                    {unreadTicketsCount}
+                  </span>
+                )}
+              </button>
+              {isNotificationsOpen && (
+                <div className="absolute top-12 left-0 sm:-left-32 w-72 bg-white border border-gray-200 shadow-2xl rounded-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                  <div className="bg-amber-50 px-4 py-3 border-b border-amber-100 flex justify-between items-center">
+                    <span className="text-xs font-black text-amber-800 uppercase tracking-wider">Tus Tickets Activos</span>
+                    <Badge className="bg-amber-500 hover:bg-amber-500 text-white text-[10px]">{unreadTicketsCount}</Badge>
+                  </div>
+                  
+                  <div className="max-h-80 overflow-y-auto">
+                    {recentTickets.length === 0 ? (
+                      <div className="p-6 text-center text-xs font-bold text-gray-400 italic">No tienes tickets pendientes. ¡Buen trabajo!</div>
+                    ) : (
+                      recentTickets.map(ticket => (
+                        <Link 
+                          key={ticket.id} 
+                          href={`/tickets?ticketId=${ticket.id}`} 
+                          onClick={() => setIsNotificationsOpen(false)}
+                          className="flex flex-col p-3 border-b border-gray-50 hover:bg-blue-50 transition-colors cursor-pointer"
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] font-black text-blue-600">{ticket.codigo}</span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${ticket.estado === 'Re-Abierto' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {ticket.estado}
+                            </span>
+                          </div>
+                          <span className="text-xs font-bold text-gray-800 truncate">{ticket.asunto}</span>
+                          <span className="text-[10px] text-gray-500 mt-1 truncate">De: {ticket.creadorNombre}</span>
+                        </Link>
+                      ))
+                    )}
+                  </div>
+                  
+                  <Link 
+                    href="/tickets" 
+                    onClick={() => setIsNotificationsOpen(false)}
+                    className="block text-center bg-gray-50 hover:bg-gray-100 text-xs font-bold text-gray-600 p-3 transition-colors"
+                  >
+                    Ver Todos
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <nav className="flex-1 p-3 overflow-y-auto overflow-x-hidden space-y-1">
           {permittedMenu.map((group: any, idx) => {
-            
-            // 1. LINK SIMPLE (Como "Inicio")
             if (!group.isGroup) {
               const isActive = pathname === group.href;
               return (
@@ -149,15 +263,11 @@ export function Sidebar() {
                 </Link>
               );
             }
-
-            // 2. GRUPO ACORDEÓN (Visitas, Producción, Config)
             const isOpen = openGroups[group.label];
             const hasActiveChild = group.items.some((i: any) => pathname === i.href);
 
             return (
               <div key={group.label} className="mt-4 first:mt-0">
-                
-                {/* CABECERA DEL ACORDEÓN */}
                 <button 
                   onClick={() => toggleGroup(group.label)} 
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all ${isCollapsed ? 'justify-center' : ''} ${hasActiveChild && !isOpen ? 'bg-primary/5 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
@@ -169,8 +279,6 @@ export function Sidebar() {
                   </div>
                   {!isCollapsed && (isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
                 </button>
-
-                {/* ÍTEMS DEL ACORDEÓN */}
                 {(!isCollapsed && isOpen) && (
                   <div className="mt-1 ml-4 pl-3 border-l-2 border-gray-100 flex flex-col gap-1">
                     {group.items.map((item: any) => {
@@ -192,7 +300,6 @@ export function Sidebar() {
             );
           })}
         </nav>
-
         <div className="p-4 border-t border-border shrink-0 bg-white">
           <button onClick={handleLogout} className="flex items-center gap-3 rounded-xl px-3 py-3 w-full text-red-600 hover:bg-red-50 transition-colors" title={isCollapsed ? "Cerrar Sesión" : undefined}>
             <LogOut size={20} className="shrink-0 text-red-500" />
@@ -200,8 +307,6 @@ export function Sidebar() {
           </button>
         </div>
       </aside>
-
-      {/* VERSIÓN MÓVIL (MENÚ INFERIOR) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-border flex justify-around items-center h-16 px-1 z-40 shadow-[0_-4px_15px_rgba(0,0,0,0.05)] pb-safe">
         {flatPermittedItems.slice(0, 3).map((item) => {
           const isActive = pathname === item.href;
@@ -212,13 +317,28 @@ export function Sidebar() {
             </Link>
           );
         })}
-        <button onClick={() => setIsMobileMenuOpen(true)} className="flex flex-col items-center justify-center w-full h-full gap-1">
+        <button 
+          onClick={() => { setIsNotificationsOpen(!isNotificationsOpen); setIsMobileMenuOpen(false); }} 
+          className="flex flex-col items-center justify-center w-full h-full gap-1 relative"
+        >
+          <div className="relative">
+            <Bell size={22} className={isNotificationsOpen ? 'text-amber-500' : 'text-muted-foreground'} />
+            {unreadTicketsCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 h-4 w-4 bg-red-500 text-white text-[9px] font-black flex items-center justify-center rounded-full border border-white animate-in zoom-in">
+                {unreadTicketsCount}
+              </span>
+            )}
+          </div>
+          <span className={`text-[10px] ${isNotificationsOpen ? 'text-amber-500 font-bold' : 'text-muted-foreground'}`}>Alertas</span>
+        </button>
+        <button 
+          onClick={() => { setIsMobileMenuOpen(true); setIsNotificationsOpen(false); }} 
+          className="flex flex-col items-center justify-center w-full h-full gap-1"
+        >
           <Menu size={22} className={isMobileMenuOpen ? 'text-primary' : 'text-muted-foreground'} />
           <span className={`text-[10px] ${isMobileMenuOpen ? 'text-primary font-bold' : 'text-muted-foreground'}`}>Más</span>
         </button>
       </nav>
-
-      {/* VERSIÓN MÓVIL (MENÚ DESPLEGABLE "MÁS") */}
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end animate-in fade-in duration-200">
           <div className="absolute inset-0 bg-black/60" onClick={() => setIsMobileMenuOpen(false)}></div>
@@ -266,6 +386,56 @@ export function Sidebar() {
             <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full p-4 rounded-xl bg-red-50 text-red-600 font-bold border border-red-100 hover:bg-red-100 transition-colors mt-2">
               <LogOut size={20} /> Cerrar Sesión
             </button>
+          </div>
+        </div>
+      )}
+      {isNotificationsOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setIsNotificationsOpen(false)}></div>
+          
+          <div id="mobile-notif-panel" className="relative bg-white w-full rounded-t-3xl p-5 pb-8 shadow-2xl animate-in slide-in-from-bottom max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-center mb-5 border-b border-border pb-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-100 p-2 rounded-full"><Bell className="text-amber-600" size={20} /></div>
+                <span className="font-bold text-foreground text-sm">Tus Alertas</span>
+                <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-[10px] ml-1">{unreadTicketsCount} Nuevas</Badge>
+              </div>
+              <button onClick={() => setIsNotificationsOpen(false)} className="bg-muted text-muted-foreground hover:bg-gray-200 p-2 rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto flex-1 mb-2 space-y-2">
+              {recentTickets.length === 0 ? (
+                <div className="p-6 text-center text-xs font-bold text-gray-400 italic bg-gray-50 rounded-xl border border-dashed border-gray-200">No tienes tickets ni alertas pendientes.</div>
+              ) : (
+                recentTickets.map(ticket => (
+                  <Link 
+                    key={ticket.id} 
+                    href={`/tickets?ticketId=${ticket.id}`} 
+                    onClick={() => setIsNotificationsOpen(false)}
+                    className="flex flex-col p-3.5 border border-gray-100 bg-gray-50 rounded-xl hover:bg-blue-50 active:bg-blue-100 transition-colors"
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-black text-blue-600">{ticket.codigo}</span>
+                      <span className={`text-[9px] px-2 py-0.5 rounded font-bold ${ticket.estado === 'Re-Abierto' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {ticket.estado}
+                      </span>
+                    </div>
+                    <span className="text-sm font-bold text-gray-800 leading-tight">{ticket.asunto}</span>
+                    <span className="text-[10px] text-gray-500 mt-2 font-medium">De: {ticket.creadorNombre}</span>
+                  </Link>
+                ))
+              )}
+            </div>
+            
+            <Link 
+              href="/tickets" 
+              onClick={() => setIsNotificationsOpen(false)}
+              className="mt-3 block text-center bg-white border border-gray-200 hover:bg-gray-50 text-xs font-bold text-gray-600 p-3.5 rounded-xl transition-colors shadow-sm"
+            >
+              Ver Todos los Tickets
+            </Link>
           </div>
         </div>
       )}

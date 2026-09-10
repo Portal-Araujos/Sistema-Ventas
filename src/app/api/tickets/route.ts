@@ -16,8 +16,42 @@ export async function GET(request: Request) {
     const userId = payload.id as string;
     const userRol = payload.rol as string;
     const userPermisos = (payload.permisos as string[]) || [];
+    const { searchParams } = new URL(request.url);
 
-    // 🔥 LAZY SLA: AUTO-CIERRE DE TICKETS VENCIDOS 🔥
+    if (searchParams.get('alertas') === 'true') {
+      const whereAlertas: any = {
+        estado: { in: ['Abierto', 'Re-Abierto'] }
+      };
+      const esSuperAdmin = userRol === 'super_admin' || userPermisos.includes('ver_todos_tickets');
+      if (!esSuperAdmin) {
+        whereAlertas.asignados = { some: { id: userId } };
+      }
+
+      const alertasTickets = await prisma.ticketGestion.findMany({
+        where: whereAlertas,
+        select: {
+          id: true,
+          codigo: true,
+          estado: true,
+          asunto: true,
+          updatedAt: true, 
+          creador: { select: { nombre: true } }
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 10
+      });
+      const alertasFormateadas = alertasTickets.map((t: any) => ({
+        id: t.id,
+        codigo: t.codigo,
+        estado: t.estado,
+        asunto: t.asunto,
+        updatedAt: t.updatedAt, 
+        creadorNombre: t.creador?.nombre || 'Sistema'
+      }));
+
+      return NextResponse.json(alertasFormateadas); 
+    }
+
     const ticketsVencidos = await prisma.ticketGestion.findMany({
       where: {
         estado: { notIn: ['Cerrado', 'Resuelto'] },
@@ -34,7 +68,7 @@ export async function GET(request: Request) {
             fechaCierre: new Date(),
             mensajes: {
               create: {
-                remitenteId: userId, // Auditoría del usuario en sesión
+                remitenteId: userId, 
                 contenido: '⚠️ Ticket cerrado automáticamente por caducidad de fecha límite (SLA).',
                 esSistema: true
               }
@@ -49,7 +83,6 @@ export async function GET(request: Request) {
       include: { departamento: true } 
     });
     const miDepartamento = dbUser?.departamento?.nombre || 'General';
-    const { searchParams } = new URL(request.url);
     const ticketId = searchParams.get('id');
 
     if (ticketId) {
@@ -58,7 +91,7 @@ export async function GET(request: Request) {
         include: {
           institucion: { select: { nombre: true } },
           creador: { select: { nombre: true, rol: { select: { nombre: true } } } },
-          asignados: { select: { id: true, nombre: true, rol: { select: { nombre: true } } } }, // 🔥 MÚLTIPLES DUEÑOS
+          asignados: { select: { id: true, nombre: true, rol: { select: { nombre: true } } } }, 
           mensajes: {
             include: { remitente: { select: { nombre: true, rol: { select: { nombre: true } } } } },
             orderBy: { createdAt: 'asc' }
@@ -90,7 +123,7 @@ export async function GET(request: Request) {
     if (!esSuperAdmin) {
       if (userRol === 'vendedor') {
         whereClause.OR = [
-          { asignados: { some: { id: userId } } }, // 🔥 AHORA BUSCA EN EL ARREGLO
+          { asignados: { some: { id: userId } } },
           { creadorId: userId }
         ];
       } else {
@@ -108,7 +141,7 @@ export async function GET(request: Request) {
       where: whereClause,
       include: {
         institucion: { select: { nombre: true } },
-        asignados: { select: { nombre: true } }, // 🔥 AHORA INCLUYE EL ARREGLO
+        asignados: { select: { nombre: true } }, 
         creador: { select: { nombre: true } }
       },
       orderBy: { updatedAt: 'desc' }
@@ -128,10 +161,8 @@ export async function POST(request: Request) {
     if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userId = payload.id as string;
-    
     const contentType = request.headers.get('content-type') || '';
 
-    // 1. SI ES UN ARCHIVO FÍSICO DESDE EL CHAT (FormData)
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
       const accion = formData.get('accion') as string;
@@ -178,22 +209,16 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({ error: 'Acción FormData no válida' }, { status: 400 });
     }
-
-    // 2. SI ES TEXTO JSON (Para Crear un Ticket Nuevo)
     const body = await request.json();
     const { accion } = body; 
     
     if (accion === 'crearTicket') {
       const { tipo, asunto, prioridad, institucionId, asignadosIds, mensajeInicial, fechaLimite } = body;
-      
-      // 🔥 SLA: FECHA LÍMITE DIRECTA DEL CALENDARIO 🔥
       let fechaLimiteCalc = null;
       if (fechaLimite) {
         // Le sumamos el 23:59:59 para que venza al FINAL de ese día en hora Ecuador
         fechaLimiteCalc = new Date(`${fechaLimite}T23:59:59.999-05:00`); 
       }
-
-      // 🔥 CONEXIÓN MÚLTIPLE DE USUARIOS 🔥
       let asignadosData = {};
       if (asignadosIds && Array.isArray(asignadosIds) && asignadosIds.length > 0) {
         asignadosData = { connect: asignadosIds.map((id: string) => ({ id })) };
@@ -225,8 +250,8 @@ export async function POST(request: Request) {
               prioridad: prioridad || 'Media',
               institucionId,
               creadorId: userId,
-              asignados: asignadosData, // 🔥 AHORA ES UN ARREGLO
-              fechaLimite: fechaLimiteCalc, // 🔥 GUARDAMOS LA FECHA DE CADUCIDAD
+              asignados: asignadosData,
+              fechaLimite: fechaLimiteCalc, 
               estado: 'Abierto',
               mensajes: {
                 create: { remitenteId: userId, contenido: mensajeInicial || 'Ticket abierto.' }
@@ -259,11 +284,8 @@ export async function PUT(request: Request) {
     const userRol = payload.rol as string;
     const body = await request.json();
     const { ticketId, nuevoEstado, motivoReapertura } = body;
-    
     const ticket = await prisma.ticketGestion.findUnique({ where: { id: parseInt(ticketId) } });
     if (!ticket) return NextResponse.json({ error: 'Ticket no encontrado' }, { status: 404 });
-
-    // 🔥 REGLA DE ORO: SOLO EL CREADOR PUEDE CERRARLO 🔥
     if (nuevoEstado === 'Cerrado') {
       if (ticket.creadorId !== userId) {
         return NextResponse.json({ error: 'Operación denegada. Solo la persona que abrió el ticket puede marcarlo como Resuelto/Cerrado.' }, { status: 403 });
@@ -278,7 +300,7 @@ export async function PUT(request: Request) {
         data: {
           estado: 'Re-Abierto',
           fechaCierre: null,
-          fechaLimite: null, // Si se reabre, quitamos la caducidad
+          fechaLimite: null, 
           mensajes: {
             create: { remitenteId: userId, contenido: `⚠️ Ticket Re-Abierto. Motivo: ${motivoReapertura}`, esSistema: true }
           }

@@ -25,6 +25,7 @@ const MODULOS_PERMISOS = [
       { id: 'ventas:ver', label: 'Ver Historial de Ventas' },
       { id: 'ventas:crear', label: 'Crear Contratos / Ventas' },
       { id: 'ventas:validar', label: 'Auditar Campos de Facturación' },
+      { id: 'base_consultas:ver', label: 'Consulta de base Clientes' },
       { id: 'visitas:ver', label: 'Ver Seguimientos y Rutas GPS' },
       { id: 'indicadores:ver', label: 'Ver Indicadores y KPIs de Ventas' },
       { id: 'cobranzas:ver', label: 'Ver gestión de cobranzas' }

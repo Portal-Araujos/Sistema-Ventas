@@ -46,8 +46,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
       setArchivoAdjunto(null);
     }
   }, [isOpen, ticketId]);
-
-  // 🔥 ALGORITMO ENTERPRISE: Comprime imagen y la empaqueta como ARCHIVO FÍSICO 🔥
   const comprimirImagen = (file: File): Promise<File> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -100,7 +98,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
 
     setLoading(true);
     try {
-      // 🔥 AHORA ENVIAMOS UN FORM-DATA REAL (Cero Base64) 🔥
       const formData = new FormData();
       formData.append('accion', 'enviarMensaje');
       formData.append('ticketId', String(ticketId));
@@ -111,7 +108,7 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
 
       const res = await fetch('/api/tickets', {
         method: 'POST',
-        body: formData // Node.js detectará automáticamente que es multipart/form-data
+        body: formData 
       });
 
       if (res.ok) {
@@ -146,8 +143,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
       setLoading(false);
     }
   };
-
-  // 🔥 RECUPERAMOS LA FUNCIÓN PARA BORRAR ARCHIVOS FÍSICOS 🔥
   const borrarArchivo = async (mensajeId: number) => {
     if (!confirm('¿Estás seguro de borrar este archivo? Se eliminará del servidor para ahorrar espacio, pero el texto se mantendrá.')) return;
     setLoading(true);
@@ -195,8 +190,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
             <X size={18} />
           </button>
         </div>
-
-        {/* BODY / CHAT AREA */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {!ticket ? (
             <div className="text-center text-gray-400 text-xs mt-10 animate-pulse font-bold">Cargando hilo de conversación...</div>
@@ -221,13 +214,11 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
                 <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-4`}>
                   <div className={`text-[9px] font-bold text-gray-400 mb-1 px-1 flex gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                     <span>{msg.remitente?.nombre || 'Sistema'} ({msg.remitente?.rol || 'Auto'})</span>
-                    <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>{new Date(msg.createdAt).toLocaleString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   
                   <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 shadow-sm text-sm ${isMe ? 'bg-primary text-white rounded-tr-none' : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none'}`}>
                     <p className="whitespace-pre-wrap">{msg.contenido}</p>
-                    
-                    {/* 🔥 PANEL DE ADJUNTOS AVANZADO (Descargar y Borrar) 🔥 */}
                     {msg.adjuntoUrl && (
                       <div className="mt-2 border-t border-white/20 pt-2 relative group">
                         {isImage ? (
@@ -235,8 +226,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
                             <a href={msg.adjuntoUrl} target="_blank" rel="noreferrer" title="Ver en pantalla completa">
                               <img src={msg.adjuntoUrl} alt="adjunto" className="rounded-lg max-h-48 object-cover border border-black/10 cursor-zoom-in hover:opacity-90 transition-opacity" />
                             </a>
-                            
-                            {/* CAJA DE HERRAMIENTAS FLOTANTE (Solo se ve al pasar el mouse) */}
                             <div className="absolute -top-3 -right-3 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <a href={msg.adjuntoUrl} download={msg.adjuntoNombre || 'imagen_descargada.jpg'} className="bg-blue-500 text-white p-1.5 rounded-full shadow-md hover:bg-blue-600 transition-colors" title="Descargar a la computadora">
                                 <Download size={14}/>
@@ -268,8 +257,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
                         )}
                       </div>
                     )}
-
-                    {/* 🔥 MENSAJE DE REEMPLAZO SI EL ARCHIVO FUE BORRADO 🔥 */}
                     {!msg.adjuntoUrl && msg.adjuntoNombre?.includes('eliminado') && (
                       <div className="mt-2 border-t border-white/20 pt-2 flex items-center gap-1">
                         <Trash2 size={12} className={isMe ? 'text-white/70' : 'text-gray-400'} />
@@ -285,8 +272,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
           )}
           <div ref={mensajesEndRef} />
         </div>
-
-        {/* PREVIEW DE ADJUNTO (Antes de enviar) */}
         {archivoAdjunto && (
           <div className="bg-blue-50 border-t border-blue-200 p-2 px-4 flex justify-between items-center">
             <div className="flex items-center gap-2 text-xs font-bold text-blue-800">
@@ -297,8 +282,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
             <button onClick={() => setArchivoAdjunto(null)} className="text-red-500 hover:text-red-700"><X size={16}/></button>
           </div>
         )}
-
-        {/* FOOTER / CONTROLES DE ACCIÓN */}
         <div className="bg-white border-t border-gray-200 p-3 z-10">
           
           {ticket?.estado !== 'Cerrado' ? (
@@ -348,7 +331,6 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
               <Button type="button" variant="outline" size="sm" onClick={() => cambiarEstado('Pendiente')} className="flex-1 text-xs h-8 text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100 font-bold">
                 Pausar a Pendiente
               </Button>
-              {/* Ocultamos el botón de cerrar si no eres el dueño */}
               {ticket?.creadorId === currentUserId && (
                 <Button type="button" variant="outline" size="sm" onClick={() => cambiarEstado('Cerrado')} className="flex-1 text-xs h-8 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 font-bold">
                   <CheckCircle2 size={14} className="mr-1"/> Marcar Resuelto

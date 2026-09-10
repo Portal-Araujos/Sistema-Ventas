@@ -227,6 +227,7 @@ model Institution {
   pedidos            Pedido[]
   guiasDespacho      GuiaDespacho[]
   tickets            TicketGestion[]
+  baseConsultas      BaseConsulta[]
 
   @@map("instituciones")
 }
@@ -310,6 +311,7 @@ model Venta {
   tipoClienteId     Int?            @map("tipo_cliente_id")
   tieneCedula       Boolean         @default(false) @map("tiene_cedula")
   tipoCliente       TipoCliente?    @relation(fields: [tipoClienteId], references: [id])
+  numeroCedula      String?
 
   @@map("ventas")
 }
@@ -507,6 +509,33 @@ model MensajeTicket {
   remitente     Usuario       @relation(fields: [remitenteId], references: [id])
 
   @@map("mensajes_ticket")
+}
+
+model ModalidadLaboral {
+  id        Int            @id @default(autoincrement())
+  nombre    String         @unique
+  activo    Boolean        @default(true)
+  clientes  BaseConsulta[]
+
+  @@map("modalidades_laborales")
+}
+
+model BaseConsulta {
+  id              String            @id @default(uuid())
+  identificacion  String            @unique // Cédula o RUC (Único para actualizar masivamente sin duplicar)
+  nombres         String
+  liquidoPagar    Float             @map("liquido_pagar") // Capacidad de endeudamiento
+  
+  modalidadId     Int?              @map("modalidad_id")
+  modalidad       ModalidadLaboral? @relation(fields: [modalidadId], references: [id])
+  
+  institucionId   String?           @map("institucion_id") // Opcional (Puede no tener escuela)
+  institucion     Institution?      @relation(fields: [institucionId], references: [id], onDelete: SetNull)
+  
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  @@map("base_consultas")
 }
 
 model DepartamentoEmpresa {

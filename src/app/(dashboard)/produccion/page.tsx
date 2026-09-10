@@ -181,8 +181,11 @@ export default function ProduccionPage() {
       const sku = p.skuCodigo || 'S/N';
       const color = p.color ? p.color.trim() : '-';
       const talla = p.talla ? p.talla.trim() : '-';
+      const genero = p.genero ? p.genero.trim() : 'UNISEX';
       const prendaNombre = p.tipoRopa ? p.tipoRopa.trim() : 'Prenda';
-      const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
+      
+      // 🔥 GÉNERO AÑADIDO AL RESUMEN 🔥
+      const prendaColorTalla = `${prendaNombre} (${color}, ${talla}, ${genero})`;
 
       const key = `${sku}_${prendaColorTalla}`;
       if (!mapaTotales[key]) mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
@@ -191,7 +194,7 @@ export default function ProduccionPage() {
 
     wsData.push([]); wsData.push(["========================================="]);
     wsData.push(["TOTALES Y RESUMEN DE CORTE DE PRENDAS"]);
-    wsData.push(["SKU", "Prenda(color y talla)", "Cantidad Total"]);
+    wsData.push(["SKU", "Prenda (Color, Talla, Género)", "Cantidad Total"]); // 🔥 TÍTULO ACTUALIZADO
     Object.values(mapaTotales).forEach(item => { wsData.push([item.sku, item.prendaColorTalla, item.cantidadTotal]); });
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -208,7 +211,8 @@ export default function ProduccionPage() {
           todasLasPrendas.push({
             ...item, codigoOP: grupo.codigoOP, institucionNombre: grupo.institucionNombre,
             numContrato: ped.numContrato, nombreCliente: ped.nombreCliente, ingresoTaller: grupo.fechaInicioTexto,
-            fechaCompromiso: item.fechaEstimadaConfeccion ? new Date(item.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : grupo.fechaCompromisoTexto
+            // 🔥 CORRECCIÓN: BÚSQUEDA EXHAUSTIVA DE LA FECHA 🔥
+            fechaCompromiso: item.fechaEstimadaConfeccionTexto || (item.fechaEstimadaConfeccion ? new Date(item.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : (grupo.fechaRequeridaTexto || grupo.fechaCompromisoTexto || 'No asignada'))
           });
         });
       });
@@ -237,8 +241,13 @@ export default function ProduccionPage() {
     prendasAImprimir.forEach(p => {
       const sku = p.skuCodigo || 'S/N'; const prendaNombre = p.tipoRopa || 'Prenda'; const color = p.color || '-'; const talla = p.talla || '-';
       const bordadoText = p.bordado || 'Sin bordado'; const obsText = p.observacion || p.observacionOperaciones || 'Sin observaciones';
-      const fCompromiso = p.fechaEstimadaConfeccion ? new Date(p.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : grupo.fechaCompromisoTexto;
-      const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
+      const genero = p.genero || 'UNISEX'; // 🔥 GÉNERO AÑADIDO 🔥
+      
+      // 🔥 CORRECCIÓN: BÚSQUEDA EXHAUSTIVA DE LA FECHA 🔥
+      const fCompromiso = p.fechaEstimadaConfeccionTexto || (p.fechaEstimadaConfeccion ? new Date(p.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : (grupo.fechaRequeridaTexto || grupo.fechaCompromisoTexto || 'No asignada'));
+      
+      // 🔥 GÉNERO EN EL TEXTO DEL RESUMEN 🔥
+      const prendaColorTalla = `${prendaNombre} (${color}, ${talla}, ${genero})`;
       
       const key = `${sku}_${prendaColorTalla}`;
       if (!mapaTotalesPDF[key]) mapaTotalesPDF[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
@@ -247,7 +256,7 @@ export default function ProduccionPage() {
       htmlFilasDetalle += `
         <tr>
           <td>${grupo.codigoOP}</td><td>${grupo.institucionNombre}</td><td>${p.numContrato}</td><td>${p.nombreCliente}</td>
-          <td>${sku}</td><td>${prendaNombre}</td><td>${color}</td><td>${p.genero || 'UNISEX'}</td><td>${talla}</td>
+          <td>${sku}</td><td>${prendaNombre}</td><td>${color}</td><td>${genero}</td><td>${talla}</td>
           <td style="text-align:center; font-weight:bold;">${p.cantidad}</td><td>${bordadoText}</td><td>${obsText}</td>
           <td>${p.operarioAsignado?.nombre || 'Sin Asignar'}</td>
           <td>${p.estadoProduccion || 'Planificacion'}</td><td>${grupo.fechaInicioTexto || '-'}</td><td>${fCompromiso}</td>
@@ -266,7 +275,7 @@ export default function ProduccionPage() {
         <body>
           <h1>${tituloDocumento}</h1><p>Fecha Impresión: ${new Date().toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })} | Vendedor: ${grupo.vendedorNombre}</p>
           <table><thead><tr><th>Código OP</th><th>Institución</th><th>N° Contrato</th><th>Cliente</th><th>SKU</th><th>Prenda</th><th>Color</th><th>Sexo</th><th>Talla</th><th>Cant.</th><th>Bordado</th><th>Observación</th><th>Operario</th><th>Estado</th><th>Ingreso Taller</th><th>F. Compromiso</th></tr></thead><tbody>${htmlFilasDetalle}</tbody></table>
-          <div style="page-break-inside: avoid;"><h2 style="text-align:center; font-size:14px; margin-bottom:8px;">TOTALES Y RESUMEN DE CORTE</h2><table class="tabla-totales"><thead><tr><th>SKU</th><th>Prenda (Color y Talla)</th><th style="text-align:center;">Cantidad Total</th></tr></thead><tbody>${htmlFilasTotales}</tbody></table></div>
+          <div style="page-break-inside: avoid;"><h2 style="text-align:center; font-size:14px; margin-bottom:8px;">TOTALES Y RESUMEN DE CORTE</h2><table class="tabla-totales"><thead><tr><th>SKU</th><th>Prenda (Color, Talla, Género)</th><th style="text-align:center;">Cantidad Total</th></tr></thead><tbody>${htmlFilasTotales}</tbody></table></div>
           <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
       </html>
@@ -383,6 +392,7 @@ export default function ProduccionPage() {
                   <th className="p-3.5 text-center">Prendas</th>
                   <th className="p-3.5 text-center">Estado Taller</th>
                   <th className="p-3.5">Fechas (Inicio / Comp.)</th>
+                  <th className="p-3.5 text-center">Fecha Requerida</th> 
                   <th className="p-3.5 text-center">Acciones</th>
                 </tr>
               </thead>
@@ -400,6 +410,11 @@ export default function ProduccionPage() {
                       <td className="p-3.5 text-gray-500 whitespace-nowrap">
                         <div className="text-[10px]">IN: <span className="font-bold">{item.fechaInicioTexto}</span></div>
                         <div className={`text-[10px] ${item.esAtrasado ? 'text-red-600 font-bold' : 'text-gray-600'}`}>MAX: <span>{item.fechaCompromisoTexto}</span></div>
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <span className={`font-bold px-2 py-1 rounded border ${item.esAtrasado ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                          {item.fechaRequeridaTexto || 'No asignada'}
+                        </span>
                       </td>
                       <td className="p-3.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
@@ -490,7 +505,7 @@ export default function ProduccionPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {ped.detalles?.map((p: any) => (
+                            {[...(ped.detalles || [])].sort((a: any, b: any) => (a.skuCodigo || '').localeCompare(b.skuCodigo || '')).map((p: any) => (
                               <tr key={p.id} className="hover:bg-white">
                                 <td className="p-2 text-center">
                                   <input type="checkbox" className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer" checked={prendasSeleccionadas.includes(p.id)} onChange={() => toggleSeleccionPrenda(p.id)} />

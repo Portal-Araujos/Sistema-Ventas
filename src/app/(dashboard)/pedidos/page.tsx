@@ -131,7 +131,9 @@ export default function PedidosPage() {
       observacion: pedido.observacion || '',
       tipoCobroId: pedido.tipoCobroId || '',
       estadoClienteId: pedido.estadoClienteId || '',
-      estadoContratoId: pedido.estadoContratoId || ''
+      estadoContratoId: pedido.estadoContratoId || '',
+      tieneCedula: pedido.tieneCedula || false,
+      numeroCedula: pedido.numeroCedula || ''
     });
     setMostrarFormContrato(false); 
   };
@@ -140,7 +142,7 @@ export default function PedidosPage() {
     setPedidoEditSelId('NUEVO');
     setContratoData({
       numContrato: '', nombreCliente: '', valorContrato: '', abono: '', meses: '12', mesCobro: 'Enero',
-      prendas: [], tipoPedido: 'Pedido', observacion: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: ''
+      prendas: [], tipoPedido: 'Pedido', observacion: '', tipoCobroId: '', estadoClienteId: '', estadoContratoId: '' , tieneCedula: false, numeroCedula: ''
     });
     setMostrarFormContrato(true); 
   };
@@ -337,11 +339,7 @@ export default function PedidosPage() {
   };
 
   const esModoAdmin = currentUser?.rol?.toLowerCase().includes('admin');
-
-  // FILTRO GLOBAL: Filtramos todos los registros ANTES de paginar
   const filteredGrupos = grupos.filter(g => g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) || g.codigoPedido?.toLowerCase().includes(searchTerm.toLowerCase()));
-  
-  // CÁLCULO DE PAGINACIÓN
   const totalPages = Math.max(1, Math.ceil(filteredGrupos.length / itemsPerPage));
   const paginatedGrupos = filteredGrupos.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -438,7 +436,34 @@ export default function PedidosPage() {
                       </td>
 
                       <td className="p-3.5 text-gray-500 whitespace-nowrap">{item.updatedAt}</td>
-                      <td className="p-3.5 text-center font-bold text-blue-600">{item.fechaRequeridaTexto}</td>
+                      <td className="p-3.5 text-center">
+                        <div className="flex flex-col items-center justify-center relative group">
+                          <span className="font-bold text-blue-600">{item.fechaRequeridaTexto}</span>
+                          
+                          {/* 🔥 ALERTA DE OBSERVACIÓN (CAMBIO DE FECHA) 🔥 */}
+                          {item.pedidosAsociados?.some((p: any) => p.observacion?.trim()) && (
+                            <div className="mt-1 flex items-center justify-center cursor-help">
+                              <AlertCircle size={14} className="text-red-500 animate-pulse" />
+                              <span className="ml-1 text-[9px] font-black text-red-500 uppercase tracking-wide">Aviso</span>
+                              
+                              {/* Tooltip Emergente (Hover en PC / Tap en Celular) */}
+                              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-56 sm:w-72 bg-gray-900 text-white text-xs rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+                                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 border-x-8 border-x-transparent border-t-8 border-t-gray-900"></div>
+                                <p className="font-bold text-red-400 mb-2 border-b border-gray-700 pb-1 flex items-center gap-1">
+                                  <AlertCircle size={14}/> Motivo de Reprogramación:
+                                </p>
+                                <div className="space-y-2 max-h-32 overflow-y-auto text-left">
+                                  {item.pedidosAsociados.filter((p: any) => p.observacion?.trim()).map((p: any, idx: number) => (
+                                    <p key={idx} className="leading-tight">
+                                      <span className="text-gray-400 font-bold">Contrato #{p.numContrato}:</span> {p.observacion}
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-3.5">
                         <div className="flex items-center justify-center gap-1.5">
                           

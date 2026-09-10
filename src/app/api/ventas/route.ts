@@ -34,7 +34,6 @@ export async function GET(request: Request) {
     const mesCobro = searchParams.get('mesCobro');
     const where: any = {};
     
-    // 🔥 AQUÍ ESTÁ LA MAGIA: Solo el vendedor tiene restricciones 🔥
     if (userRol === 'vendedor') {
       where.vendedorId = userId;
     }
@@ -97,11 +96,10 @@ export async function GET(request: Request) {
         cuotaMensual: v.cuotaMensual,
         nombreCliente: ped?.nombreCliente || '',
         observacion: ped?.observacion || '',
-        
         abono: v.abono,
         tipoClienteId: v.tipoClienteId?.toString(),
         tieneCedula: v.tieneCedula,
-
+        numeroCedula: v.numeroCedula || '',
         estadoClienteId: v.estadoClienteId?.toString(),
         estadoClienteNombre: v.estadoCliente?.nombre || 'Pendiente',
         estadoContratoId: v.estadoContratoId?.toString(),
@@ -133,7 +131,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const {
       institucionId, numContrato, valorContrato, meses, mesCobro, cuotaMensual,
-      estadoClienteId, estadoContratoId, tipoCobroId, abono, tipoClienteId, tieneCedula, nombreCliente, observacion
+      estadoClienteId, estadoContratoId, tipoCobroId, abono, tipoClienteId, tieneCedula, nombreCliente, observacion,numeroCedula
     } = body;
 
     if (!institucionId || !numContrato || !valorContrato || !meses || !mesCobro) {
@@ -160,6 +158,7 @@ export async function POST(request: Request) {
         tipoCobroId: tipoCobroId ? parseInt(tipoCobroId) : null,
         tipoClienteId: tipoClienteId ? parseInt(tipoClienteId) : null,
         tieneCedula: Boolean(tieneCedula),
+        numeroCedula: numeroCedula ? String(numeroCedula).trim() : null,
         estadoTicket: 'Pendiente Facturación'
       }
     });
@@ -184,7 +183,7 @@ export async function PUT(request: Request) {
     const { 
       id, observacionesFact, verificacionFact,
       institucionId, numContrato, valorContrato, meses, mesCobro, cuotaMensual,
-      estadoClienteId, estadoContratoId, tipoCobroId, abono, tipoClienteId, tieneCedula, nombreCliente, observacion
+      estadoClienteId, estadoContratoId, tipoCobroId, abono, tipoClienteId, tieneCedula, nombreCliente, observacion, numeroCedula
     } = body;
 
     if (!id) return NextResponse.json({ error: 'ID de venta requerido' }, { status: 400 });
@@ -207,6 +206,7 @@ export async function PUT(request: Request) {
       updateData.tipoCobroId = tipoCobroId ? parseInt(tipoCobroId) : null;
       updateData.tipoClienteId = tipoClienteId ? parseInt(tipoClienteId) : null;
       updateData.tieneCedula = Boolean(tieneCedula);
+      updateData.numeroCedula = numeroCedula ? String(numeroCedula).trim() : null;
       await prisma.pedido.updateMany({
         where: { institucionId: ventaDb.institucionId, numContrato: ventaDb.numContrato },
         data: {

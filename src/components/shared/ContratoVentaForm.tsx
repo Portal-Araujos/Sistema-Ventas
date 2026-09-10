@@ -190,17 +190,41 @@ export default function ContratoVentaForm({
         </div>
         {(mostrarAdmin ?? true) && (
           <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center space-x-2 pt-1">
-              <input 
-                type="checkbox" 
-                id="tieneCedula"
-                checked={!!data.tieneCedula} 
-                onChange={e => handleDataChange('tieneCedula', e.target.checked)} 
-                className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer" 
-              />
-              <Label htmlFor="tieneCedula" className="text-[11px] font-bold text-gray-700 uppercase cursor-pointer">
-                ¿Contrato incluye Cédula?
-              </Label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 pt-1 border-b border-gray-100 pb-2">
+              <div className="flex items-center space-x-2">
+                <input 
+                  type="checkbox" 
+                  id="tieneCedula"
+                  checked={!!data.tieneCedula} 
+                  onChange={e => {
+                    const isChecked = e.target.checked;
+                    onChange({
+                      ...data,
+                      tieneCedula: isChecked,
+                      numeroCedula: isChecked ? data.numeroCedula : ''
+                    });
+                  }} 
+                  className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer" 
+                />
+                <Label htmlFor="tieneCedula" className="text-[11px] font-bold text-gray-700 uppercase cursor-pointer">
+                  ¿Contrato incluye Cédula?
+                </Label>
+              </div>
+              
+              {!!data.tieneCedula && (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2">
+                  <Label className="text-[10px] font-bold text-blue-700 uppercase">N° Cédula / RUC *</Label>
+                  <Input 
+                    type="text" 
+                    required 
+                    value={data.numeroCedula || ''} 
+                    onChange={e => handleDataChange('numeroCedula', e.target.value.replace(/\D/g, ''))} 
+                    className="h-8 w-36 text-xs font-bold border-blue-300 focus-visible:ring-blue-500" 
+                    placeholder="Ej: 1712345678" 
+                    maxLength={13}
+                  />
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               <div>

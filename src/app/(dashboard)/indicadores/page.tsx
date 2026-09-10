@@ -94,21 +94,24 @@ export default function IndicadoresPage() {
       'Meta Asignada ($)': r.metaMonto,
       '% Cumplido': r.porcentajeCumplido
     }));
-    const dataTransito = reporte.map(r => ({
-      'Estado': 'En Tránsito (Pendiente Facturación)',
-      'Semana Lunes': fechaLunes,
-      'Vendedor': r.vendedorNombre,
-      'Lunes ($)': r.diasTransito.lunes,
-      'Martes ($)': r.diasTransito.martes,
-      'Miércoles ($)': r.diasTransito.miercoles,
-      'Jueves ($)': r.diasTransito.jueves,
-      'Viernes ($)': r.diasTransito.viernes,
-      'Sábado ($)': r.diasTransito.sabado,
-      'Domingo ($)': r.diasTransito.domingo, 
-      'Total Cierre ($)': r.transitoTotal,
-      'Meta Asignada ($)': 0,
-      '% Cumplido': 0
-    }));
+    const dataTransito = reporte.map(r => {
+      const porcentajeRetenido = r.metaMonto > 0 ? ((r.transitoTotal / r.metaMonto) * 100).toFixed(1) : '0';
+      return {
+        'Estado': 'En Tránsito (Pendiente Facturación)',
+        'Semana Lunes': fechaLunes,
+        'Vendedor': r.vendedorNombre,
+        'Lunes ($)': r.diasTransito.lunes,
+        'Martes ($)': r.diasTransito.martes,
+        'Miércoles ($)': r.diasTransito.miercoles,
+        'Jueves ($)': r.diasTransito.jueves,
+        'Viernes ($)': r.diasTransito.viernes,
+        'Sábado ($)': r.diasTransito.sabado,
+        'Domingo ($)': r.diasTransito.domingo, 
+        'Total Cierre ($)': r.transitoTotal,
+        'Meta Asignada ($)': r.metaMonto, 
+        '% Cumplido': porcentajeRetenido 
+      };
+    });
     const dataFinal = [...dataAprobada, ...dataTransito];
     const ws = XLSX.utils.json_to_sheet(dataFinal);
     const wb = XLSX.utils.book_new();
@@ -210,7 +213,7 @@ export default function IndicadoresPage() {
                   <TableCell className="text-center font-medium text-xs text-gray-600">${r.diasReales.jueves.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-medium text-xs text-gray-600">${r.diasReales.viernes.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-medium text-xs text-gray-600">${r.diasReales.sabado.toFixed(2)}</TableCell>
-                  <TableCell className="text-center font-medium text-xs text-red-600 bg-red-50/20">${r.diasReales.domingo.toFixed(2)}</TableCell> {/* 🔥 Añadido Domingo */}
+                  <TableCell className="text-center font-medium text-xs text-red-600 bg-red-50/20">${r.diasReales.domingo.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-extrabold text-sm text-emerald-700 bg-emerald-50/50">${r.cierreSemanal.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-bold text-sm text-gray-800 bg-gray-50/50">${r.metaMonto.toFixed(2)}</TableCell>
                   <TableCell className="text-center">
@@ -225,7 +228,7 @@ export default function IndicadoresPage() {
         </div>
       </div>
       <div className="mt-4 opacity-90">
-        <h2 className="text-sm font-bold text-amber-800 mb-3 flex items-center gap-2"><AlertTriangle size={16} /> DINERO EN TRÁNSITO (Falta Facturación / Documentos)</h2>
+        <h2 className="text-sm font-bold text-amber-800 mb-3 flex items-center gap-2"><AlertTriangle size={16} /> VENTAS PENDIENTES (Falta Facturación / Documentos)</h2>
         <div className="bg-white rounded-xl shadow-sm border border-amber-200 overflow-x-auto">
           <Table>
             <TableHeader className="bg-amber-50/80">
@@ -239,13 +242,14 @@ export default function IndicadoresPage() {
                 <TableHead className="font-semibold text-gray-700 text-center">Sábado</TableHead>
                 <TableHead className="font-semibold text-red-700 text-center">Domingo</TableHead> 
                 <TableHead className="font-bold text-amber-800 text-center bg-amber-100/50">Total Retenido</TableHead>
+                <TableHead className="font-bold text-amber-800 text-center bg-amber-100/50">% Retenido</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8 text-gray-500">Calculando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-gray-500">Calculando...</TableCell></TableRow>
               ) : reporte.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8 text-gray-500">No hay datos.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-gray-500">No hay datos.</TableCell></TableRow>
               ) : reporte.map(r => (
                 <TableRow key={r.vendedorId} className="hover:bg-amber-50/30">
                   <TableCell className="font-bold text-gray-600 text-sm">👤 {r.vendedorNombre}</TableCell>
@@ -257,6 +261,10 @@ export default function IndicadoresPage() {
                   <TableCell className="text-center font-medium text-xs text-gray-900">${r.diasTransito.sabado.toFixed(2)}</TableCell>
                   <TableCell className="text-center font-medium text-xs text-red-700 bg-red-50/20">${r.diasTransito.domingo.toFixed(2)}</TableCell> 
                   <TableCell className="text-center font-bold text-sm text-amber-700 bg-amber-50/50">${r.transitoTotal.toFixed(2)}</TableCell>
+                  <TableCell className="text-center"><Badge variant="outline" className="text-xs font-bold bg-amber-50 text-amber-800 border-amber-300">
+                      {r.metaMonto > 0 ? ((r.transitoTotal / r.metaMonto) * 100).toFixed(1) : '0'}%
+                    </Badge>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

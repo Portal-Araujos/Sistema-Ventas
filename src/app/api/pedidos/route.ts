@@ -76,7 +76,6 @@ export async function GET(request: Request) {
         institucion: { select: { id: true, nombre: true } },
         usuario: { select: { id: true, nombre: true } },
         operarioAsignado: { select: { id: true, nombre: true } },
-        // 🔥 INYECCIÓN 1: Traer los detalles con el nombre del usuario que lo recibió 🔥
         detalles: {
           include: { usuarioReceptor: { select: { nombre: true } } }
         }
@@ -91,7 +90,8 @@ export async function GET(request: Request) {
         id: true, numContrato: true, institucionId: true, vendedorId: true, 
         valorContrato: true, abono: true, meses: true, mesCobro: true,
         tipoCobroId: true, estadoClienteId: true, estadoContratoId: true,
-        cuotaMensual: true, tipoClienteId: true, tieneCedula: true
+        cuotaMensual: true, tipoClienteId: true, tieneCedula: true,  
+        numeroCedula: true
       },
       orderBy: { fechaVenta: 'desc' }
     });
@@ -165,7 +165,8 @@ export async function GET(request: Request) {
         estadoClienteId: ventaAsociada?.estadoClienteId || '',
         estadoContratoId: ventaAsociada?.estadoContratoId || '',
         tipoClienteId: ventaAsociada?.tipoClienteId || '', 
-        tieneCedula: ventaAsociada?.tieneCedula || false
+        tieneCedula: ventaAsociada?.tieneCedula || false,
+        numeroCedula: ventaAsociada?.numeroCedula || ''
       });
 
       const numContratosEnPedido = contratoExtraido !== 'S/N' ? contratoExtraido.split(',').filter(Boolean).length : 1;
@@ -181,8 +182,6 @@ export async function GET(request: Request) {
       fechaRequeridaTexto: g.fechaRequerida ? new Date(g.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'No asignada',
       updatedAt: new Date(g.updatedAt).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })
     }));
-
-    // 🔥 INYECCIÓN 2: Devolvemos el currentUser para que el Frontend sepa si eres Admin y active el botón rojo 🔥
     return NextResponse.json({ tabla: resultado, currentUser: { id: userId, rol: userRol } });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Error al consultar pedidos' }, { status: 500 });
@@ -203,7 +202,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, cuotaMensual, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId, tipoClienteId, tieneCedula, observacion } = body;
+    const { modo, id, institucionId, detalles, numContrato, nombreCliente, fechaRequerida, valorContrato, abono, cuotaMensual, meses, mesCobro, tipoCobroId, estadoClienteId, estadoContratoId, tipoClienteId, tieneCedula, numeroCedula, observacion } = body;
     
     if (modo === 'recepcion_vendedor') {
       const { prendasIds } = body;
@@ -261,8 +260,6 @@ export async function PUT(request: Request) {
         if (numContrato !== undefined) updateData.numContrato = numContratoLimpio || null;
         if (nombreCliente !== undefined) updateData.nombreCliente = nombreCliente;
         if (fechaRequerida !== undefined) updateData.fechaRequerida = fechaParseada;
-        
-        // 🔥 AHORA SÍ GUARDAMOS LA OBSERVACIÓN GENERAL DEL CONTRATO 🔥
         if (observacion !== undefined) updateData.observacion = observacion;
         
         updateData.usuarioId = vendedorFinalId; 
@@ -285,15 +282,13 @@ export async function PUT(request: Request) {
         }
         await prisma.pedido.update({ where: { id }, data: updateData });
       }
-      
-      // 🔥 ESPEJO MAESTRO: BUSCAMOS LA VENTA CON EL CONTRATO VIEJO 🔥
       if (pedidoAntiguo) {
         const ventaExistente = await prisma.venta.findFirst({
           where: { institucionId: idEscuelaReal, numContrato: oldNumContrato }
         });
 
         const ventaData: any = {};
-        if (numContrato !== undefined) ventaData.numContrato = numContratoLimpio; // Le inyectamos el nuevo
+        if (numContrato !== undefined) ventaData.numContrato = numContratoLimpio; 
         if (valorContrato !== undefined) ventaData.valorContrato = parseMoney(valorContrato);
         if (abono !== undefined) ventaData.abono = parseMoney(abono);
         if (cuotaMensual !== undefined) ventaData.cuotaMensual = parseMoney(cuotaMensual);
@@ -304,6 +299,7 @@ export async function PUT(request: Request) {
         if (estadoContratoId) ventaData.estadoContratoId = parseId(estadoContratoId);
         if (tipoClienteId) ventaData.tipoClienteId = parseId(tipoClienteId); 
         if (tieneCedula !== undefined) ventaData.tieneCedula = Boolean(tieneCedula);
+        if (numeroCedula !== undefined) ventaData.numeroCedula = numeroCedula ? String(numeroCedula).trim() : null;
         ventaData.vendedorId = vendedorFinalId; 
 
         if (ventaExistente) {
@@ -394,6 +390,8 @@ export async function POST(request: Request) {
         tipoCobroId: parseId(body.tipoCobroId),
         estadoClienteId: parseId(body.estadoClienteId),
         estadoContratoId: parseId(body.estadoContratoId),
+        tieneCedula: Boolean(body.tieneCedula), 
+        numeroCedula: body.numeroCedula ? String(body.numeroCedula).trim() : null,
       }
     });
     return NextResponse.json(nuevoPedido);
@@ -401,7 +399,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message || 'Error interno' }, { status: 500 }); 
   }
 }
-
 export async function DELETE(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -416,7 +413,6 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Falta ID para eliminar' }, { status: 400 });
     }
     await prisma.$transaction(async (tx) => {
-      // SOLO SE BORRA LA CAJA ABIERTA (Borradores)
       const whereClause: any = { institucionId, estado: 'Borrador' };
       if (userRol === 'vendedor') whereClause.usuarioId = userId;
       const pedidosABorrar = await tx.pedido.findMany({ where: whereClause });
