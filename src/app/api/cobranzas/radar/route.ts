@@ -91,7 +91,6 @@ export async function POST(request: Request) {
     let fileTipo = null;
     let fileNombre = null;
 
-    // 🔥 GUARDADO DEL ARCHIVO FÍSICO 🔥
     if (file && file.size > 0) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
@@ -115,8 +114,10 @@ export async function POST(request: Request) {
         prioridad: 'Alta',
         institucionId: institucionId,
         creadorId: userId,
-        asignadoAId: vendedorId || userId
-      }
+        asignados: {
+          connect: { id: vendedorId || userId }
+        }
+      } 
     });
 
     await prisma.mensajeTicket.create({
