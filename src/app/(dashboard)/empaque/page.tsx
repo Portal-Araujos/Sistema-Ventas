@@ -14,7 +14,6 @@ export default function EmpaquePage() {
   const [kpis, setKpis] = useState<any>({});
   const [institucionesList, setInstitucionesList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInstFilter, setSelectedInstFilter] = useState('');
   const [kpiFilter, setKpiFilter] = useState(''); 
@@ -37,18 +36,15 @@ export default function EmpaquePage() {
 
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
   const [grupoDetalle, setGrupoDetalle] = useState<any>(null);
-
   const [modalEmpacarOpen, setModalEmpacarOpen] = useState(false);
   const [contratoSel, setContratoSel] = useState<any>(null);
   const [responsable, setResponsable] = useState('');
   const [prendasChecklist, setPrendasChecklist] = useState<any[]>([]);
   const [codigoEscaneado, setCodigoEscaneado] = useState('');
   const [saving, setSaving] = useState(false);
-
   const [modalGuiaOpen, setModalGuiaOpen] = useState(false);
   const [codigoGuia, setCodigoGuia] = useState('');
   const [prendasParaGuia, setPrendasParaGuia] = useState<any[]>([]);
-
   const [toast, setToast] = useState<{ tipo: 'exito' | 'error'; texto: string } | null>(null);
   const showToast = (tipo: 'exito' | 'error', texto: string) => { setToast({ tipo, texto }); setTimeout(() => setToast(null), 4000); };
 
@@ -86,8 +82,6 @@ export default function EmpaquePage() {
     setContratoSel(contrato);
     setResponsable(contrato.responsableEmpaque !== 'Sin Asignar' ? contrato.responsableEmpaque : '');
     const prendasSeguras = contrato.detallesCompletos || contrato.detalles || [];
-    
-    // 🔥 INICIALIZAMOS EL CONTADOR DE ESCANEOS AL ABRIR EL MODAL 🔥
     const checklistConContador = prendasSeguras.map((p: any) => ({
       ...p,
       escaneadas: p.estadoEmpaque === 'Preparado' ? p.cantidad : 0
@@ -100,15 +94,12 @@ export default function EmpaquePage() {
   const handleCambiarEstadoPrenda = (id: string, nuevoEstado: string) => {
     setPrendasChecklist(prev => prev.map(p => {
       if (p.id === id) {
-        // 🔥 Si usan el selector manual, autocompletamos el contador de golpe 🔥
         const nuevasEscaneadas = nuevoEstado === 'Preparado' ? p.cantidad : 0;
         return { ...p, estadoEmpaque: nuevoEstado, escaneadas: nuevasEscaneadas };
       }
       return p;
     }));
   };
-
-  // 🔥 EL CEREBRO DEL PISTOLEO (Lee el "Enter" de la pistola USB) 🔥
   const procesarEscaneo = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -122,18 +113,14 @@ export default function EmpaquePage() {
         const p = checklistActualizada[i];
         const estOp = (p.estadoOperacion || '').toLowerCase();
         const llegoAEmpaque = estOp.includes('empaque') || estOp.includes('listos') || estOp.includes('despacho');
-
-        // Buscamos una fila que coincida con el SKU y que no esté completa aún
         if (p.skuCodigo?.toUpperCase() === sku && llegoAEmpaque && p.guiaDespachoId === null) {
           if (p.escaneadas < p.cantidad) {
             prendaEncontrada = true;
             p.escaneadas += 1;
-            
-            // Si con este escaneo completamos la cantidad requerida...
             if (p.escaneadas === p.cantidad) {
               p.estadoEmpaque = 'Preparado';
             }
-            break; // Rompemos el ciclo para sumar de 1 en 1
+            break; 
           }
         }
       }
@@ -143,7 +130,7 @@ export default function EmpaquePage() {
       }
 
       setPrendasChecklist(checklistActualizada);
-      setCodigoEscaneado(''); // Limpiamos el input muy rápido para el siguiente "Beep"
+      setCodigoEscaneado(''); 
     }
   };
 
@@ -357,8 +344,6 @@ export default function EmpaquePage() {
     XLSX.utils.book_append_sheet(wb, ws, "Checklist Empaque");
     XLSX.writeFile(wb, `Checklist_Empaque_${grupo.codigoOP}.xlsx`);
   };
-
-  // 🔥 LÓGICA DE FILTRADO, ORDENAMIENTO DINÁMICO Y PAGINACIÓN 🔥
   const getBarColor = (avance: number) => {
     if (avance === 100) return 'bg-emerald-500';
     if (avance > 0) return 'bg-amber-500';
@@ -601,7 +586,6 @@ export default function EmpaquePage() {
             )}
 
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1 mt-4">Lista de Contratos para Empacar (Checklist):</p>
-            
             <div className="overflow-x-auto border rounded-xl">
               <table className="w-full text-left text-xs border-collapse min-w-800px">
                 <thead>
@@ -657,7 +641,6 @@ export default function EmpaquePage() {
                 <Input className="h-9 text-xs mt-1 border-gray-300 bg-white" placeholder="Ej: Juan Perez" value={responsable} onChange={e => setResponsable(e.target.value)} />
               </div>
             </div>
-            {/* 🔥 PANEL DEL LECTOR DE CÓDIGOS DE BARRAS 🔥 */}
             <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 mt-2 flex flex-col sm:flex-row items-center gap-4 shadow-inner">
               <div className="bg-emerald-100 p-2.5 rounded-lg shrink-0"><PackageCheck className="text-emerald-600" size={24}/></div>
               <div className="flex-1 w-full">
@@ -743,7 +726,6 @@ export default function EmpaquePage() {
             </div>
             <p className="text-[10px] text-gray-500 italic">* Solo las prendas que han llegado físicamente a Bodega (Empaque) pueden ser preparadas.</p>
           </div>
-
           <DialogFooter className="mt-5 flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={() => setModalEmpacarOpen(false)}>Cancelar</Button>
             <Button size="sm" className="bg-primary hover:bg-primary/90 text-white font-bold" disabled={saving} onClick={handleGuardarChecklist}>
@@ -752,8 +734,6 @@ export default function EmpaquePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* 🚚 MODAL DE INGRESO DE GUÍA DE DESPACHO 🚚 */}
       <Dialog open={modalGuiaOpen} onOpenChange={setModalGuiaOpen}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
           <DialogHeader>

@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
     const ticketsVencidos = await prisma.ticketGestion.findMany({
       where: {
-        estado: { notIn: ['Cerrado', 'Resuelto'] },
+        estado: { notIn: ['Cerrado', 'Resuelto', 'Vencido'] },
         fechaLimite: { lt: new Date() }
       }
     });
@@ -64,12 +64,12 @@ export async function GET(request: Request) {
         await prisma.ticketGestion.update({
           where: { id: t.id },
           data: {
-            estado: 'Cerrado',
+            estado: 'Vencido',
             fechaCierre: new Date(),
             mensajes: {
               create: {
                 remitenteId: userId, 
-                contenido: '⚠️ Ticket cerrado automáticamente por caducidad de fecha límite (SLA).',
+                contenido: '⚠️ Este ticket superó su fecha límite y ha sido marcado como VENCIDO. Aún pueden responder para darle solución.',
                 esSistema: true
               }
             }

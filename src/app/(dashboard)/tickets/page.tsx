@@ -19,7 +19,13 @@ export default function TicketsPage() {
   const [tabActiva, setTabActiva] = useState('General');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 🔥 ESTADOS DE FILTROS Y PAGINACIÓN 🔥
+  // 🔥 NUEVOS FILTROS DE USUARIOS 🔥
+  const [filtroCreador, setFiltroCreador] = useState('');
+  const [filtroAsignado, setFiltroAsignado] = useState('');
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+
+  // ESTADOS DE FILTROS Y PAGINACIÓN
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -109,9 +115,7 @@ export default function TicketsPage() {
     setDropdownInst(false);
   };
 
-  // 🔥 BUSCADOR SÚPER PRECISO DE USUARIOS (Anti-Tildes) 🔥
   const normalizarTexto = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
   const handleBuscarUsuario = (termino: string) => {
     setBusquedaUser(termino);
     const termLimpio = normalizarTexto(termino.trim());
@@ -146,6 +150,7 @@ export default function TicketsPage() {
     if (!nuevoTicket.tipo) return alert("Por favor, selecciona el ÁREA RESPONSABLE.");
     if (!nuevoTicket.institucionId || !nuevoTicket.asunto || !nuevoTicket.mensajeInicial) return alert("Completa Institución, Asunto y Mensaje.");
     if (nuevoTicket.asignadosIds.length === 0) return alert("Debes asignar el ticket a por lo menos 1 persona.");
+    if (!nuevoTicket.fechaLimite) return alert("Debes seleccionar una Fecha Límite de resolución.");
 
     setSaving(true);
     try {
@@ -177,6 +182,7 @@ export default function TicketsPage() {
       case 'Pendiente': return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'Cerrado': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'Re-Abierto': return 'bg-red-100 text-red-800 border-red-200';
+      case 'Vencido': return 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse'; 
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -186,24 +192,27 @@ export default function TicketsPage() {
   };
 
   const ticketsFiltrados = tickets.filter(t => {
-    // Filtro de Búsqueda
+    if (filtroCreador && t.creador?.nombre !== filtroCreador) return false;
+    if (filtroAsignado && !t.asignados?.some((a:any) => a.nombre === filtroAsignado)) return false;
+    if (fechaDesde || fechaHasta) {
+      const fechaTicket = new Date(t.createdAt);
+      if (fechaDesde && fechaTicket < new Date(`${fechaDesde}T00:00:00-05:00`)) return false;
+      if (fechaHasta && fechaTicket > new Date(`${fechaHasta}T23:59:59-05:00`)) return false;
+    }
+    
     const searchLower = searchTerm.toLowerCase();
     const pasaSearch = t.codigo.toLowerCase().includes(searchLower) || 
                        t.asunto.toLowerCase().includes(searchLower) ||
                        t.institucion?.nombre.toLowerCase().includes(searchLower);
     if (!pasaSearch) return false;
 
-    // 🔥 FILTRO DE TARJETAS (ESTADOS) 🔥
     if (estadoFiltro) {
-      // Si seleccionas "Abierto", también te muestra los "Re-Abiertos"
       if (estadoFiltro === 'Abierto') {
         if (t.estado !== 'Abierto' && t.estado !== 'Re-Abierto') return false;
       } else {
         if (t.estado !== estadoFiltro) return false;
       }
     }
-
-    // Filtro de Pestañas (Super Admin vs Area vs Vendedor)
     if (currentUser.esSuperAdmin) {
       return tabActiva === 'General' || t.tipo === tabActiva;
     } else if (currentUser.rol === 'vendedor') {
@@ -216,11 +225,9 @@ export default function TicketsPage() {
   });
 
   const conteoAbiertos = tickets.filter(t => t.estado === 'Abierto' || t.estado === 'Re-Abierto').length;
-  const conteoEnProceso = tickets.filter(t => t.estado === 'En Proceso').length;
+  const conteoVencidos = tickets.filter(t => t.estado === 'Vencido').length;;
   const conteoPendientes = tickets.filter(t => t.estado === 'Pendiente').length;
   const conteoCerrados = tickets.filter(t => t.estado === 'Cerrado').length;
-
-  // 🔥 LÓGICA DE PAGINACIÓN 15 FILAS 🔥
   const totalPages = Math.max(1, Math.ceil(ticketsFiltrados.length / itemsPerPage));
   const itemsPaginados = ticketsFiltrados.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -245,16 +252,14 @@ export default function TicketsPage() {
           </Button>
         </div>
       </div>
-
-      {/* 🔥 TARJETAS FILTRABLES 🔥 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div onClick={() => toggleFiltroEstado('Abierto')} className={`bg-white p-4 rounded-2xl border cursor-pointer shadow-sm flex items-center gap-4 transition-all ${estadoFiltro === 'Abierto' ? 'ring-2 ring-amber-400 border-transparent bg-amber-50/30' : 'border-gray-200 hover:border-amber-300'}`}>
           <div className="bg-amber-100 p-3 rounded-xl text-amber-600"><Inbox size={24}/></div>
           <div><p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Abiertos</p><p className="text-2xl font-black text-gray-900">{conteoAbiertos}</p></div>
         </div>
-        <div onClick={() => toggleFiltroEstado('En Proceso')} className={`bg-white p-4 rounded-2xl border cursor-pointer shadow-sm flex items-center gap-4 transition-all ${estadoFiltro === 'En Proceso' ? 'ring-2 ring-blue-400 border-transparent bg-blue-50/30' : 'border-gray-200 hover:border-blue-300'}`}>
-          <div className="bg-blue-100 p-3 rounded-xl text-blue-600"><RefreshCw size={24}/></div>
-          <div><p className="text-xs font-bold text-gray-500 uppercase tracking-wider">En Proceso</p><p className="text-2xl font-black text-gray-900">{conteoEnProceso}</p></div>
+        <div onClick={() => toggleFiltroEstado('Vencido')} className={`bg-white p-4 rounded-2xl border cursor-pointer shadow-sm flex items-center gap-4 transition-all ${estadoFiltro === 'Vencido' ? 'ring-2 ring-rose-400 border-transparent bg-rose-50/30' : 'border-gray-200 hover:border-rose-300'}`}>
+          <div className="bg-rose-100 p-3 rounded-xl text-rose-600"><AlertCircle size={24}/></div>
+          <div><p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Vencidos (SLA)</p><p className="text-2xl font-black text-rose-600 animate-pulse">{conteoVencidos}</p></div>
         </div>
         <div onClick={() => toggleFiltroEstado('Pendiente')} className={`bg-white p-4 rounded-2xl border cursor-pointer shadow-sm flex items-center gap-4 transition-all ${estadoFiltro === 'Pendiente' ? 'ring-2 ring-purple-400 border-transparent bg-purple-50/30' : 'border-gray-200 hover:border-purple-300'}`}>
           <div className="bg-purple-100 p-3 rounded-xl text-purple-600"><Clock size={24}/></div>
@@ -265,28 +270,59 @@ export default function TicketsPage() {
           <div><p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Resueltos</p><p className="text-2xl font-black text-gray-900">{conteoCerrados}</p></div>
         </div>
       </div>
-
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-center border-b border-gray-200 pb-2">
-        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
+      <div className="flex flex-col gap-4 border-b border-gray-200 pb-0">
+        <div className="flex flex-col lg:flex-row gap-4 w-full bg-gray-50/70 p-3 rounded-2xl border border-gray-200 shadow-sm">
+          <div className="w-full lg:w-1/2 relative">
+            <Search size={18} className="absolute left-4 top-3.5 text-gray-400" />
+            <Input 
+              className="pl-11 bg-white border-gray-200 h-11 rounded-xl text-sm font-medium w-full focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all shadow-sm" 
+              placeholder="Buscar ticket, asunto, escuela..." 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+            />
+          </div>
+          <div className="w-full lg:w-1/2 grid grid-cols-1 sm:grid-cols-12 gap-2">
+            <div className="sm:col-span-6 flex items-center justify-between bg-white border border-gray-200 rounded-xl px-2 h-11 shadow-sm hover:border-gray-300 transition-colors"> 
+              <Input type="date" className="h-9 text-[11px] font-bold border-none w-full px-1 focus-visible:ring-0 text-center bg-transparent" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} title="Desde" />
+              <span className="text-xs text-gray-300 font-black">-</span>
+              <Input type="date" className="h-9 text-[11px] font-bold border-none w-full px-1 focus-visible:ring-0 text-center bg-transparent" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} title="Hasta" />
+            </div>
+            <select 
+              className="sm:col-span-3 h-11 border border-gray-200 rounded-xl px-2 text-[11px] font-bold bg-white text-gray-600 outline-none focus:border-primary shadow-sm hover:border-gray-300 transition-colors" 
+              value={filtroCreador} onChange={e => setFiltroCreador(e.target.value)}
+            >
+              <option value="">Creado por...</option>
+              {Array.from(new Set(tickets.map(t => t.creador?.nombre).filter(Boolean))).map((nombre: any) => (
+                <option key={nombre} value={nombre}>{nombre}</option>
+              ))}
+            </select>
+            <select 
+              className="sm:col-span-3 h-11 border border-gray-200 rounded-xl px-2 text-[11px] font-bold bg-white text-gray-600 outline-none focus:border-primary shadow-sm hover:border-gray-300 transition-colors" 
+              value={filtroAsignado} onChange={e => setFiltroAsignado(e.target.value)}
+            >
+              <option value="">Asignado a...</option>
+              {Array.from(new Set(tickets.flatMap(t => t.asignados?.map((a:any) => a.nombre)).filter(Boolean))).map((nombre: any) => (
+                <option key={nombre} value={nombre}>{nombre}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-2 w-full overflow-x-auto hide-scrollbar pt-1">
           {currentUser.esSuperAdmin ? (
             <>
-              <button onClick={() => setTabActiva('General')} className={`px-4 py-2 text-sm font-black transition-all rounded-t-lg whitespace-nowrap ${tabActiva === 'General' ? 'border-b-2 border-primary text-primary bg-primary/5' : 'text-gray-500 hover:bg-gray-100'}`}>🌍 Vista Global</button>
+              <button onClick={() => setTabActiva('General')} className={`px-4 py-2 text-sm font-black transition-all rounded-t-xl whitespace-nowrap ${tabActiva === 'General' ? 'border-b-2 border-primary text-primary bg-primary/5' : 'text-gray-500 hover:bg-gray-100'}`}>🌍 Vista Global</button>
               {departamentos.map(d => (
-                <button key={d.id} onClick={() => setTabActiva(d.nombre)} className={`px-4 py-2 text-sm font-black transition-all rounded-t-lg whitespace-nowrap ${tabActiva === d.nombre ? 'border-b-2 border-primary text-primary bg-primary/5' : 'text-gray-500 hover:bg-gray-100'}`}>{d.nombre}</button>
+                <button key={d.id} onClick={() => setTabActiva(d.nombre)} className={`px-4 py-2 text-sm font-black transition-all rounded-t-xl whitespace-nowrap ${tabActiva === d.nombre ? 'border-b-2 border-primary text-primary bg-primary/5' : 'text-gray-500 hover:bg-gray-100'}`}>{d.nombre}</button>
               ))}
             </>
           ) : currentUser.rol === 'vendedor' ? (
-            <button onClick={() => setTabActiva('Mios')} className={`px-4 py-2 text-sm font-black transition-all rounded-t-lg whitespace-nowrap border-b-2 border-primary text-primary bg-primary/5`}>👤 Mis Tickets Asignados</button>
+            <button onClick={() => setTabActiva('Mios')} className={`px-4 py-2 text-sm font-black transition-all rounded-t-xl whitespace-nowrap border-b-2 border-primary text-primary bg-primary/5`}>👤 Mis Tickets Asignados</button>
           ) : (
             <>
-              <button onClick={() => setTabActiva('MiArea')} className={`px-4 py-2 text-sm font-black transition-all rounded-t-lg whitespace-nowrap flex items-center gap-1 ${tabActiva === 'MiArea' ? 'border-b-2 border-primary text-primary bg-primary/5' : 'text-gray-500 hover:bg-gray-100'}`}><Briefcase size={14}/> Área: {currentUser.departamento}</button>
-              <button onClick={() => setTabActiva('Mios')} className={`px-4 py-2 text-sm font-black transition-all rounded-t-lg whitespace-nowrap flex items-center gap-1 ${tabActiva === 'Mios' ? 'border-b-2 border-primary text-primary bg-primary/5' : 'text-gray-500 hover:bg-gray-100'}`}><User size={14}/> Mis Tickets (Directos)</button>
+              <button onClick={() => setTabActiva('MiArea')} className={`px-4 py-2 text-sm font-black transition-all rounded-t-xl whitespace-nowrap flex items-center gap-1 ${tabActiva === 'MiArea' ? 'border-b-2 border-primary text-primary bg-primary/5' : 'text-gray-500 hover:bg-gray-100'}`}><Briefcase size={14}/> Área: {currentUser.departamento}</button>
+              <button onClick={() => setTabActiva('Mios')} className={`px-4 py-2 text-sm font-black transition-all rounded-t-xl whitespace-nowrap flex items-center gap-1 ${tabActiva === 'Mios' ? 'border-b-2 border-primary text-primary bg-primary/5' : 'text-gray-500 hover:bg-gray-100'}`}><User size={14}/> Mis Tickets (Directos)</button>
             </>
           )}
-        </div>
-        <div className="relative w-full md:w-72">
-          <Search size={16} className="absolute left-3 top-3 text-gray-400" />
-          <Input className="pl-9 bg-white border-gray-200 h-10" placeholder="Buscar ticket, escuela..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
       </div>
 
@@ -297,18 +333,19 @@ export default function TicketsPage() {
               <tr>
                 <th className="p-4">Ticket</th>
                 <th className="p-4">Asunto / Institución</th>
-                <th className="p-4">Área Responsable</th>
+                <th className="p-4 hidden md:table-cell">Área Responsable</th>
                 <th className="p-4">Asignados</th>
+                <th className="p-4">Tiempos SLA</th>
                 <th className="p-4 text-center">Estado</th>
                 <th className="p-4 text-right">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={6} className="p-12 text-center text-gray-500 font-bold animate-pulse">Cargando mesa de ayuda...</td></tr>
+                <tr><td colSpan={7} className="p-12 text-center text-gray-500 font-bold animate-pulse">Cargando mesa de ayuda...</td></tr>
               ) : itemsPaginados.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-16 text-center">
+                  <td colSpan={7} className="p-16 text-center">
                     <div className="flex flex-col items-center">
                       <CheckCircle2 size={48} className="text-gray-300 mb-3"/>
                       <p className="text-lg font-bold text-gray-500">Bandeja limpia</p>
@@ -317,22 +354,42 @@ export default function TicketsPage() {
                   </td>
                 </tr>
               ) : (
-                itemsPaginados.map((t) => (
+                itemsPaginados.map((t) => {
+                  const esNuevo = t.createdAt ? (new Date().getTime() - new Date(t.createdAt).getTime() < 12 * 60 * 60 * 1000) : false;
+                  
+                  return (
                   <tr key={t.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => abrirChat(t.id)}>
                     <td className="p-4">
-                      <div className="font-bold text-gray-900">{t.codigo}</div>
-                      <div className={`text-[10px] font-black uppercase mt-0.5 ${t.prioridad === 'Alta' || t.prioridad === 'Urgente' ? 'text-red-500' : 'text-gray-400'}`}>Prio: {t.prioridad}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-900">{t.codigo}</span>
+                        {esNuevo && <span className="bg-amber-400 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md animate-bounce shadow-sm">✨ NUEVO</span>}
+                      </div>
+                      <div className={`text-[10px] font-black uppercase mt-0.5 ${t.prioridad === 'Alta' || t.prioridad === 'Urgente' ? 'text-red-500' : 'text-gray-400'}`}>Prioridad: {t.prioridad}</div>
                     </td>
                     <td className="p-4">
                       <div className="font-bold text-primary truncate max-w-200px sm:max-w-300px" title={t.asunto}>{t.asunto}</div>
-                      <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1"><AlertCircle size={10}/> {t.institucion?.nombre || 'General'}</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1"><AlertCircle size={10}/> {t.institucion?.nombre || 'General'}</div>
                     </td>
-                    <td className="p-4 font-bold text-gray-700">{t.tipo}</td>
+                    <td className="p-4 font-bold text-gray-700 hidden md:table-cell">{t.tipo}</td>
                     <td className="p-4">
-                      <div className="text-sm font-bold text-gray-800 truncate max-w-150px" title={t.asignados?.map((a:any)=>a.nombre).join(', ')}>
+                      <div className="text-[9px] text-gray-400 uppercase font-bold">Para:</div>
+                      <div className="text-xs font-bold text-gray-800 truncate max-w-150px" title={t.asignados?.map((a:any)=>a.nombre).join(', ')}>
                         {t.asignados && t.asignados.length > 0 ? t.asignados.map((a:any)=>a.nombre).join(', ') : 'Sin asignar'}
                       </div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">De: {t.creador?.nombre}</div>
+                      <div className="text-[10px] text-gray-400 uppercase font-bold mt-1"> De: <span className="text-gray-600 normal-case">{t.creador?.nombre}</span></div>
+                    </td>
+                    <td className="p-4">
+                      <div className="text-[10px] text-gray-500">
+                        <span className="font-bold text-emerald-600">Creación:</span> {t.createdAt ? new Date(t.createdAt).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' }) : 'S/N'}
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-1">
+                        <span className="font-bold text-amber-600">Límite:</span> {t.fechaLimite ? new Date(t.fechaLimite).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }) : 'Sin Límite'}
+                      </div>
+                      {t.fechaCierre && (
+                        <div className="text-[10px] text-gray-500 mt-1">
+                          <span className="font-bold text-red-500">Cerrado:</span> {new Date(t.fechaCierre).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short' })}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 text-center">
                       <Badge className={`text-xs ${getColorEstado(t.estado)}`}>{t.estado}</Badge>
@@ -343,13 +400,11 @@ export default function TicketsPage() {
                       </Button>
                     </td>
                   </tr>
-                ))
+                )})
               )}
             </tbody>
           </table>
         </div>
-
-        {/* 🔥 CONTROLES DE PAGINACIÓN A 15 🔥 */}
         {totalPages > 1 && (
           <div className="p-4 border-t border-gray-100 flex justify-between items-center bg-gray-50/50 rounded-b-2xl">
             <span className="text-xs text-gray-500 font-medium">Página {currentPage} de {totalPages} ({ticketsFiltrados.length} resultados)</span>
