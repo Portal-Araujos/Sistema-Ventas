@@ -177,19 +177,20 @@ export async function POST(request: Request) {
         let fileNombre = null;
 
         if (file && file.size > 0) {
-          const bytes = await file.arrayBuffer();
-          const buffer = Buffer.from(bytes);
-          const filename = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-          const uploadDir = path.join(process.cwd(), 'public/uploads');
-          
-          await mkdir(uploadDir, { recursive: true });
-          const filepath = path.join(uploadDir, filename);
-          await writeFile(filepath, buffer);
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      const cleanFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+      const filename = `${Date.now()}_${cleanFileName}`;
+      const uploadDir = path.join(process.cwd(), 'storage/uploads');
+      
+      await mkdir(uploadDir, { recursive: true });
+      const filepath = path.join(uploadDir, filename);
+      await writeFile(filepath, buffer);
 
-          fileUrl = `/uploads/${filename}`;
-          fileTipo = file.type;
-          fileNombre = file.name;
-        }
+      fileUrl = `/uploads/${filename}`;
+      fileTipo = file.type;
+      fileNombre = file.name;
+    }
 
         const nuevoMensaje = await prisma.mensajeTicket.create({
           data: { 
