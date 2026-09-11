@@ -45,10 +45,11 @@ export default function VentasPage() {
   const [saving, setSaving] = useState(false);
   const [institucionesDisponibles, setInstitucionesDisponibles] = useState<any[]>([]);
   const [departamentos, setDepartamentos] = useState<any[]>([]);
-  const [ticketModal, setTicketModal] = useState({
-    open: false, tipo: '', institucionId: '', asignadoAId: '', prioridad: 'Media', asunto: '', mensajeInicial: '', institucionNombre: '', asignadoNombre: ''
+  const [ticketModal, setTicketModal] = useState<{
+    open: boolean; tipo: string; institucionId: string; asignadosIds: string[]; prioridad: string; asunto: string; mensajeInicial: string; institucionNombre: string; asignadoNombre: string;
+  }>({
+    open: false, tipo: '', institucionId: '', asignadosIds: [], prioridad: 'Media', asunto: '', mensajeInicial: '', institucionNombre: '', asignadoNombre: ''
   });
-
   const hoyStr = new Date().toISOString().split('T')[0];
   const initialFormVenta = {
     id: '', cantonId: '', institucionId: '', institucionNombre: '', fechaVenta: hoyStr, numContrato: '', nombreCliente: '',
@@ -339,9 +340,15 @@ export default function VentasPage() {
 
   const handleOpenTicket = (v: any) => {
     setTicketModal({
-      open: true, tipo: departamentos.length > 0 ? departamentos[0].nombre : '', institucionId: v.institucionId,
-      asignadoAId: v.vendedorId, prioridad: 'Alta', asunto: `Revisión de Contrato N° ${v.numContrato}`,
-      mensajeInicial: '', institucionNombre: v.institucionNombre, asignadoNombre: v.vendedorNombre 
+      open: true, 
+      tipo: departamentos.length > 0 ? departamentos[0].nombre : '', 
+      institucionId: v.institucionId,
+      asignadosIds: [v.vendedorId], 
+      prioridad: 'Alta', 
+      asunto: `Revisión de Contrato N° ${v.numContrato}`,
+      mensajeInicial: '', 
+      institucionNombre: v.institucionNombre, 
+      asignadoNombre: v.vendedorNombre 
     });
   };
 

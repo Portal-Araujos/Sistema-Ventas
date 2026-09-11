@@ -50,7 +50,7 @@ export async function GET(request: Request) {
       whereVentas.vendedorId = vendedorId;
       whereVisitas.usuarioId = vendedorId;
       whereAsignaciones.vendedorId = vendedorId;
-      whereTickets.asignadoAId = vendedorId;
+      whereTickets.asignados = { some: { id: vendedorId } };
       wherePedidos.usuarioId = vendedorId;
     }
 
