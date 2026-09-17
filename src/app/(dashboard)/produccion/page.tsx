@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   Scissors, Search, Calendar, Eye, Settings2, CheckCircle2, 
@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { useSearchParams } from 'next/navigation';
 
-export default function ProduccionPage() {
+function ProduccionPageContent() {
   const [data, setData] = useState<any[]>([]);
   const [kpis, setKpis] = useState<any>({});
   const [catalogos, setCatalogos] = useState<any>({ estados: [], operarios: [] });
@@ -664,5 +664,12 @@ export default function ProduccionPage() {
         </div>
       )}
     </div>
+  );
+}
+export default function ProduccionPage() {
+  return (
+    <Suspense fallback={<div className="p-16 text-center text-gray-500 font-bold animate-pulse">Cargando módulo de producción...</div>}>
+      <ProduccionPageContent />
+    </Suspense>
   );
 }

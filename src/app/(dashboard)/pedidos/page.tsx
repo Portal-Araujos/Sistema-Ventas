@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,Suspense } from 'react';
 import { ShoppingBag, Edit, Send, PlusCircle, Trash2, CheckCircle2, AlertCircle, Search, Eye, PackageCheck, Calendar, ClipboardCheck, LockOpen, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 
 import ContratoVentaForm from '@/components/shared/ContratoVentaForm';
 
-export default function PedidosPage() {
+function PedidosPageContent() {
   const [grupos, setGrupos] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null); 
   const [institucionesList, setInstitucionesList] = useState<any[]>([]);
@@ -795,5 +795,12 @@ export default function PedidosPage() {
         </div>
       )}
     </div>
+  );
+}
+export default function PedidosPage() {
+  return (
+    <Suspense fallback={<div className="p-16 text-center text-gray-500 font-bold animate-pulse">Cargando módulo de producción...</div>}>
+      <PedidosPageContent />
+    </Suspense>
   );
 }
