@@ -185,7 +185,7 @@ model Usuario {
   departamentoId         Int?                 @map("departamento_id")
   departamento           DepartamentoEmpresa? @relation(fields: [departamentoId], references: [id])
   detallesRecibidos      DetallePedido[]      @relation("UsuarioReceptorDetalle")
-
+  notificaciones         Notificacion[]       @relation("NotificacionesUsuario")
   @@map("usuarios")
 }
 
@@ -547,4 +547,17 @@ model DepartamentoEmpresa {
   usuarios Usuario[]
 
   @@map("departamentos_empresa")
+}
+model Notificacion {
+  id               Int      @id @default(autoincrement())
+  titulo           String
+  mensaje          String
+  tipoModulo       String   // Ej: 'TICKETS', 'OPERACIONES', 'PRODUCCION', 'DESPACHO', 'PEDIDOS'
+  urlDestino       String?  // Ej: '/produccion?pedidoId=PED-123456'
+  leido            Boolean  @default(false)
+  rolDestino       String?  // Si se llena (ej: "operaciones"), llega a todos los de esa área
+  usuarioDestinoId String?  @map("usuario_destino_id") // Si se llena, llega a un vendedor específico
+  usuarioDestino   Usuario? @relation("NotificacionesUsuario", fields: [usuarioDestinoId], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now()) @map("created_at")
+  @@map("notificaciones")
 }

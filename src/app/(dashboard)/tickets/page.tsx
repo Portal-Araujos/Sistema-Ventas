@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Ticket, Search, Plus, AlertCircle, CheckCircle2, Clock, Trash2, HardDrive, Inbox, ChevronRight, User, RefreshCw, Briefcase, X, ChevronLeft } from 'lucide-react';
+import { Ticket, Search, Plus, AlertCircle, CheckCircle2, Clock, Trash2, HardDrive, Inbox, ChevronRight, User, ArrowUp, ArrowDown, ArrowUpDown, Briefcase, X, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -19,7 +19,6 @@ export default function TicketsPage() {
   const [tabActiva, setTabActiva] = useState('General');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 🔥 NUEVOS FILTROS DE USUARIOS 🔥
   const [filtroCreador, setFiltroCreador] = useState('');
   const [filtroAsignado, setFiltroAsignado] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
@@ -29,6 +28,17 @@ export default function TicketsPage() {
   const [estadoFiltro, setEstadoFiltro] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
+  const handleSort = (key: string) => {
+  let direction: 'asc' | 'desc' = 'asc';
+  if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+  setSortConfig({ key, direction });
+  };
+  const getSortIcon = (key: string) => {
+  if (!sortConfig || sortConfig.key !== key) return <ArrowUpDown size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />;
+  return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="text-primary" /> : <ArrowDown size={14} className="text-primary" />;
+  };
 
   const [chatOpen, setChatOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
@@ -52,7 +62,6 @@ export default function TicketsPage() {
     } catch (e) { alert("Error de conexión al servidor"); } finally { setLimpiando(false); }
   };
 
-  // 🔥 NUEVO CAMPO: fechaLimite EN VEZ DE diasLimite 🔥
   const [nuevoTicket, setNuevoTicket] = useState<{
     tipo: string; institucionId: string; asignadosIds: string[]; prioridad: string; asunto: string; mensajeInicial: string; fechaLimite: string;
   }>({
@@ -94,8 +103,16 @@ export default function TicketsPage() {
   };
 
   useEffect(() => { cargarDatos(); }, []);
-  
-  // Resetea a página 1 si cambian los filtros
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tId = params.get('ticketId');
+    if (tId) {
+      abrirChat(parseInt(tId));
+      // Limpiamos la URL para que no se vuelva a abrir si recarga la página
+      window.history.replaceState({}, '', '/tickets');
+    }
+  }, []);
+
   useEffect(() => { setCurrentPage(1); }, [searchTerm, tabActiva, estadoFiltro]);
 
   const handleBuscarEscuela = async (termino: string) => {
@@ -138,7 +155,6 @@ export default function TicketsPage() {
     setDropdownUser(false);
   };
 
-  // 🔥 BOTÓN REPARADO PARA ELIMINAR USUARIO 🔥
   const removerUsuario = (e: React.MouseEvent, userId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -212,6 +228,8 @@ export default function TicketsPage() {
       } else {
         if (t.estado !== estadoFiltro) return false;
       }
+    } else {
+      if (t.estado === 'Cerrado' || t.estado === 'Resuelto') return false;
     }
     if (currentUser.esSuperAdmin) {
       return tabActiva === 'General' || t.tipo === tabActiva;
@@ -223,13 +241,30 @@ export default function TicketsPage() {
       return true;
     }
   });
+  // 🔥 ORDEN INTELIGENTE (3 NIVELES) 🔥
+  const sortedTickets = [...ticketsFiltrados].sort((a, b) => {
+  if (sortConfig) {
+    let aVal = a[sortConfig.key]; let bVal = b[sortConfig.key];
+    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  }
+  // Nivel 1: Nuevos (<12h) o Urgentes | Nivel 2: Normales | Nivel 3: Cerrados/Vencidos
+  const aNuevo = a.createdAt ? (new Date().getTime() - new Date(a.createdAt).getTime() < 12 * 60 * 60 * 1000) : false;
+  const bNuevo = b.createdAt ? (new Date().getTime() - new Date(b.createdAt).getTime() < 12 * 60 * 60 * 1000) : false;
+  const scoreA = (aNuevo || a.prioridad === 'Urgente' || a.prioridad === 'Alta') ? 3 : (a.estado === 'Cerrado' || a.estado === 'Resuelto') ? 1 : 2;
+  const scoreB = (bNuevo || b.prioridad === 'Urgente' || b.prioridad === 'Alta') ? 3 : (b.estado === 'Cerrado' || b.estado === 'Resuelto') ? 1 : 2;
 
+  if (scoreA !== scoreB) return scoreB - scoreA;
+  // Si tienen la misma prioridad, ordenamos por la última respuesta (updatedAt)
+  return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+  const totalPages = Math.max(1, Math.ceil(sortedTickets.length / itemsPerPage));
+  const itemsPaginados = sortedTickets.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const conteoAbiertos = tickets.filter(t => t.estado === 'Abierto' || t.estado === 'Re-Abierto').length;
   const conteoVencidos = tickets.filter(t => t.estado === 'Vencido').length;;
   const conteoPendientes = tickets.filter(t => t.estado === 'Pendiente').length;
   const conteoCerrados = tickets.filter(t => t.estado === 'Cerrado').length;
-  const totalPages = Math.max(1, Math.ceil(ticketsFiltrados.length / itemsPerPage));
-  const itemsPaginados = ticketsFiltrados.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30 overflow-x-hidden">
@@ -329,17 +364,27 @@ export default function TicketsPage() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm whitespace-nowrap">
-            <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase text-xs font-black">
-              <tr>
-                <th className="p-4">Ticket</th>
-                <th className="p-4">Asunto / Institución</th>
-                <th className="p-4 hidden md:table-cell">Área Responsable</th>
-                <th className="p-4">Asignados</th>
-                <th className="p-4">Tiempos SLA</th>
-                <th className="p-4 text-center">Estado</th>
-                <th className="p-4 text-right">Acción</th>
-              </tr>
-            </thead>
+            <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase text-xs font-black select-none">
+          <tr>
+            <th className="p-4 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('codigo')}>
+              <div className="flex items-center gap-1">Ticket {getSortIcon('codigo')}</div>
+            </th>
+            <th className="p-4 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('institucionNombre')}>
+              <div className="flex items-center gap-1">Asunto / Institución {getSortIcon('institucionNombre')}</div>
+            </th>
+            <th className="p-4 hidden md:table-cell cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('tipo')}>
+              <div className="flex items-center gap-1">Área {getSortIcon('tipo')}</div>
+            </th>
+            <th className="p-4">Asignados</th>
+            <th className="p-4 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('createdAt')}>
+              <div className="flex items-center gap-1">Tiempos SLA {getSortIcon('createdAt')}</div>
+            </th>
+            <th className="p-4 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('estado')}>
+              <div className="flex items-center justify-center gap-1">Estado {getSortIcon('estado')}</div>
+            </th>
+            <th className="p-4 text-right">Acción</th>
+          </tr>
+        </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr><td colSpan={7} className="p-12 text-center text-gray-500 font-bold animate-pulse">Cargando mesa de ayuda...</td></tr>

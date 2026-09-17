@@ -26,30 +26,41 @@ export async function GET(request: Request) {
         lte: new Date(`${fechaFin}T23:59:59.999-05:00`)
       };
     }
-    const pedidos = await prisma.pedido.findMany({
-      where: whereCondition,
-      include: {
-        institucion: { select: { id: true, nombre: true } },
-        usuario: { select: { id: true, nombre: true } },
-        detalles: true
-      },
-      orderBy: { updatedAt: 'desc' }
-    });
+    const [pedidos, pedidosMaestros] = await Promise.all([
+      prisma.pedido.findMany({
+        where: whereCondition,
+        include: {
+          institucion: { select: { id: true, nombre: true } },
+          usuario: { select: { id: true, nombre: true } },
+          detalles: true
+        },
+        orderBy: { updatedAt: 'desc' }
+      }),
+      prisma.pedido.findMany({
+        where: { estado: { not: 'Borrador' } },
+        select: { id: true, institucionId: true, fechaRequerida: true },
+        orderBy: { createdAt: 'asc' }
+      })
+    ]);
     const mapaGrupos = new Map();
     for (const ped of pedidos) {
       const instId = ped.institucionId;
       const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
       const grupoKey = `${instId}_${fr}`;
-      const pedCreatedAt = new Date(ped.createdAt).getTime(); // Para rastrear el código maestro
-      
       let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
 
       if (!mapaGrupos.has(grupoKey)) {
+        // 🔥 MAGIA: Buscamos el ID del contrato más viejo globalmente
+        const pedidoBase = pedidosMaestros.find((pm: any) => {
+          const frPm = pm.fechaRequerida ? new Date(pm.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
+          return pm.institucionId === instId && frPm === fr;
+        });
+        const idMaestro = pedidoBase ? pedidoBase.id : ped.id;
+
         mapaGrupos.set(grupoKey, {
           id: grupoKey,
           institucionId: instId, 
-          codigoOP: `PED-${ped.id.slice(0, 6).toUpperCase()}`, // Código Inicial
-          _maxCreatedAt: pedCreatedAt,
+          codigoOP: `PED-${idMaestro.slice(0, 6).toUpperCase()}`, // 🔥 CÓDIGO ÚNICO E INMUTABLE
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Vendedor',
           paquetesCantidad: 0, 
@@ -60,12 +71,6 @@ export async function GET(request: Request) {
           fechaRequeridaDate: null,
           pedidosAsociados: []
         });
-      } else {
-        const grupo = mapaGrupos.get(grupoKey);
-        if (pedCreatedAt > grupo._maxCreatedAt) {
-          grupo._maxCreatedAt = pedCreatedAt;
-          grupo.codigoOP = `PED-${ped.id.slice(0, 6).toUpperCase()}`;
-        }
       }
       const grupo = mapaGrupos.get(grupoKey);
       if (ped.fechaRequerida) {
@@ -117,7 +122,7 @@ export async function GET(request: Request) {
         hoyLocal.setHours(0, 0, 0, 0);
         esAtrasado = reqDateLocal < hoyLocal;
       }
-      const { fechaRequeridaDate, _maxCreatedAt, ...restoGrupo } = g;
+      const { fechaRequeridaDate, ...restoGrupo } = g;
       return { ...restoGrupo, avanceGlobal, estadoGlobal, fechaRequeridaTexto, esAtrasado };
     });
 
@@ -160,6 +165,26 @@ export async function PUT(request: Request) {
          const desp = p?.detalles.filter(d => d.guiaDespachoId !== null).length || 0;
          if (tot === desp && tot > 0) {
              await prisma.pedido.update({ where: { id: ped.pedidoId }, data: { estado: 'Despachado', fechaFinEmpaque: new Date() } });
+         }
+      }
+      if (prendasIds.length > 0) {
+         // Buscamos a quién le pertenece este pedido
+         const detalleReferencia = await prisma.detallePedido.findFirst({ 
+           where: { id: prendasIds[0] }, 
+           include: { pedido: true } 
+         });
+         
+         if (detalleReferencia?.pedido) {
+            const codigoOP = `PED-${detalleReferencia.pedido.id.slice(0, 6).toUpperCase()}`;
+            await prisma.notificacion.create({
+              data: {
+                titulo: '🚚 Guía de Despacho Generada',
+                mensaje: `Bodega ha despachado prendas de tu pedido ${codigoOP}. Guía: ${codigoGuia}`,
+                tipoModulo: 'PEDIDOS',
+                urlDestino: `/pedidos?pedidoId=${codigoOP}`,
+                usuarioDestinoId: detalleReferencia.pedido.usuarioId // Solo le avisa al dueño
+              }
+            });
          }
       }
       return NextResponse.json({ success: true, guia: nuevaGuia });

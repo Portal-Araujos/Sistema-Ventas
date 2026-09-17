@@ -292,6 +292,22 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: 'Operación denegada. Solo la persona que abrió el ticket puede marcarlo como Resuelto/Cerrado.' }, { status: 403 });
       }
     }
+    if (nuevoEstado === 'Resuelto') {
+      const ticketResuelto = await prisma.ticketGestion.update({
+        where: { id: parseInt(ticketId) },
+        data: {
+          estado: 'Resuelto',
+          mensajes: {
+            create: { 
+              remitenteId: userId, 
+              contenido: `✅ OPERACIÓN FINALIZADA. El equipo ha marcado este ticket como RESUELTO. Creador del ticket, por favor revise y confirme el "Cierre" o solicite una "Re-apertura".`, 
+              esSistema: true 
+            }
+          }
+        }
+      });
+      return NextResponse.json({ success: true, ticket: ticketResuelto });
+    }
 
     if (nuevoEstado === 'Re-Abierto') {
       if (userRol !== 'super_admin') return NextResponse.json({ error: 'Solo el Super Admin puede forzar reaperturas.' }, { status: 403 });

@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       whereBase.createdAt = { gte: new Date(startStr), lte: new Date(endStr) };
     }
 
-    const [estadosCatalogo, todosLosDetalles] = await Promise.all([
+    const [estadosCatalogo, todosLosDetalles, pedidosMaestros] = await Promise.all([
       prisma.estadoOperacion.findMany({ where: { activo: true } }),
       prisma.detallePedido.findMany({
         where: whereBase,
@@ -46,6 +46,11 @@ export async function GET(request: Request) {
           }
         },
         orderBy: { createdAt: 'desc' }
+      }),
+      prisma.pedido.findMany({
+        where: { estado: { not: 'Borrador' } },
+        select: { id: true, institucionId: true, fechaRequerida: true },
+        orderBy: { createdAt: 'asc' } 
       })
     ]);
 
@@ -85,11 +90,18 @@ export async function GET(request: Request) {
       }
       if (!cumpleFiltro) return;
       if (!mapaEscuelas.has(grupoKey)) {
+        // 🔥 MAGIA: Buscamos el ID del contrato más viejo de esta escuela y fecha
+        const pedidoBase = pedidosMaestros.find((pm: any) => {
+          const frPm = pm.fechaRequerida ? new Date(pm.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
+          return pm.institucionId === instId && frPm === fr;
+        });
+        const idMaestro = pedidoBase ? pedidoBase.id : ped.id;
+
         mapaEscuelas.set(grupoKey, {
           id: grupoKey, 
-          institucionId: instId, // Conserva el id original para que el filtro de la tabla funcione perfecto
+          institucionId: instId, 
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
-          codigoPedido: `PED-${ped.id.slice(0, 6).toUpperCase()}`,
+          codigoPedido: `PED-${idMaestro.slice(0, 6).toUpperCase()}`, // 🔥 CÓDIGO ÚNICO E INMUTABLE
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaIngresoTexto: new Date(ped.createdAt).toLocaleDateString('es-EC', { timeZone: 'America/Guayaquil' }),
           fechaRequeridaTexto: ped.fechaRequerida ? new Date(ped.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'No asignada',
@@ -157,7 +169,6 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { modo } = body;
-    // 🔥 NUEVO MODO: REPROGRAMACIÓN DE FECHA MASIVA 🔥
     if (modo === 'cambiar_fecha_requerida') {
       const { pedidoIds, nuevaFecha, motivo } = body;
       
@@ -230,12 +241,24 @@ export async function PUT(request: Request) {
       const contratosOrdenados = Array.from(genericasPorContrato.values()).sort((a, b) => a.totalPrendas - b.totalPrendas);
       for (const contrato of contratosOrdenados) {
         for (const prenda of contrato.items) {
-          const key = `${prenda.skuCodigo || 'S/N'}|${prenda.tipoRopa || 'Prenda'}|${prenda.color || '-'}|${prenda.talla || '-'}`;
+          
+          // 🔥 CORRECCIÓN: IGUALAMOS LA LLAVE EXACTA DE 7 DATOS DEL FRONTEND 🔥
+          const sku = prenda.skuCodigo || 'S/N';
+          const ropa = prenda.tipoRopa || 'Prenda';
+          const color = prenda.color || '-';
+          const talla = prenda.talla || '-';
+          const genero = prenda.genero || '-';
+          const observacion = prenda.observacion || '-';
+          const bordado = prenda.bordado || '-';
+          const key = `${sku}|${ropa}|${color}|${talla}|${genero}|${observacion}|${bordado}`;
+          
+          // Ahora sí encontrará el número que escribiste en pantalla
           let stockDisponible = stockAsignado[key] ? parseInt(stockAsignado[key]) : 0;
+          
           if (stockDisponible >= prenda.cantidad) {
             await prisma.detallePedido.update({
               where: { id: prenda.id },
-              data: { estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' }
+              data: { estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' } 
             });
             stockAsignado[key] -= prenda.cantidad;
 
@@ -244,7 +267,7 @@ export async function PUT(request: Request) {
             
             await prisma.detallePedido.update({
               where: { id: prenda.id },
-              data: { cantidad: stockDisponible, estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' }
+              data: { cantidad: stockDisponible, estadoOperacion: 'Despacho', estadoProduccion: 'Terminado' } 
             });
             const dataCreate: any = {
               pedidoId: prenda.pedidoId,
@@ -257,7 +280,7 @@ export async function PUT(request: Request) {
               bordado: prenda.bordado,
               observacion: prenda.observacion,
               operarioAsignadoId: prenda.operarioAsignadoId,
-              estadoOperacion: 'En produccion',
+              estadoOperacion: 'En produccion', 
               estadoProduccion: 'Planificacion'
             };
             if (fechaParseada) dataCreate.fechaEstimadaConfeccion = fechaParseada;
@@ -267,9 +290,38 @@ export async function PUT(request: Request) {
           } else {
             await prisma.detallePedido.update({
               where: { id: prenda.id },
-              data: dataProduccion
+              data: dataProduccion 
             });
           }
+        }
+      }
+      // 🔥 GATILLO AUTOMÁTICO: AVISAR A TALLER Y VENDEDOR 🔥
+      if (prendasPendientes.length > 0) {
+        const idPedidoReal = prendasPendientes[0].pedidoId;
+        const pedidoBase = await prisma.pedido.findUnique({ where: { id: idPedidoReal } });
+        
+        if (pedidoBase) {
+           const codigoOP = `PED-${idPedidoReal.slice(0, 6).toUpperCase()}`;
+           // 1. Avisar a Producción (Taller)
+           await prisma.notificacion.create({
+             data: {
+               titulo: '✂️ Nuevos Cortes Asignados',
+               mensaje: `Operaciones ha enviado prendas a confección para el pedido ${codigoOP}.`,
+               tipoModulo: 'PRODUCCION',
+               urlDestino: `/produccion?pedidoId=${codigoOP}`,
+               rolDestino: 'produccion' // Asegúrate de que este sea el nombre del rol o permiso de tu taller
+             }
+           });
+           // 2. Avisar al Vendedor
+           await prisma.notificacion.create({
+             data: {
+               titulo: '📊 Pedido Procesado',
+               mensaje: `Tu pedido ${codigoOP} ha pasado por Operaciones y se ha distribuido el stock.`,
+               tipoModulo: 'PEDIDOS',
+               urlDestino: `/pedidos?pedidoId=${codigoOP}`,
+               usuarioDestinoId: pedidoBase.usuarioId // Aquí le llega SOLO al dueño del pedido
+             }
+           });
         }
       }
 

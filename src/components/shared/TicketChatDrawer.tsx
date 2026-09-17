@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Paperclip, FileText, CheckCircle2, AlertCircle, RefreshCw, Image as ImageIcon, Trash2, Download } from 'lucide-react';
+import { X, Send, Paperclip, FileText, CheckCircle2, AlertCircle, Clock,RefreshCw, Image as ImageIcon, Trash2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -165,8 +165,10 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
       case 'Abierto': return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'En Proceso': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Pendiente': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Resuelto': return 'bg-cyan-100 text-cyan-800 border-cyan-300 animate-pulse'; // 🔥 NUEVO ESTADO DE ESPERA
       case 'Cerrado': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'Re-Abierto': return 'bg-red-100 text-red-800 border-red-200';
+      case 'Vencido': return 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -326,15 +328,48 @@ export default function TicketChatDrawer({ isOpen, onClose, ticketId, currentUse
             </div>
           )}
 
-          {ticket?.estado !== 'Cerrado' && (
+          {/* 🔥 1. BOTONES CUANDO EL TICKET ESTÁ ACTIVO 🔥 */}
+          {ticket?.estado !== 'Cerrado' && ticket?.estado !== 'Resuelto' && (
             <div className="mt-3 flex justify-between gap-2 border-t border-gray-100 pt-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => cambiarEstado('Pendiente')} className="flex-1 text-xs h-8 text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100 font-bold">
+              <Button type="button" variant="outline" size="sm" onClick={() => cambiarEstado('Pendiente')} className="flex-1 text-xs h-8 text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100 font-bold shadow-sm">
                 Pausar a Pendiente
               </Button>
-              {ticket?.creadorId === currentUserId && (
-                <Button type="button" variant="outline" size="sm" onClick={() => cambiarEstado('Cerrado')} className="flex-1 text-xs h-8 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 font-bold">
-                  <CheckCircle2 size={14} className="mr-1"/> Marcar Resuelto
-                </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => cambiarEstado('Resuelto')} className="flex-1 text-xs h-8 text-cyan-700 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 font-bold shadow-sm">
+                <CheckCircle2 size={14} className="mr-1"/> Notificar Solución
+              </Button>
+            </div>
+          )}
+
+          {/* 🔥 2. FLUJO DE APROBACIÓN CUANDO ESTÁ "RESUELTO" 🔥 */}
+          {ticket?.estado === 'Resuelto' && (
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              {ticket.creadorId === currentUserId ? (
+                <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="bg-cyan-50 border border-cyan-200 text-cyan-800 text-xs p-2.5 rounded-lg text-center font-bold shadow-inner">
+                    El equipo ha marcado este ticket como resuelto. ¿Estás conforme con el resultado?
+                  </div>
+                  
+                  <div className="flex flex-col gap-2">
+                    <Input 
+                      placeholder="Escribe aquí qué falta (Obligatorio solo si rechazas)..." 
+                      className="text-xs h-9 bg-white border-gray-300 focus:border-red-400"
+                      value={motivoReapertura}
+                      onChange={e => setMotivoReapertura(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => cambiarEstado('Re-Abierto')} className="flex-1 text-xs h-9 text-red-700 bg-red-50 border-red-200 hover:bg-red-100 font-bold shadow-sm">
+                        👎 Faltan cosas (Re-abrir)
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => cambiarEstado('Cerrado')} className="flex-1 text-xs h-9 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 font-bold shadow-sm">
+                        👍 Conforme (Cerrar)
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-100 text-gray-500 text-xs font-bold py-3 rounded-lg flex items-center justify-center gap-2 border border-gray-200 shadow-inner">
+                  <Clock size={16} className="animate-spin-slow" /> ⏳ Esperando que el creador apruebe la solución...
+                </div>
               )}
             </div>
           )}

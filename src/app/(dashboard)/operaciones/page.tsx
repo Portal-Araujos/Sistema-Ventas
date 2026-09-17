@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Factory, Search, Calendar, Eye, ChevronLeft, ChevronRight, 
-  CheckCircle2, AlertCircle, AlertTriangle, Edit2,PackageSearch, Calculator, Box
+  CheckCircle2, AlertCircle, AlertTriangle, Edit2,PackageSearch, Calculator, Box, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { useSearchParams } from 'next/navigation';
 
 export default function OperacionesPage() {
   const [data, setData] = useState<any[]>([]);
@@ -17,6 +18,7 @@ export default function OperacionesPage() {
   const [estadosCatalogo, setEstadosCatalogo] = useState<any[]>([]);
   const [institucionesList, setInstitucionesList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
 
   // FILTROS
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +31,20 @@ export default function OperacionesPage() {
   // PAGINACIÓN
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  // 🔥 ORDENAMIENTO DE COLUMNAS 🔥
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+  const getSortIcon = (key: string) => {
+    if (!sortConfig || sortConfig.key !== key) return <ArrowUpDown size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />;
+    return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="text-primary" /> : <ArrowDown size={14} className="text-primary" />;
+  };
 
   // MODALES
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
@@ -116,6 +132,20 @@ export default function OperacionesPage() {
   };
 
   useEffect(() => { cargarDatos(); }, [selectedEstadoFilter, fechaDesde, fechaHasta]);
+
+  useEffect(() => {
+    const pId = searchParams.get('pedidoId');
+    if (pId && data.length > 0) {
+      // Ponemos el código en el buscador para que se filtre visualmente
+      setSearchTerm(pId);
+
+      // Y abrimos automáticamente el modal de Gestión de ese pedido exacto
+      const grupoEncontrado = data.find(g => g.codigoPedido === pId);
+      if (grupoEncontrado) {
+        handleOpenDetalle(grupoEncontrado);
+      }
+    }
+  }, [searchParams, data]);
   useEffect(() => { setCurrentPage(1); }, [searchTerm, selectedInstFilter]);
 
   useEffect(() => {
@@ -252,24 +282,48 @@ export default function OperacionesPage() {
   });
   
   // ▼ 1. COPIA Y PEGA DESDE AQUÍ HASTA paginatedData ▼
+  // 🔥 LÓGICA DE ORDENAMIENTO MEJORADA 🔥
   const sortedData = [...filteredData].sort((a, b) => {
+    // Si el usuario hizo clic en una columna, usamos ese orden
+    if (sortConfig) {
+      let aValue = a[sortConfig.key];
+      let bValue = b[sortConfig.key];
+
+      // Inteligencia para ordenar Fechas correctamente
+      if (sortConfig.key.includes('fecha') || sortConfig.key.includes('Fecha')) {
+        const parseDate = (dStr: string) => {
+          if (!dStr || dStr.includes('No asig') || dStr.includes('Sin Asig') || dStr.includes('1969') || dStr.includes('1970')) return new Date(8640000000000000).getTime();
+          if (dStr.includes('-')) return new Date(dStr).getTime();
+          const p = dStr.split('/');
+          return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : new Date(dStr).getTime();
+        };
+        aValue = parseDate(aValue);
+        bValue = parseDate(bValue);
+      }
+
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+
+    // Si NO hay filtro activo, usamos el orden por defecto (Prioridad a los atrasados y fecha requerida)
     const isFantasmaA = !a.fechaRequeridaTexto || a.fechaRequeridaTexto.includes('1969') || a.fechaRequeridaTexto.includes('1970');
     const isFantasmaB = !b.fechaRequeridaTexto || b.fechaRequeridaTexto.includes('1969') || b.fechaRequeridaTexto.includes('1970');
 
-    // Mandar fantasmas (sin fecha) al final
     if (isFantasmaA && !isFantasmaB) return 1;
     if (!isFantasmaA && isFantasmaB) return -1;
     if (isFantasmaA && isFantasmaB) return 0;
     if (a.esAtrasado && !b.esAtrasado) return -1;
     if (!a.esAtrasado && b.esAtrasado) return 1;
-    const parseDate = (dStr: string) => {
+    
+    const parseDateDefault = (dStr: string) => {
       if (!dStr) return new Date(8640000000000000).getTime();
       if (dStr.includes('-')) return new Date(dStr).getTime();
       const p = dStr.split('/');
       return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : new Date(dStr).getTime();
     };
 
-    return parseDate(a.fechaRequerida || a.fechaRequeridaTexto) - parseDate(b.fechaRequerida || b.fechaRequeridaTexto);
+    return parseDateDefault(a.fechaRequerida || a.fechaRequeridaTexto) - parseDateDefault(b.fechaRequerida || b.fechaRequeridaTexto);
   });
 
   const totalPages = Math.max(1, Math.ceil(sortedData.length / itemsPerPage));
@@ -356,16 +410,32 @@ export default function OperacionesPage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
           <div className="overflow-auto max-h-[65vh] w-full">
             <table className="w-full text-left border-collapse text-xs min-w-800px">
-              <thead className="sticky top-0 z-20 bg-gray-100 shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
+              <thead className="sticky top-0 z-20 bg-gray-100 shadow-[0_1px_2px_rgba(0,0,0,0.1)] select-none">
                 <tr className="text-gray-600 font-black uppercase border-b border-gray-300">
-                  <th className="p-3.5">Código</th>
-                  <th className="p-3.5">Institución</th>
-                  <th className="p-3.5">Vendedor</th>
-                  <th className="p-3.5">Fecha Ingreso</th>
-                  <th className="p-3.5 text-center">Paquetes</th>
-                  <th className="p-3.5 text-center">Estado Actual</th>
-                  <th className="p-3.5 text-center">Fecha Requerida</th>
-                  <th className="p-3.5 text-center">Fecha Est. Confección</th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('codigoPedido')}>
+                    <div className="flex items-center gap-1">Código {getSortIcon('codigoPedido')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('institucionNombre')}>
+                    <div className="flex items-center gap-1">Institución {getSortIcon('institucionNombre')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('vendedorNombre')}>
+                    <div className="flex items-center gap-1">Vendedor {getSortIcon('vendedorNombre')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('fechaIngresoTexto')}>
+                    <div className="flex items-center gap-1">Fecha Ingreso {getSortIcon('fechaIngresoTexto')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('paquetesCantidad')}>
+                    <div className="flex items-center justify-center gap-1">Paquetes {getSortIcon('paquetesCantidad')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('estadoActual')}>
+                    <div className="flex items-center justify-center gap-1">Estado Actual {getSortIcon('estadoActual')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('fechaRequeridaTexto')}>
+                    <div className="flex items-center justify-center gap-1">Fecha Requerida {getSortIcon('fechaRequeridaTexto')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('fechaEstimadaConfeccionTexto')}>
+                    <div className="flex items-center justify-center gap-1">Est. Confección {getSortIcon('fechaEstimadaConfeccionTexto')}</div>
+                  </th>
                   <th className="p-3.5 text-center w-28">Acciones</th>
                 </tr>
               </thead>

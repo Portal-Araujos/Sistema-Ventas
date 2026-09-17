@@ -70,18 +70,25 @@ export async function GET(request: Request) {
       }
     }
 
-    const pedidos = await prisma.pedido.findMany({
-      where: whereCondition,
-      include: {
-        institucion: { select: { id: true, nombre: true } },
-        usuario: { select: { id: true, nombre: true } },
-        operarioAsignado: { select: { id: true, nombre: true } },
-        detalles: {
-          include: { usuarioReceptor: { select: { nombre: true } } }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const [pedidos, pedidosMaestros] = await Promise.all([
+      prisma.pedido.findMany({
+        where: whereCondition,
+        include: {
+          institucion: { select: { id: true, nombre: true } },
+          usuario: { select: { id: true, nombre: true } },
+          operarioAsignado: { select: { id: true, nombre: true } },
+          detalles: {
+            include: { usuarioReceptor: { select: { nombre: true } } }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.pedido.findMany({
+        where: { estado: { not: 'Borrador' } },
+        select: { id: true, institucionId: true, fechaRequerida: true },
+        orderBy: { createdAt: 'asc' }
+      })
+    ]);
 
     const institucionIds = [...new Set(pedidos.map((p: any) => p.institucionId))];
     const ventasGuardadas = await prisma.venta.findMany({
@@ -101,6 +108,7 @@ export async function GET(request: Request) {
     for (const ped of pedidos as any[]) {
       const instId = ped.institucionId;
       let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
+      const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
       let grupoKey = instId; 
       if (ped.estado !== 'Borrador') {
          const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
@@ -126,9 +134,15 @@ export async function GET(request: Request) {
       let fechaValida = ped.fechaRequerida;
       if (fechaValida && new Date(fechaValida).getFullYear() < 2000) fechaValida = null;
       if (!mapaGrupos.has(grupoKey)) {
+        const pedidoBase = pedidosMaestros.find((pm: any) => {
+          const frPm = pm.fechaRequerida ? new Date(pm.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
+          return pm.institucionId === instId && frPm === fr;
+        });
+        const idMaestro = pedidoBase ? pedidoBase.id : ped.id;
+
         mapaGrupos.set(grupoKey, {
           id: grupoKey, 
-          codigoPedido: ped.estado === 'Borrador' ? `PED-${instId.slice(0, 6).toUpperCase()}` : `PED-${ped.id.slice(0,6).toUpperCase()}`,
+          codigoPedido: ped.estado === 'Borrador' ? `PED-${instId.slice(0, 6).toUpperCase()}` : `PED-${idMaestro.slice(0,6).toUpperCase()}`,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
           fechaCreacion: ped.createdAt, fechaRequerida: fechaValida,
@@ -237,10 +251,30 @@ export async function PUT(request: Request) {
     const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
     
     if (modo === 'masivo') {
-      await prisma.pedido.updateMany({
+      const pedidosAEnviar = await prisma.pedido.findMany({
         where: { institucionId, estado: 'Borrador' },
-        data: { estado: 'Pendiente en revisión', fechaRequerida: fechaParseada }
+        include: { institucion: { select: { nombre: true } } }
       });
+
+      if (pedidosAEnviar.length > 0) {
+        await prisma.pedido.updateMany({
+          where: { institucionId, estado: 'Borrador' },
+          data: { estado: 'Pendiente en revisión', fechaRequerida: fechaParseada }
+        });
+        const primerPedido = pedidosAEnviar[0];
+        const codigoOP = `PED-${primerPedido.id.slice(0, 6).toUpperCase()}`;
+        const nombreEscuela = primerPedido.institucion?.nombre || 'la institución';
+        await prisma.notificacion.create({
+          data: {
+            titulo: '📦 Nuevo Pedido Recibido',
+            mensaje: `El vendedor ha enviado el pedido ${codigoOP} de ${nombreEscuela} para balance de stock.`,
+            tipoModulo: 'OPERACIONES',
+            urlDestino: `/operaciones?pedidoId=${codigoOP}`,
+            rolDestino: 'admin' 
+          }
+        });
+      }
+
       return NextResponse.json({ success: true });
     } else {
       const pedidoAntiguo = await prisma.pedido.findUnique({ where: { id } });

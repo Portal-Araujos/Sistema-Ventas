@@ -5,13 +5,14 @@ import * as XLSX from 'xlsx';
 import { 
   Scissors, Search, Calendar, Eye, Settings2, CheckCircle2, 
   AlertCircle, Printer, Boxes, ChevronLeft, ChevronRight, 
-  Download, Package, UserCheck, AlertTriangle, RefreshCw
+  Download, Package, UserCheck, AlertTriangle, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { useSearchParams } from 'next/navigation';
 
 export default function ProduccionPage() {
   const [data, setData] = useState<any[]>([]);
@@ -20,6 +21,7 @@ export default function ProduccionPage() {
   const [institucionesList, setInstitucionesList] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
 
   // FILTROS
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,6 +34,21 @@ export default function ProduccionPage() {
   // PAGINACIÓN
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
+
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key: string) => {
+    if (!sortConfig || sortConfig.key !== key) return <ArrowUpDown size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />;
+    return sortConfig.direction === 'asc' ? <ArrowUp size={14} className="text-primary" /> : <ArrowDown size={14} className="text-primary" />;
+  };
 
   // MODALES
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
@@ -78,6 +95,16 @@ export default function ProduccionPage() {
   };
 
   useEffect(() => { cargarDatos(); }, [fechaDesde, fechaHasta, selectedEstadoFilter]);
+  useEffect(() => {
+    const pId = searchParams.get('pedidoId');
+    if (pId && data.length > 0) {
+      setSearchTerm(pId);
+      const grupoEncontrado = data.find(g => g.codigoOP === pId);
+      if (grupoEncontrado) {
+        handleOpenDetalle(grupoEncontrado);
+      }
+    }
+  }, [searchParams, data]);
   useEffect(() => { setCurrentPage(1); }, [searchTerm, selectedInstFilter, selectedEstadoFilter, kpiFilter]);
 
   useEffect(() => {
@@ -183,8 +210,6 @@ export default function ProduccionPage() {
       const talla = p.talla ? p.talla.trim() : '-';
       const genero = p.genero ? p.genero.trim() : 'UNISEX';
       const prendaNombre = p.tipoRopa ? p.tipoRopa.trim() : 'Prenda';
-      
-      // 🔥 GÉNERO AÑADIDO AL RESUMEN 🔥
       const prendaColorTalla = `${prendaNombre} (${color}, ${talla}, ${genero})`;
 
       const key = `${sku}_${prendaColorTalla}`;
@@ -211,7 +236,6 @@ export default function ProduccionPage() {
           todasLasPrendas.push({
             ...item, codigoOP: grupo.codigoOP, institucionNombre: grupo.institucionNombre,
             numContrato: ped.numContrato, nombreCliente: ped.nombreCliente, ingresoTaller: grupo.fechaInicioTexto,
-            // 🔥 CORRECCIÓN: BÚSQUEDA EXHAUSTIVA DE LA FECHA 🔥
             fechaCompromiso: item.fechaEstimadaConfeccionTexto || (item.fechaEstimadaConfeccion ? new Date(item.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : (grupo.fechaRequeridaTexto || grupo.fechaCompromisoTexto || 'No asignada'))
           });
         });
@@ -241,17 +265,15 @@ export default function ProduccionPage() {
     prendasAImprimir.forEach(p => {
       const sku = p.skuCodigo || 'S/N'; const prendaNombre = p.tipoRopa || 'Prenda'; const color = p.color || '-'; const talla = p.talla || '-';
       const bordadoText = p.bordado || 'Sin bordado'; const obsText = p.observacion || p.observacionOperaciones || 'Sin observaciones';
-      const genero = p.genero || 'UNISEX'; // 🔥 GÉNERO AÑADIDO 🔥
-      
-      // 🔥 CORRECCIÓN: BÚSQUEDA EXHAUSTIVA DE LA FECHA 🔥
+      const genero = p.genero || 'UNISEX'; 
       const fCompromiso = p.fechaEstimadaConfeccionTexto || (p.fechaEstimadaConfeccion ? new Date(p.fechaEstimadaConfeccion).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : (grupo.fechaRequeridaTexto || grupo.fechaCompromisoTexto || 'No asignada'));
-      
-      // 🔥 GÉNERO EN EL TEXTO DEL RESUMEN 🔥
       const prendaColorTalla = `${prendaNombre} (${color}, ${talla}, ${genero})`;
       
       const key = `${sku}_${prendaColorTalla}`;
       if (!mapaTotalesPDF[key]) mapaTotalesPDF[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
       mapaTotalesPDF[key].cantidadTotal += (p.cantidad || 1);
+
+      
 
       htmlFilasDetalle += `
         <tr>
@@ -306,8 +328,39 @@ export default function ProduccionPage() {
     return matchSearch && matchInst && matchEstado && matchKpi;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
-  const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  // 🔥 INTERCEPTOR DE ORDENAMIENTO 🔥
+  const sortedData = [...filteredData].sort((a, b) => {
+    if (sortConfig) {
+      let aValue = a[sortConfig.key];
+      let bValue = b[sortConfig.key];
+
+      // Inteligencia para ordenar Fechas (DD/MM/YYYY)
+      if (sortConfig.key === 'fechaRequeridaTexto' || sortConfig.key === 'fechaInicioTexto' || sortConfig.key === 'fechaCompromisoTexto') {
+        const parseDate = (dStr: string) => {
+          if (!dStr || dStr.includes('No asig') || dStr.includes('Sin Asig') || dStr.includes('1969') || dStr.includes('1970')) return new Date(8640000000000000).getTime();
+          if (dStr.includes('-')) return new Date(dStr).getTime();
+          const p = dStr.split('/');
+          return p.length === 3 ? new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime() : new Date(dStr).getTime();
+        };
+        aValue = parseDate(aValue);
+        bValue = parseDate(bValue);
+      }
+
+      // Ordenar números y texto
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+
+    // Orden por defecto: Atrasados van primero
+    if (a.esAtrasado && !b.esAtrasado) return -1;
+    if (!a.esAtrasado && b.esAtrasado) return 1;
+    return 0;
+  });
+
+  // 🔥 APLICAMOS LA PAGINACIÓN A LOS DATOS YA ORDENADOS 🔥
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / itemsPerPage));
+  const paginatedData = sortedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   
   const esModoAdmin = currentUser?.rol?.toLowerCase().includes('admin');
 
@@ -383,16 +436,32 @@ export default function ProduccionPage() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden">
           <div className="overflow-auto max-h-[65vh] w-full">
             <table className="w-full text-left border-collapse text-xs min-w-800px">
-              <thead className="sticky top-0 z-20 bg-gray-100 shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
+              <thead className="sticky top-0 z-20 bg-gray-100 shadow-[0_1px_2px_rgba(0,0,0,0.1)] select-none">
                 <tr className="text-gray-600 font-black uppercase border-b border-gray-300">
-                  <th className="p-3.5">Código Pedido</th>
-                  <th className="p-3.5">Institución</th>
-                  <th className="p-3.5">Vendedor</th>
-                  <th className="p-3.5 text-center">Paquetes</th>
-                  <th className="p-3.5 text-center">Prendas</th>
-                  <th className="p-3.5 text-center">Estado Taller</th>
-                  <th className="p-3.5">Fechas (Inicio / Comp.)</th>
-                  <th className="p-3.5 text-center">Fecha Requerida</th> 
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('codigoOP')}>
+                    <div className="flex items-center gap-1">Código Pedido {getSortIcon('codigoOP')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('institucionNombre')}>
+                    <div className="flex items-center gap-1">Institución {getSortIcon('institucionNombre')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('vendedorNombre')}>
+                    <div className="flex items-center gap-1">Vendedor {getSortIcon('vendedorNombre')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('paquetesCantidad')}>
+                    <div className="flex items-center justify-center gap-1">Paquetes {getSortIcon('paquetesCantidad')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('totalPrendas')}>
+                    <div className="flex items-center justify-center gap-1">Prendas {getSortIcon('totalPrendas')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('estadoActual')}>
+                    <div className="flex items-center justify-center gap-1">Estado Taller {getSortIcon('estadoActual')}</div>
+                  </th>
+                  <th className="p-3.5 cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('fechaInicioTexto')}>
+                    <div className="flex items-center gap-1">Fechas (Inicio / Comp.) {getSortIcon('fechaInicioTexto')}</div>
+                  </th>
+                  <th className="p-3.5 text-center cursor-pointer hover:bg-gray-200 transition-colors group" onClick={() => handleSort('fechaRequeridaTexto')}>
+                    <div className="flex items-center justify-center gap-1">Fecha Requerida {getSortIcon('fechaRequeridaTexto')}</div>
+                  </th>
                   <th className="p-3.5 text-center">Acciones</th>
                 </tr>
               </thead>

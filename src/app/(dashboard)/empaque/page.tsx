@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import * as XLSX from 'xlsx';
+import { useSearchParams } from 'next/navigation';
 
 export default function EmpaquePage() {
   const [data, setData] = useState<any[]>([]);
@@ -22,7 +23,7 @@ export default function EmpaquePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | null }>({ key: '', direction: null });
-
+  const searchParams = useSearchParams();
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
@@ -67,6 +68,16 @@ export default function EmpaquePage() {
   };
 
   useEffect(() => { cargarDatos(); }, [fechaDesde, fechaHasta]);
+  useEffect(() => {
+    const pId = searchParams.get('pedidoId');
+    if (pId && data.length > 0) {
+      setSearchTerm(pId);
+      const grupoEncontrado = data.find(g => g.codigoOP === pId);
+      if (grupoEncontrado) {
+        handleOpenDetalle(grupoEncontrado);
+      }
+    }
+  }, [searchParams, data]);
   useEffect(() => { setCurrentPage(1); }, [searchTerm, selectedInstFilter, kpiFilter]);
 
   useEffect(() => {
