@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect , Suspense} from 'react';
 import { Package, Search, Calendar, Eye, CheckCircle2, AlertCircle, PackageCheck, Truck, Clock,ArrowUpDown,FileSpreadsheet, ArrowUp, ArrowDown,  Printer, ChevronLeft, ChevronRight, Save, Send, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import * as XLSX from 'xlsx';
 import { useSearchParams } from 'next/navigation';
 
-export default function EmpaquePage() {
+function EmpaquePageContent() {
   const [data, setData] = useState<any[]>([]);
   const [kpis, setKpis] = useState<any>({});
   const [institucionesList, setInstitucionesList] = useState<any[]>([]);
@@ -787,5 +787,13 @@ export default function EmpaquePage() {
         </div>
       )}
     </div>
+  );
+  
+}
+export default function EmpaquePage() {
+  return (
+    <Suspense fallback={<div className="p-16 text-center text-gray-500 font-bold animate-pulse">Cargando módulo de empaque...</div>}>
+      <EmpaquePageContent />
+    </Suspense> 
   );
 }
