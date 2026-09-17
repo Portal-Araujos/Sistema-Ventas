@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect , Suspense} from 'react';
 import { 
   Factory, Search, Calendar, Eye, ChevronLeft, ChevronRight, 
   CheckCircle2, AlertCircle, AlertTriangle, Edit2,PackageSearch, Calculator, Box, ArrowUp, ArrowDown, ArrowUpDown
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { useSearchParams } from 'next/navigation';
 
-export default function OperacionesPage() {
+function OperacionesPageContent() {
   const [data, setData] = useState<any[]>([]);
   const [kpis, setKpis] = useState<any>({});
   const [estadosCatalogo, setEstadosCatalogo] = useState<any[]>([]);
@@ -755,5 +755,12 @@ export default function OperacionesPage() {
         </div>
       )}
     </div>
+  );
+}
+export default function OperacionesPage() {
+  return (
+    <Suspense fallback={<div className="p-16 text-center text-gray-500 font-bold animate-pulse">Cargando módulo de operaciones...</div>}>
+      <OperacionesPageContent />
+    </Suspense>
   );
 }
