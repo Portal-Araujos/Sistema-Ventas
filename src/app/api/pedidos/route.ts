@@ -113,7 +113,10 @@ export async function GET(request: Request) {
       if (ped.estado !== 'Borrador') {
          const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
          grupoKey = `${instId}_${fr}`;
+      } else {
+         grupoKey = `${instId}_${ped.usuarioId}`; // Aislamos a cada vendedor
       }
+      
       const ventaAsociada = ventasGuardadas.find(v => {
         const vNum = v.numContrato ? String(v.numContrato).trim() : 'S/N';
         return vNum === contratoExtraido && v.institucionId === instId;
@@ -142,6 +145,8 @@ export async function GET(request: Request) {
 
         mapaGrupos.set(grupoKey, {
           id: grupoKey, 
+          institucionId: instId, 
+          vendedorId: ped.usuarioId,
           codigoPedido: ped.estado === 'Borrador' ? `PED-${instId.slice(0, 6).toUpperCase()}` : `PED-${idMaestro.slice(0,6).toUpperCase()}`,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
@@ -251,19 +256,27 @@ export async function PUT(request: Request) {
     const fechaParseada = (fechaRequerida && fechaRequerida.length > 4) ? new Date(`${fechaRequerida}T12:00:00Z`) : null;
     
     if (modo === 'masivo') {
+      // 🔥 Aislamos la acción solo para los borradores de ese vendedor específico
+      const whereMasivo: any = { institucionId, estado: 'Borrador' };
+      if (body.vendedorId) whereMasivo.usuarioId = body.vendedorId;
+      else if (userRol === 'vendedor') whereMasivo.usuarioId = userIdFallback;
+
       const pedidosAEnviar = await prisma.pedido.findMany({
-        where: { institucionId, estado: 'Borrador' },
+        where: whereMasivo,
         include: { institucion: { select: { nombre: true } } }
       });
 
       if (pedidosAEnviar.length > 0) {
         await prisma.pedido.updateMany({
-          where: { institucionId, estado: 'Borrador' },
+          where: whereMasivo,
           data: { estado: 'Pendiente en revisión', fechaRequerida: fechaParseada }
         });
+
+        // (Aquí sigue el código del gatillo que hicimos antes para avisar a Operaciones)
         const primerPedido = pedidosAEnviar[0];
         const codigoOP = `PED-${primerPedido.id.slice(0, 6).toUpperCase()}`;
         const nombreEscuela = primerPedido.institucion?.nombre || 'la institución';
+
         await prisma.notificacion.create({
           data: {
             titulo: '📦 Nuevo Pedido Recibido',
@@ -274,7 +287,6 @@ export async function PUT(request: Request) {
           }
         });
       }
-
       return NextResponse.json({ success: true });
     } else {
       const pedidoAntiguo = await prisma.pedido.findUnique({ where: { id } });
@@ -442,13 +454,16 @@ export async function DELETE(request: Request) {
     const userRol = payload.rol as string;
     const userId = payload.id as string;
     const { searchParams } = new URL(request.url);
-    const institucionId = searchParams.get('institucionId');
+
+    const institucionId = searchParams.get('institucionId') || searchParams.get('id');
+    const vendedorId = searchParams.get('vendedorId');
     if (!institucionId) {
       return NextResponse.json({ error: 'Falta ID para eliminar' }, { status: 400 });
     }
     await prisma.$transaction(async (tx) => {
       const whereClause: any = { institucionId, estado: 'Borrador' };
       if (userRol === 'vendedor') whereClause.usuarioId = userId;
+      else if (vendedorId) whereClause.usuarioId = vendedorId;
       const pedidosABorrar = await tx.pedido.findMany({ where: whereClause });
       if (pedidosABorrar.length === 0) {
         throw new Error('No hay borradores para eliminar.');

@@ -147,10 +147,10 @@ export default function PedidosPage() {
     setMostrarFormContrato(true); 
   };
 
-  const handleEliminarPedido = async (pedidoId: string) => {
+  const handleEliminarPedido = async (grupo: any) => {
     if (!confirm('¿Eliminar definitivamente este pedido borrador?')) return;
     try {
-      const res = await fetch(`/api/pedidos?id=${pedidoId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/pedidos?institucionId=${grupo.institucionId}&vendedorId=${grupo.vendedorId}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       showToast('exito', 'Borrador eliminado correctamente.');
@@ -169,7 +169,8 @@ export default function PedidosPage() {
       const res = await fetch('/api/pedidos', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modo: 'masivo', institucionId: pedido.institucionId || pedido.id, fechaRequerida: fechaLimpia })
+        // 🔥 Ahora pasamos el vendedorId
+        body: JSON.stringify({ modo: 'masivo', institucionId: pedido.institucionId, vendedorId: pedido.vendedorId, fechaRequerida: fechaLimpia })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
