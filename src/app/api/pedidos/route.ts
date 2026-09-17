@@ -30,27 +30,40 @@ export async function GET(request: Request) {
     const fechaInicio = searchParams.get('fechaInicio');
     const fechaFin = searchParams.get('fechaFin');
     const institucionIdParam = searchParams.get('institucionId');
+
     const whereCondition: any = {};
-    
+
     if (estadoParam === 'Borrador') {
       whereCondition.estado = 'Borrador';
+      
+      // 🔥 PRIVACIDAD DE BORRADORES: Solo veo mis propios borradores
+      // Ni operaciones ni bodega pueden ver borradores a medio hacer. Solo el creador.
+      // (Excepción: super_admin para temas de auditoría)
+      if (userRol !== 'super_admin') {
+        whereCondition.usuarioId = userId;
+      }
+      
     } else {
       whereCondition.estado = { not: 'Borrador' };
+      
+      // 🔥 PEDIDOS ENVIADOS 🔥
+      // Vendedor: Solo ve lo suyo o lo de su escuela.
+      // Operaciones/Bodega: Sin restricciones (ven lo de todos para poder producir).
+      if (userRol === 'vendedor') {
+        const vendedorInfo = await prisma.usuario.findUnique({
+          where: { id: userId },
+          include: { institucionesAsignadas: { select: { id: true } } }
+        });
+        const misEscuelas = vendedorInfo?.institucionesAsignadas.map((i: any) => i.id) || [];
+
+        whereCondition.OR = [
+          { usuarioId: userId },
+          { institucionId: { in: misEscuelas } }
+        ];
+      }
     }
 
-    if (userRol === 'vendedor') {
-      const vendedorInfo = await prisma.usuario.findUnique({
-        where: { id: userId },
-        include: { institucionesAsignadas: { select: { id: true } } }
-      });
-      const misEscuelas = vendedorInfo?.institucionesAsignadas.map((i: any) => i.id) || [];
-
-      whereCondition.OR = [
-        { usuarioId: userId },
-        { institucionId: { in: misEscuelas } }
-      ];
-    }
-    
+    // Filtro por escuela específica si se usa el buscador
     if (institucionIdParam) {
       if (whereCondition.OR) {
         whereCondition.AND = [{ institucionId: institucionIdParam }];
@@ -58,11 +71,11 @@ export async function GET(request: Request) {
         whereCondition.institucionId = institucionIdParam;
       }
     }
-    
+
+    // Filtro por fechas
     if (fechaInicio || fechaFin) {
       const startStr = fechaInicio ? `${fechaInicio}T00:00:00-05:00` : '1970-01-01T00:00:00-05:00';
       const endStr = fechaFin ? `${fechaFin}T23:59:59.999-05:00` : '2099-12-31T23:59:59.999-05:00';
-      
       if (whereCondition.AND) {
          whereCondition.AND.push({ createdAt: { gte: new Date(startStr), lte: new Date(endStr) } });
       } else {
@@ -102,6 +115,7 @@ export async function GET(request: Request) {
       },
       orderBy: { fechaVenta: 'desc' }
     });
+
     const mapaGrupos = new Map();
     const prioridadEstados = ['Pendiente en revision', 'En produccion', 'en empaque', 'Listos para el despacho', 'Despacho'];
     
@@ -109,18 +123,20 @@ export async function GET(request: Request) {
       const instId = ped.institucionId;
       let contratoExtraido = ped.numContrato ? String(ped.numContrato).trim() : 'S/N';
       const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
+
+      // 🔥 REGLA DE AGRUPAMIENTO BLINDADA 🔥
       let grupoKey = instId; 
       if (ped.estado !== 'Borrador') {
-         const fr = ped.fechaRequerida ? new Date(ped.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
          grupoKey = `${instId}_${fr}`;
       } else {
-         grupoKey = `${instId}_${ped.usuarioId}`; // Aislamos a cada vendedor
+         grupoKey = `${instId}_${ped.usuarioId}`; // Separa a cada vendedor
       }
-      
+
       const ventaAsociada = ventasGuardadas.find(v => {
         const vNum = v.numContrato ? String(v.numContrato).trim() : 'S/N';
         return vNum === contratoExtraido && v.institucionId === instId;
       });
+
       let estadoRealPedido = ped.estado;
       if (ped.estado !== 'Borrador') {
         const estPrendas = (ped.detalles || []).map((d:any) => d.estadoOperacion || 'Pendiente en revision');
@@ -134,8 +150,10 @@ export async function GET(request: Request) {
           estadoRealPedido = estadoMasRetrasado;
         }
       }
+
       let fechaValida = ped.fechaRequerida;
       if (fechaValida && new Date(fechaValida).getFullYear() < 2000) fechaValida = null;
+
       if (!mapaGrupos.has(grupoKey)) {
         const pedidoBase = pedidosMaestros.find((pm: any) => {
           const frPm = pm.fechaRequerida ? new Date(pm.fechaRequerida).toISOString().split('T')[0] : 'sin-fecha';
@@ -145,8 +163,8 @@ export async function GET(request: Request) {
 
         mapaGrupos.set(grupoKey, {
           id: grupoKey, 
-          institucionId: instId, 
-          vendedorId: ped.usuarioId,
+          institucionId: instId,     // Enviado al frontend para el DELETE
+          vendedorId: ped.usuarioId, // Enviado al frontend para el PUT/DELETE
           codigoPedido: ped.estado === 'Borrador' ? `PED-${instId.slice(0, 6).toUpperCase()}` : `PED-${idMaestro.slice(0,6).toUpperCase()}`,
           institucionNombre: ped.institucion?.nombre || 'Sin Escuela',
           vendedorNombre: ped.usuario?.nombre || 'Sistema',
@@ -163,8 +181,10 @@ export async function GET(request: Request) {
              grupo.fechaRequerida = fechaValida;
          }
       }
+
       const grupo = mapaGrupos.get(grupoKey);
       const unidadesEnEstePedido = (ped.detalles || []).reduce((acc: number, item: any) => acc + (item.cantidad || 1), 0);
+
       grupo.pedidosAsociados.push({
         id: ped.id, numContrato: contratoExtraido,
         nombreCliente: ped.nombreCliente || `Cliente Contrato #${contratoExtraido}`,
@@ -201,6 +221,7 @@ export async function GET(request: Request) {
       fechaRequeridaTexto: g.fechaRequerida ? new Date(g.fechaRequerida).toLocaleDateString('es-EC', { timeZone: 'UTC' }) : 'No asignada',
       updatedAt: new Date(g.updatedAt).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })
     }));
+
     return NextResponse.json({ tabla: resultado, currentUser: { id: userId, rol: userRol } });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Error al consultar pedidos' }, { status: 500 });
