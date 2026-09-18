@@ -33,76 +33,102 @@
 
 :root {
   /* TUS COLORES DE MARCA */
-  --background: #F8F9FB;
+  --background: #f8f9fb;
   --foreground: #111111;
-  
-  --card: #FFFFFF;
+
+  --card: #ffffff;
   --card-foreground: #111111;
-  
-  --popover: #FFFFFF;
+
+  --popover: #ffffff;
   --popover-foreground: #111111;
-  
+
   /* TU ACENTO ROJO */
-  --primary: #E31E24; 
-  --primary-foreground: #FFFFFF;
-  
+  --primary: #e31e24;
+  --primary-foreground: #ffffff;
+
   /* COLORES SECUNDARIOS */
-  --secondary: #F8F9FB;
+  --secondary: #f8f9fb;
   --secondary-foreground: #111111;
-  
-  --muted: #F3F4F6;
-  --muted-foreground: #8A8A8A; /* Gris Medio - Textos secundarios */
-  
-  --border: #D9D9D9; /* Gris Claro */
-  --input: #D9D9D9;
-  --ring: #E31E24;
-  
+
+  --muted: #f3f4f6;
+  --muted-foreground: #8a8a8a; /* Gris Medio - Textos secundarios */
+
+  --border: #d9d9d9; /* Gris Claro */
+  --input: #d9d9d9;
+  --ring: #e31e24;
+
   --radius: 0.5rem; /* Bordes redondeados elegantes */
-  
+
   /* SIDEBAR CORPORATIVO (Rojo y Blanco) */
-  --sidebar: #FFFFFF; /* Fondo general del menú */
+  --sidebar: #ffffff; /* Fondo general del menú */
   --sidebar-foreground: #555555; /* Texto e iconos inactivos en gris */
-  --sidebar-primary: #E31E24;
-  --sidebar-primary-foreground: #FFFFFF;
-  
+  --sidebar-primary: #e31e24;
+  --sidebar-primary-foreground: #ffffff;
+
   /* ESTAS 2 LÍNEAS CONTROLAN EL RECUADRO SELECCIONADO / HOVER */
-  --sidebar-accent: #E31E24; /* Fondo del recuadro en Rojo */
-  --sidebar-accent-foreground: #FFFFFF; /* Texto e icono resaltado en Blanco */
-  
-  --sidebar-border: #D9D9D9; /* Línea divisoria gris clara */
-  --sidebar-ring: #E31E24;
+  --sidebar-accent: #e31e24; /* Fondo del recuadro en Rojo */
+  --sidebar-accent-foreground: #ffffff; /* Texto e icono resaltado en Blanco */
+
+  --sidebar-border: #d9d9d9; /* Línea divisoria gris clara */
+  --sidebar-ring: #e31e24;
 }
 
 .dark {
   /* Soporte Oscuro por si acaso */
   --background: #111111;
-  --foreground: #F8F9FB;
-  --card: #1A1A1A;
-  --card-foreground: #F8F9FB;
-  --primary: #E31E24;
-  --primary-foreground: #FFFFFF;
+  --foreground: #f8f9fb;
+  --card: #1a1a1a;
+  --card-foreground: #f8f9fb;
+  --primary: #e31e24;
+  --primary-foreground: #ffffff;
   --border: #333333;
   --input: #333333;
-  --muted-foreground: #8A8A8A;
-  --ring: #E31E24;
+  --muted-foreground: #8a8a8a;
+  --ring: #e31e24;
 }
 
 @layer base {
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* ======================================================== */
   /* TU SISTEMA DE TIPOGRAFÍA (DESIGN SYSTEM)                 */
   /* ======================================================== */
-  .text-h1 { font-size: 32px; font-weight: 700; color: #111111; }
-  .text-subtitle { font-size: 22px; font-weight: 600; color: #111111; }
-  .text-card-title { font-size: 18px; font-weight: 600; color: #111111; }
-  .text-normal { font-size: 15px; font-weight: 400; color: #111111; }
-  .text-secondary { font-size: 13px; font-weight: 500; color: #8A8A8A; }
-  
-  .text-kpi { font-size: 36px; font-weight: 700; color: #E31E24; }
+  .text-h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: #111111;
+  }
+  .text-subtitle {
+    font-size: 22px;
+    font-weight: 600;
+    color: #111111;
+  }
+  .text-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111111;
+  }
+  .text-normal {
+    font-size: 15px;
+    font-weight: 400;
+    color: #111111;
+  }
+  .text-secondary {
+    font-size: 13px;
+    font-weight: 500;
+    color: #8a8a8a;
+  }
+
+  .text-kpi {
+    font-size: 36px;
+    font-weight: 700;
+    color: #e31e24;
+  }
   @media (min-width: 768px) {
-    .text-kpi { font-size: 42px; } /* Adaptación a desktop */
+    .text-kpi {
+      font-size: 42px;
+    } /* Adaptación a desktop */
   }
 }

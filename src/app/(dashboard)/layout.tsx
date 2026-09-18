@@ -1,6 +1,10 @@
-import React from 'react';
-import { Sidebar } from '@/components/layout/Sidebar';
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+import React from "react";
+import { Sidebar } from "@/components/layout/Sidebar";
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex min-h-screen bg-gray-50 pb-16 md:pb-0">
       {/* Menú Lateral */}

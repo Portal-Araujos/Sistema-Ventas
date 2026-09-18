@@ -12,7 +12,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: {
     default: "Dashboard | Sistema Comercial", // Título por defecto si una página no define uno
-    template: "%s | Sistema Comercial",       // El %s será reemplazado dinámicamente
+    template: "%s | Sistema Comercial", // El %s será reemplazado dinámicamente
   },
   description: "Sistema de gestión y ventas corporativas",
 };
@@ -23,10 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="es"
-      className={`${inter.variable} h-full antialiased`}
-    >
+    <html lang="es" className={`${inter.variable} h-full antialiased`}>
       {/* 2. Inyectamos la fuente, el fondo corporativo y el texto a 15px por defecto */}
       <body className="min-h-full flex flex-col font-sans bg-background text-foreground text-[15px]">
         {children}

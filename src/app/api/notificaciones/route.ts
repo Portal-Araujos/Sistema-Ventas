@@ -1,16 +1,19 @@
-import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
+import { NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'secret-fallback');
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || "secret-fallback",
+);
 
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get('session_token')?.value;
-    if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    
+    const token = cookieStore.get("session_token")?.value;
+    if (!token)
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userId = payload.id as string;
     const userRol = payload.rol as string;
@@ -21,18 +24,18 @@ export async function GET(request: Request) {
         leido: false,
         OR: [
           { usuarioDestinoId: userId }, // Alertas directas a ti (Ej: Tus pedidos)
-          { rolDestino: userRol },      // Alertas a tu departamento (Ej: Todo Taller)
-          { rolDestino: 'admin' }       // Si eres admin, puedes hacer que te lleguen copias
-        ]
+          { rolDestino: userRol }, // Alertas a tu departamento (Ej: Todo Taller)
+          { rolDestino: "admin" }, // Si eres admin, puedes hacer que te lleguen copias
+        ],
       },
-      orderBy: { createdAt: 'desc' },
-      take: 20 // Solo traemos las 20 más recientes para no saturar el celular
+      orderBy: { createdAt: "desc" },
+      take: 20, // Solo traemos las 20 más recientes para no saturar el celular
     });
 
     return NextResponse.json(notificaciones);
   } catch (error) {
     console.error("Error GET Notificaciones:", error);
-    return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
 
@@ -42,10 +45,10 @@ export async function PUT(request: Request) {
     const body = await request.json();
     await prisma.notificacion.update({
       where: { id: parseInt(body.notificacionId) },
-      data: { leido: true }
+      data: { leido: true },
     });
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: 'Error' }, { status: 500 });
+    return NextResponse.json({ error: "Error" }, { status: 500 });
   }
 }
