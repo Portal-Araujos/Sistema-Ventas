@@ -2,25 +2,8 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import {
-  ShoppingBag,
-  Edit,
-  Send,
-  PlusCircle,
-  Trash2,
-  CheckCircle2,
-  AlertCircle,
-  TicketPlus,
-  LifeBuoy,
-  Search,
-  Eye,
-  PackageCheck,
-  Calendar,
-  ClipboardCheck,
-  LockOpen,
-  Printer,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+  ShoppingBag,Edit,Send,PlusCircle,Trash2, CheckCircle2,AlertCircle,TicketPlus, User, LifeBuoy,Search,X ,
+  Eye,PackageCheck, Calendar,ClipboardCheck,LockOpen, Printer, ChevronLeft,ChevronRight} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -86,23 +69,86 @@ function PedidosPageContent() {
     prioridad: "Alta",
     mensaje: "",
   });
+  // 🔥 ESTADOS PARA BÚSQUEDA DE USUARIOS 🔥
+  const [usuariosLista, setUsuariosLista] = useState<any[]>([]);
+  const [usuariosSeleccionados, setUsuariosSeleccionados] = useState<any[]>([]);
+  const [busquedaUser, setBusquedaUser] = useState('');
+  const [resultadosUser, setResultadosUser] = useState<any[]>([]);
+  const [dropdownUser, setDropdownUser] = useState(false);
 
-  const handleAbrirTicketContextual = (
-    prenda: any,
-    contrato: any,
-    grupo: any,
-  ) => {
+  // 🔥 LÓGICA DE BÚSQUEDA DE USUARIOS 🔥
+  const normalizarTexto = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  
+  const handleBuscarUsuario = (termino: string) => {
+    setBusquedaUser(termino);
+    const termLimpio = normalizarTexto(termino.trim());
+    if (termLimpio.length < 1) { setResultadosUser([]); setDropdownUser(false); return; }
+    
+    const filtrados = usuariosLista.filter(u => 
+      normalizarTexto(u.nombre).includes(termLimpio) || 
+      (u.rolNombre && normalizarTexto(u.rolNombre).includes(termLimpio))
+    );
+    setResultadosUser(filtrados);
+    setDropdownUser(true);
+  };
+
+  const seleccionarUsuario = (user: any) => {
+    if (!usuariosSeleccionados.find(u => u.id === user.id)) {
+      setUsuariosSeleccionados(prev => [...prev, user]);
+    }
+    setBusquedaUser('');
+    setDropdownUser(false);
+  };
+
+  const removerUsuario = (e: React.MouseEvent, userId: string) => {
+    e.preventDefault(); e.stopPropagation();
+    setUsuariosSeleccionados(prev => prev.filter(u => u.id !== userId));
+  };
+
+  // 🔥 ACTUALIZAMOS LA FUNCIÓN DE ABRIR PARA QUE LIMPIE LA SELECCIÓN 🔥
+  const handleAbrirTicketContextual = (prenda: any, contrato: any, grupo: any) => {
     setPrendaParaTicket({
-      institucionId: grupo.institucionId,
-      institucionNombre: grupo.institucionNombre,
-      contrato: contrato.numContrato,
-      sku: prenda.skuCodigo,
-      tipoRopa: prenda.tipoRopa,
-      color: prenda.color,
-      tallaAnterior: prenda.talla,
+      institucionId: grupo.institucionId, institucionNombre: grupo.institucionNombre, contrato: contrato.numContrato,
+      sku: prenda.skuCodigo, tipoRopa: prenda.tipoRopa, color: prenda.color, tallaAnterior: prenda.talla
     });
+    setUsuariosSeleccionados([]); // Limpiamos a los asignados
     setModalTicketOpen(true);
   };
+
+  // 🔥 ACTUALIZAMOS LA FUNCIÓN DE CREAR PARA QUE ENVÍE LOS IDs SELECCIONADOS 🔥
+  const handleCrearTicketContextual = async () => {
+    if (!ticketData.tipoModulo) return showToast('error', 'Seleccione el Área Responsable (ej. Operaciones).');
+    if (ticketData.motivo === 'Cambio de Talla' && !ticketData.nuevaTalla) return showToast('error', 'Especifique la nueva talla requerida.');
+    if (!ticketData.mensaje) return showToast('error', 'Escriba un detalle o instrucción para el equipo.');
+
+    setSaving(true);
+    try {
+      const asunto = `[${ticketData.motivo}] ${prendaParaTicket.sku} - Contrato #${prendaParaTicket.contrato}`;
+      const mensajeCompleto = `⚠️ REPORTE DESDE RECEPCIÓN DE PEDIDOS ⚠️\n\n📌 Prenda: ${prendaParaTicket.tipoRopa} (${prendaParaTicket.color})\n📏 Talla Entregada: ${prendaParaTicket.tallaAnterior}\n🔄 Nueva Talla Solicitada: ${ticketData.nuevaTalla || 'N/A'}\n\n📝 Instrucciones del Vendedor:\n${ticketData.mensaje}`;
+
+      const payload = {
+        accion: 'crearTicket',
+        tipo: ticketData.tipoModulo,
+        asunto: asunto,
+        prioridad: ticketData.prioridad,
+        institucionId: prendaParaTicket.institucionId,
+        asignadosIds: usuariosSeleccionados.map(u => u.id), // 🔥 AQUÍ VIAJAN LOS USUARIOS ASIGNADOS
+        mensajeInicial: mensajeCompleto,
+        fechaLimite: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0]
+      };
+
+      const res = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Error al generar el ticket');
+
+      showToast('exito', '¡Ticket generado exitosamente! El área/persona será notificada.');
+      setModalTicketOpen(false);
+      setTicketData({ motivo: 'Cambio de Talla', nuevaTalla: '', tipoModulo: '', prioridad: 'Alta', mensaje: '' });
+      setUsuariosSeleccionados([]);
+    } catch (e: any) { showToast('error', e.message); } finally { setSaving(false); }
+  };
+  
 
   const [saving, setSaving] = useState(false);
   const [globalFechaRequerida, setGlobalFechaRequerida] = useState("");
@@ -119,10 +165,11 @@ function PedidosPageContent() {
 
   const cargarInstituciones = async () => {
     try {
-      const [resInst, resCat, resDept] = await Promise.all([
+      const [resInst, resCat, resDept, resUsu] = await Promise.all([
         fetch("/api/instituciones"),
         fetch("/api/catalogos"),
-        fetch("/api/departamentos"), // 🔥 Añadimos esto
+        fetch("/api/departamentos"), 
+        fetch('/api/usuarios')
       ]);
       const data = await resInst.json();
       setInstitucionesList(Array.isArray(data) ? data : data.data || []);
@@ -130,6 +177,16 @@ function PedidosPageContent() {
 
       const dataDept = await resDept.json();
       setDepartamentosLista(Array.isArray(dataDept) ? dataDept : []);
+      const dataUsu = await resUsu.json();
+      const arrayUsuarios = Array.isArray(dataUsu) ? dataUsu : (dataUsu.data || []);
+      
+      // 🔥 Normalizamos los datos para que el buscador encuentre el "rolNombre"
+      const usuariosFormateados = arrayUsuarios.map((u: any) => ({
+        ...u,
+        rolNombre: u.rolNombre || u.rol?.nombre || 'Usuario'
+      }));
+      
+      setUsuariosLista(usuariosFormateados);
     } catch (e) {
       console.error(e);
     }
@@ -339,64 +396,6 @@ function PedidosPageContent() {
       showToast("exito", "Contrato guardado exitosamente.");
       if (pedidoEditSelId === "NUEVO" && data.id) setPedidoEditSelId(data.id);
       cargarDatos(true);
-    } catch (e: any) {
-      showToast("error", e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCrearTicketContextual = async () => {
-    if (!ticketData.tipoModulo)
-      return showToast(
-        "error",
-        "Seleccione el Área Responsable (ej. Operaciones).",
-      );
-    if (ticketData.motivo === "Cambio de Talla" && !ticketData.nuevaTalla)
-      return showToast("error", "Especifique la nueva talla requerida.");
-    if (!ticketData.mensaje)
-      return showToast(
-        "error",
-        "Escriba un detalle o instrucción para el equipo.",
-      );
-
-    setSaving(true);
-    try {
-      const asunto = `[${ticketData.motivo}] ${prendaParaTicket.sku} - Contrato #${prendaParaTicket.contrato}`;
-      const mensajeCompleto = `⚠️ REPORTE DESDE RECEPCIÓN DE PEDIDOS ⚠️\n\n📌 Prenda: ${prendaParaTicket.tipoRopa} (${prendaParaTicket.color})\n📏 Talla Entregada: ${prendaParaTicket.tallaAnterior}\n🔄 Nueva Talla Solicitada: ${ticketData.nuevaTalla || "N/A"}\n\n📝 Instrucciones del Vendedor:\n${ticketData.mensaje}`;
-
-      const payload = {
-        accion: "crearTicket",
-        tipo: ticketData.tipoModulo,
-        asunto: asunto,
-        prioridad: ticketData.prioridad,
-        institucionId: prendaParaTicket.institucionId,
-        asignadosIds: [], // Cae a la bandeja general del área
-        mensajeInicial: mensajeCompleto,
-        fechaLimite: new Date(Date.now() + 48 * 60 * 60 * 1000)
-          .toISOString()
-          .split("T")[0], // 48 horas límite
-      };
-
-      const res = await fetch("/api/tickets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Error al generar el ticket");
-
-      showToast(
-        "exito",
-        "¡Ticket generado exitosamente! El área será notificada.",
-      );
-      setModalTicketOpen(false);
-      setTicketData({
-        motivo: "Cambio de Talla",
-        nuevaTalla: "",
-        tipoModulo: "",
-        prioridad: "Alta",
-        mensaje: "",
-      });
     } catch (e: any) {
       showToast("error", e.message);
     } finally {
@@ -1420,44 +1419,56 @@ function PedidosPageContent() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold text-gray-500 uppercase">
-                  Motivo
-                </Label>
-                <select
-                  className="w-full h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold bg-white"
-                  value={ticketData.motivo}
-                  onChange={(e) =>
-                    setTicketData({ ...ticketData, motivo: e.target.value })
-                  }
-                >
+                <Label className="text-[10px] font-bold text-gray-500 uppercase">Motivo</Label>
+                <select className="w-full h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold bg-white" value={ticketData.motivo} onChange={e => setTicketData({...ticketData, motivo: e.target.value})}>
                   <option value="Cambio de Talla">🔄 Cambio de Talla</option>
-                  <option value="Prenda Defectuosa">
-                    ⚠️ Prenda Defectuosa
-                  </option>
+                  <option value="Prenda Defectuosa">⚠️ Prenda Defectuosa</option>
                   <option value="Error de Bodega">❌ Error de Bodega</option>
                   <option value="Faltante de Paquete">📦 Faltante</option>
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold text-gray-500 uppercase">
-                  Área a Notificar *
-                </Label>
-                <select
-                  className="w-full h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold bg-white text-blue-700"
-                  value={ticketData.tipoModulo}
-                  onChange={(e) =>
-                    setTicketData({ ...ticketData, tipoModulo: e.target.value })
-                  }
-                >
+                <Label className="text-[10px] font-bold text-gray-500 uppercase">Área a Notificar *</Label>
+                <select className="w-full h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold bg-white text-blue-700" value={ticketData.tipoModulo} onChange={e => setTicketData({...ticketData, tipoModulo: e.target.value})}>
                   <option value="">- Seleccionar -</option>
-                  {departamentosLista.map((d) => (
-                    <option key={d.id} value={d.nombre}>
-                      {d.nombre}
-                    </option>
-                  ))}
+                  {departamentosLista.map(d => <option key={d.id} value={d.nombre}>{d.nombre}</option>)}
                 </select>
+              </div>
+
+              {/* 🔥 NUEVO BUSCADOR DE USUARIOS 🔥 */}
+              <div className="space-y-1.5 relative sm:col-span-2">
+                <Label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
+                  <User size={12}/> Asignar Específicamente a... (Opcional)
+                </Label>
+                
+                {usuariosSeleccionados.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {usuariosSeleccionados.map(u => (
+                      <Badge key={u.id} variant="secondary" className="bg-rose-50 text-rose-700 border-rose-200 flex items-center gap-1 py-1 pr-2 text-[10px]">
+                        {u.nombre} 
+                        <button type="button" onClick={(e) => removerUsuario(e, u.id)} className="ml-1 hover:text-red-500 focus:outline-none"><X size={10}/></button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <Input className="h-9 text-xs bg-white border-gray-300" placeholder="Buscar por nombre o rol (Ej: Bodega)..." value={busquedaUser} onChange={(e) => handleBuscarUsuario(e.target.value)} onFocus={() => { if(!busquedaUser) handleBuscarUsuario(' '); }} />
+                </div>
+                
+                {dropdownUser && (
+                  <ul className="absolute z-9999 w-full bg-white border border-gray-200 shadow-xl rounded-lg mt-1 max-h-32 overflow-y-auto">
+                    {resultadosUser.map(user => (
+                      <li key={user.id} className="px-3 py-2 hover:bg-rose-50 cursor-pointer border-b border-gray-50 flex justify-between items-center" onClick={() => seleccionarUsuario(user)}>
+                        <span className="text-xs font-bold text-gray-800">{user.nombre}</span>
+                        <span className="text-[9px] text-rose-600 uppercase font-black">{user.rolNombre || 'USUARIO'}</span>
+                      </li>
+                    ))}
+                    {resultadosUser.length === 0 && <li className="px-3 py-2 text-xs text-gray-500 italic">No se encontraron usuarios.</li>}
+                  </ul>
+                )}
               </div>
             </div>
 
