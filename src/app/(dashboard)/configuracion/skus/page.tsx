@@ -39,10 +39,8 @@ export default function CatalogoSKUPage() {
   const [skus, setSkus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState("");
-
-  // 🔥 NUEVO: PESTAÑAS DE INVENTARIO 🔥
+  //  NUEVO: PESTAÑAS DE INVENTARIO 
   const [tabActiva, setTabActiva] = useState<"TEXTIL" | "ELECTRO">("TEXTIL");
-
   // PAGINACIÓN
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
@@ -57,6 +55,7 @@ export default function CatalogoSKUPage() {
   const [mapping, setMapping] = useState<Record<string, string>>({
     codigo: "",
     tipoRopa: "",
+    producto: "",
     color: "",
     genero: "",
     talla: "",
@@ -67,6 +66,7 @@ export default function CatalogoSKUPage() {
   const [nuevoSku, setNuevoSku] = useState({
     codigo: "",
     tipoRopa: "",
+    producto: "",
     color: "",
     genero: "",
     talla: "",
@@ -83,213 +83,159 @@ export default function CatalogoSKUPage() {
     setTimeout(() => setToastMsg(null), 5000);
   };
 
+  // 1. CARGA INTELIGENTE (AMBAS TABLAS) 
   const cargarSKUs = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/pedidos/sku");
-      const data = await res.json();
-      setSkus(data.raw || []);
+      const [resTextil, resElectro] = await Promise.all([
+        fetch("/api/pedidos/sku"),
+        fetch("/api/pedidos/electro")
+      ]);
+      const dataTextil = await resTextil.json();
+      const dataElectro = await resElectro.json();
+
+      // Formateamos Electro para que encaje en la tabla visual
+      const electroFormateado = (dataElectro.raw || []).map((e: any) => ({
+        id: e.id,
+        codigo: e.codigo,
+        tipoRopa: e.familia,   
+        producto: e.producto,
+        color: e.marcaModelo,     
+        genero: e.garantia,       
+        talla: "N/A",
+        activo: e.activo,
+        categoriaItem: "ELECTRO",
+        isElectroDB: true         // Bandera clave para saber a qué tabla pertenece
+      }));
+
+      setSkus([...(dataTextil.raw || []), ...electroFormateado]);
     } catch (e) {
-      showToast("error", "Error al cargar el catálogo de códigos.");
+      showToast("error", "Error al cargar los catálogos.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    cargarSKUs();
-  }, []);
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [busqueda, tabActiva]);
+  useEffect(() => { cargarSKUs(); }, []);
+  useEffect(() => { setCurrentPage(1); }, [busqueda, tabActiva]);
 
-  // --- LÓGICA DE EXCEL (MASIVO) ADAPTADA A ELECTRO ---
+  // Lógica de lectura de archivo Excel (Se mantiene igual)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
       const wb = XLSX.read(bstr, { type: "binary" });
       const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-
       if (data.length > 0) {
         const cols = Object.keys(data[0] as object);
         setExcelColumns(cols);
         setExcelData(data);
-
         const autoMap: Record<string, string> = { ...mapping };
         cols.forEach((col) => {
           const cLower = col.toLowerCase();
-          if (cLower.includes("cod") || cLower.includes("sku"))
-            autoMap.codigo = col;
-
+          if (cLower.includes("cod") || cLower.includes("sku")) autoMap.codigo = col;
           if (tabActiva === "TEXTIL") {
-            if (cLower.includes("tipo") || cLower.includes("prenda"))
-              autoMap.tipoRopa = col;
+            if (cLower.includes("tipo") || cLower.includes("prenda")) autoMap.tipoRopa = col;
             if (cLower.includes("color")) autoMap.color = col;
-            if (
-              cLower.includes("genero") ||
-              cLower.includes("género") ||
-              cLower.includes("sexo")
-            )
-              autoMap.genero = col;
+            if (cLower.includes("genero") || cLower.includes("género") || cLower.includes("sexo")) autoMap.genero = col;
             if (cLower.includes("talla")) autoMap.talla = col;
           } else {
-            // Mapeo automático inteligente para Electro
-            if (cLower.includes("familia") || cLower.includes("categoria"))
-              autoMap.tipoRopa = col;
-            if (cLower.includes("marca") || cLower.includes("modelo"))
-              autoMap.color = col;
-            if (cLower.includes("garantia") || cLower.includes("garantía"))
-              autoMap.genero = col;
+            if (cLower.includes("producto") || cLower.includes("articulo") || cLower.includes("equipo")) autoMap.producto = col; 
+            if (cLower.includes("familia") || cLower.includes("categoria")) autoMap.tipoRopa = col;
+            if (cLower.includes("marca") || cLower.includes("modelo")) autoMap.color = col;
+            if (cLower.includes("garantia") || cLower.includes("garantía")) autoMap.genero = col;
           }
         });
-
         setMapping(autoMap);
         setImportModal(true);
-      } else {
-        showToast("alerta", "El archivo Excel está vacío.");
-      }
+      } else { showToast("alerta", "El archivo Excel está vacío."); }
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
     reader.readAsBinaryString(file);
   };
 
+  // 2. IMPORTACIÓN MASIVA ENRUTADA
   const ejecutarImportacion = async () => {
-    if (
-      !mapping.codigo ||
-      !mapping.tipoRopa ||
-      !mapping.color ||
-      !mapping.genero ||
-      (!mapping.talla && tabActiva === "TEXTIL")
-    ) {
-      showToast("error", "Debes mapear las columnas obligatorias.");
-      return;
+    if (!mapping.codigo || !mapping.tipoRopa || !mapping.color || !mapping.genero || (!mapping.talla && tabActiva === "TEXTIL")) {
+      return showToast("error", "Debes mapear las columnas obligatorias.");
     }
-
     setIsImporting(true);
 
-    const skusProcesados = excelData
-      .map((row) => ({
-        codigo: row[mapping.codigo]
-          ? String(row[mapping.codigo]).trim().toUpperCase()
-          : "",
-        tipoRopa: row[mapping.tipoRopa]
-          ? String(row[mapping.tipoRopa]).trim().toUpperCase()
-          : "",
-        color: row[mapping.color]
-          ? String(row[mapping.color]).trim().toUpperCase()
-          : "",
-        genero: row[mapping.genero]
-          ? String(row[mapping.genero]).trim().toUpperCase()
-          : "",
-        talla: row[mapping.talla]
-          ? String(row[mapping.talla]).trim().toUpperCase()
-          : tabActiva === "ELECTRO"
-            ? "N/A"
-            : "",
+    const endpoint = tabActiva === "TEXTIL" ? "/api/pedidos/sku" : "/api/pedidos/electro";
+    let payload;
+
+    if (tabActiva === "TEXTIL") {
+      const skusProcesados = excelData.map((row) => ({
+        codigo: row[mapping.codigo] ? String(row[mapping.codigo]).trim().toUpperCase() : "",
+        tipoRopa: row[mapping.tipoRopa] ? String(row[mapping.tipoRopa]).trim().toUpperCase() : "",
+        color: row[mapping.color] ? String(row[mapping.color]).trim().toUpperCase() : "",
+        genero: row[mapping.genero] ? String(row[mapping.genero]).trim().toUpperCase() : "",
+        talla: row[mapping.talla] ? String(row[mapping.talla]).trim().toUpperCase() : "",
+        activo: true, categoriaItem: "TEXTIL",
+      })).filter((s) => s.codigo !== "" && s.tipoRopa !== "");
+      payload = { skus: skusProcesados };
+    } else {
+      const equiposProcesados = excelData.map((row) => ({
+        codigo: row[mapping.codigo] ? String(row[mapping.codigo]).trim().toUpperCase() : "",
+        producto: row[mapping.producto] ? String(row[mapping.producto]).trim().toUpperCase() : "",
+        familia: row[mapping.tipoRopa] ? String(row[mapping.tipoRopa]).trim().toUpperCase() : "",
+        marcaModelo: row[mapping.color] ? String(row[mapping.color]).trim().toUpperCase() : "",
+        garantia: row[mapping.genero] ? String(row[mapping.genero]).trim().toUpperCase() : "",
         activo: true,
-        categoriaItem: tabActiva, // 🔥 SE INYECTA LA PESTAÑA ACTUAL 🔥
-      }))
-      .filter((s) => s.codigo !== "" && s.tipoRopa !== "");
+      })).filter((s) => s.codigo !== "" && s.familia !== "");
+      payload = { equipos: equiposProcesados };
+    }
 
     try {
-      const res = await fetch("/api/pedidos/sku", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skus: skusProcesados }),
-      });
+      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-
       showToast("exito", `¡Catálogo procesado en bodega ${tabActiva}!`);
       setImportModal(false);
       cargarSKUs();
-    } catch (error) {
-      showToast("error", `Hubo un error al subir los códigos al servidor.`);
-    } finally {
-      setIsImporting(false);
-    }
+    } catch (error) { showToast("error", `Hubo un error al subir los códigos al servidor.`); } finally { setIsImporting(false); }
   };
 
-  // --- LÓGICA DE CREACIÓN INDIVIDUAL ---
+  // 🔥 3. CREACIÓN INDIVIDUAL ENRUTADA 🔥
   const handleGuardarIndividual = async () => {
-    if (
-      !nuevoSku.codigo ||
-      !nuevoSku.tipoRopa ||
-      !nuevoSku.color ||
-      !nuevoSku.genero ||
-      (!nuevoSku.talla && tabActiva === "TEXTIL")
-    ) {
-      showToast("error", "Por favor llena todos los campos obligatorios.");
-      return;
+    if (!nuevoSku.codigo || !nuevoSku.tipoRopa || !nuevoSku.color || !nuevoSku.genero || (!nuevoSku.talla && tabActiva === "TEXTIL")) {
+      return showToast("error", "Por favor llena todos los campos obligatorios.");
     }
     setIsSaving(true);
     try {
-      const res = await fetch("/api/pedidos/sku", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          skus: [
-            {
-              ...nuevoSku,
-              codigo: nuevoSku.codigo.trim().toUpperCase(),
-              tipoRopa: nuevoSku.tipoRopa.trim().toUpperCase(),
-              color: nuevoSku.color.trim().toUpperCase(),
-              genero: nuevoSku.genero.trim().toUpperCase(),
-              talla:
-                tabActiva === "ELECTRO"
-                  ? "N/A"
-                  : nuevoSku.talla.trim().toUpperCase(),
-              activo: true,
-              categoriaItem: tabActiva, // 🔥 SE INYECTA LA PESTAÑA ACTUAL 🔥
-            },
-          ],
-        }),
-      });
+      const endpoint = tabActiva === "TEXTIL" ? "/api/pedidos/sku" : "/api/pedidos/electro";
+      let payload;
+
+      if (tabActiva === "TEXTIL") {
+        payload = { skus: [{ codigo: nuevoSku.codigo.trim().toUpperCase(), tipoRopa: nuevoSku.tipoRopa.trim().toUpperCase(), color: nuevoSku.color.trim().toUpperCase(), genero: nuevoSku.genero.trim().toUpperCase(), talla: nuevoSku.talla.trim().toUpperCase(), activo: true, categoriaItem: "TEXTIL" }] };
+      } else {
+        payload = { equipos: [{ codigo: nuevoSku.codigo.trim().toUpperCase(), producto: nuevoSku.producto.trim().toUpperCase(), familia: nuevoSku.tipoRopa.trim().toUpperCase(), marcaModelo: nuevoSku.color.trim().toUpperCase(), garantia: nuevoSku.genero.trim().toUpperCase(), activo: true }] };
+      }
+
+      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-
-      showToast("exito", "Código guardado correctamente.");
+      showToast("exito", "Ítem guardado correctamente en su tabla.");
       setModalNuevoOpen(false);
-      setNuevoSku({
-        codigo: "",
-        tipoRopa: "",
-        color: "",
-        genero: "",
-        talla: "",
-      });
+      setNuevoSku({ codigo: "", tipoRopa: "", producto: "",  color: "", genero: "", talla: "" });
       cargarSKUs();
-    } catch (error) {
-      showToast("error", "Ocurrió un error al procesar el código.");
-    } finally {
-      setIsSaving(false);
-    }
+    } catch (error) { showToast("error", "Ocurrió un error al procesar el código."); } finally { setIsSaving(false); }
   };
 
-  const handleToggleActivo = async (id: string, currentStatus: boolean) => {
+  // 🔥 4. BOTÓN DE APAGADO/ENCENDIDO ENRUTADO 🔥
+  const handleToggleActivo = async (id: string, currentStatus: boolean, isElectroDB: boolean) => {
     try {
-      const res = await fetch("/api/pedidos/sku", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, activo: !currentStatus }),
-      });
+      const endpoint = isElectroDB ? "/api/pedidos/electro" : "/api/pedidos/sku";
+      const res = await fetch(endpoint, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, activo: !currentStatus }) });
       if (!res.ok) throw new Error();
 
-      setSkus((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, activo: !currentStatus } : s)),
-      );
-      showToast(
-        "exito",
-        `SKU ${!currentStatus ? "activado" : "desactivado"} correctamente.`,
-      );
-    } catch (e) {
-      showToast("error", "Error al actualizar el estado del SKU.");
-    }
+      setSkus((prev) => prev.map((s) => (s.id === id && !!s.isElectroDB === isElectroDB ? { ...s, activo: !currentStatus } : s)));
+      showToast("exito", `Ítem ${!currentStatus ? "activado" : "desactivado"} correctamente.`);
+    } catch (e) { showToast("error", "Error al actualizar el estado."); }
   };
-
+  
   // FILTRADO INTELIGENTE POR PESTAÑA
   const skusFiltrados = skus.filter(
     (s) =>
@@ -326,6 +272,7 @@ export default function CatalogoSKUPage() {
             onClick={() => {
               setNuevoSku({
                 codigo: "",
+                producto: "",
                 tipoRopa: "",
                 color: "",
                 genero: "",
@@ -354,7 +301,7 @@ export default function CatalogoSKUPage() {
         </div>
       </div>
 
-      {/* 🔥 PESTAÑAS DE NAVEGACIÓN 🔥 */}
+      {/* PESTAÑAS DE NAVEGACIÓN  */}
       <div className="flex border-b border-gray-200">
         <button
           className={`flex items-center gap-2 px-6 py-3 font-bold text-sm transition-all border-b-2 ${tabActiva === "TEXTIL" ? "border-blue-600 text-blue-700 bg-blue-50/50" : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50"}`}
@@ -405,6 +352,9 @@ export default function CatalogoSKUPage() {
                     ? "Tipo de Prenda"
                     : "Familia / Categoría"}
                 </TableHead>
+                {tabActiva === "ELECTRO" && (
+                  <TableHead className="font-bold text-gray-700">Producto</TableHead>
+                )}
                 <TableHead className="font-bold text-gray-700">
                   {tabActiva === "TEXTIL" ? "Color" : "Marca / Modelo"}
                 </TableHead>
@@ -457,6 +407,11 @@ export default function CatalogoSKUPage() {
                     <TableCell className="font-bold text-gray-900">
                       {item.tipoRopa}
                     </TableCell>
+                    {tabActiva === "ELECTRO" && (
+                      <TableCell className="font-black text-gray-900 bg-purple-50/50">
+                        {item.producto}
+                      </TableCell>
+                    )}
                     <TableCell className="text-gray-600 font-medium">
                       {item.color}
                     </TableCell>
@@ -486,7 +441,7 @@ export default function CatalogoSKUPage() {
                         variant="ghost"
                         title={item.activo ? "Desactivar SKU" : "Activar SKU"}
                         className={`h-8 w-8 ${item.activo ? "text-red-500 hover:bg-red-50" : "text-emerald-500 hover:bg-emerald-50"}`}
-                        onClick={() => handleToggleActivo(item.id, item.activo)}
+                        onClick={() => handleToggleActivo(item.id, item.activo, item.isElectroDB)}
                       >
                         <Power size={16} />
                       </Button>
@@ -530,7 +485,7 @@ export default function CatalogoSKUPage() {
         )}
       </div>
 
-      {/* ➕ MODAL: NUEVO SKU INDIVIDUAL DINÁMICO ➕ */}
+      {/*MODAL: NUEVO SKU INDIVIDUAL DINÁMICO ➕ */}
       <Dialog open={modalNuevoOpen} onOpenChange={setModalNuevoOpen}>
         <DialogContent
           className={`sm:max-w-md bg-white p-6 rounded-xl border-t-4 ${tabActiva === "TEXTIL" ? "border-t-blue-600" : "border-t-purple-600"}`}
@@ -628,25 +583,47 @@ export default function CatalogoSKUPage() {
               </>
             ) : (
               <>
-                <div>
+                <div className="relative">
                   <Label className="text-xs font-bold text-gray-600">
                     Familia / Categoría *
                   </Label>
-                  <select
+                  <Input
                     className="w-full h-9 border border-gray-300 rounded-md px-3 text-sm mt-1 bg-white uppercase"
+                    placeholder="Ej: AUDIOVISUAL, COMPUTO..."
+                    list="familias-electro-list"
                     value={nuevoSku.tipoRopa}
                     onChange={(e) =>
-                      setNuevoSku({ ...nuevoSku, tipoRopa: e.target.value })
+                      setNuevoSku({ ...nuevoSku, tipoRopa: e.target.value.toUpperCase() })
                     }
-                  >
-                    <option value="">Seleccione...</option>
-                    <option value="Audiovisual">Audiovisual</option>
-                    <option value="Cómputo">Cómputo</option>
-                    <option value="Laboratorio">Laboratorio</option>
-                    <option value="Mobiliario">Mobiliario</option>
-                    <option value="Pizarras">Pizarras</option>
-                  </select>
+                  />
+                  <datalist id="familias-electro-list">
+                    {Array.from(
+                      new Set(
+                        skus
+                          .filter((s: any) => s.categoriaItem === "ELECTRO")
+                          .map((s: any) => s.tipoRopa)
+                      )
+                    ).map((fam: any) => (
+                      <option key={fam} value={fam} />
+                    ))}
+                  </datalist>
                 </div>
+                <div className="relative mt-3">
+                  <Label className="text-xs font-bold text-gray-600">Producto *</Label>
+                  <Input
+                    className="w-full h-9 border border-gray-300 rounded-md px-3 text-sm mt-1 bg-white uppercase"
+                    placeholder="Ej: PROYECTOR, TELEVISOR..."
+                    list="productos-electro-list"
+                    value={nuevoSku.producto}
+                    onChange={(e) => setNuevoSku({ ...nuevoSku, producto: e.target.value.toUpperCase() })}
+                  />
+                  <datalist id="productos-electro-list">
+                    {Array.from(new Set(skus.filter((s: any) => s.categoriaItem === "ELECTRO" && s.producto).map((s: any) => s.producto))).map((prod: any) => (
+                      <option key={prod} value={prod} />
+                    ))}
+                  </datalist>
+                </div>
+                
                 <div>
                   <Label className="text-xs font-bold text-gray-600">
                     Marca / Modelo *
@@ -845,6 +822,17 @@ export default function CatalogoSKUPage() {
                         {col}
                       </option>
                     ))}
+                  </select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold w-1/2 text-gray-700">Columna: Producto</Label>
+                  <select
+                    className="w-1/2 h-9 border border-gray-300 rounded-md px-2 text-xs bg-white"
+                    value={mapping.producto}
+                    onChange={(e) => setMapping({ ...mapping, producto: e.target.value })}
+                  >
+                    <option value="">Seleccione...</option>
+                    {excelColumns.map((col) => ( <option key={col} value={col}>{col}</option> ))}
                   </select>
                 </div>
                 <div className="flex items-center justify-between">

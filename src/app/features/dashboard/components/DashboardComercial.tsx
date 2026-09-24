@@ -1,33 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // 🔥 IMPORTAMOS EL ENRUTADOR 🔥
-import {
-  DollarSign,
-  ShieldCheck,
-  Clock,
-  Target,
-  TrendingUp,
-  Activity,
-  FilterX,
-  Building2,
-  Users,
-  MapPin,
-  CalendarX,
-  Filter,
-  FileText,
-  FileWarning,
-  Ticket,
-  AlertTriangle,
-  PackageOpen,
-  Truck,
-  PackageX,
-  UserX,
-} from "lucide-react";
+import { useRouter } from "next/navigation"; 
+import {DollarSign,ShieldCheck, Clock,Target,TrendingUp,Activity,FilterX,Building2, Users,MapPin,
+  CalendarX,Filter,FileWarning,Ticket,PackageOpen,Truck,UserX,} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export function DashboardComercial() {
-  const router = useRouter(); // 🔥 INICIAMOS EL ENRUTADOR 🔥
+  const router = useRouter(); 
   const hoyStr = new Date().toISOString().split("T")[0];
   const mesPasado = new Date();
   mesPasado.setDate(1);
@@ -46,6 +26,7 @@ export function DashboardComercial() {
   const [loading, setLoading] = useState(true);
   const [catalogos, setCatalogos] = useState<any>(null);
   const [vendedores, setVendedores] = useState<any[]>([]);
+  const [userRol, setUserRol] = useState<string>("");
 
   useEffect(() => {
     const fetchCatalogos = async () => {
@@ -54,7 +35,11 @@ export function DashboardComercial() {
           fetch("/api/catalogos"),
           fetch("/api/usuarios/vendedores"),
         ]);
-        setCatalogos(await resCat.json());
+        const catData = await resCat.json();
+        setCatalogos(catData);
+        if (catData.userRol) {
+          setUserRol(catData.userRol.toLowerCase());
+        }
         setVendedores(await resVend.json());
       } catch (e) {
         console.error("Error cargando catálogos", e);
@@ -107,7 +92,7 @@ export function DashboardComercial() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 🟢 BARRA SUPERIOR DE FILTROS 🟢 */}
+      {/* BARRA SUPERIOR DE FILTROS */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col xl:flex-row gap-3 items-end xl:items-center justify-between">
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3 w-full">
           <div>
@@ -136,69 +121,74 @@ export function DashboardComercial() {
               }
             />
           </div>
-          <div>
-            <label className="text-[10px] font-bold text-gray-500 uppercase">
-              Provincia
-            </label>
-            <select
-              className="w-full h-9 border rounded-md px-2 text-xs bg-white mt-1 outline-none font-medium"
-              value={filtros.provinciaId}
-              onChange={(e) =>
-                setFiltros({
-                  ...filtros,
-                  provinciaId: e.target.value,
-                  cantonId: "",
-                })
-              }
-            >
-              <option value="">Todas</option>
-              {catalogos?.provincias?.map((p: any) => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-gray-500 uppercase">
-              Cantón
-            </label>
-            <select
-              disabled={!filtros.provinciaId}
-              className="w-full h-9 border rounded-md px-2 text-xs bg-white mt-1 outline-none font-medium disabled:bg-gray-100 disabled:opacity-50"
-              value={filtros.cantonId}
-              onChange={(e) =>
-                setFiltros({ ...filtros, cantonId: e.target.value })
-              }
-            >
-              <option value="">Todos</option>
-              {cantonesDisponibles.map((c: any) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-gray-500 uppercase">
-              Vendedor
-            </label>
-            <select
-              className="w-full h-9 border rounded-md px-2 text-xs bg-white mt-1 outline-none font-medium"
-              value={filtros.vendedorId}
-              onChange={(e) =>
-                setFiltros({ ...filtros, vendedorId: e.target.value })
-              }
-            >
-              <option value="">Todos los Vendedores</option>
-              {Array.isArray(vendedores) &&
-                vendedores.map((v: any) => (
-                  <option key={v.id} value={v.id}>
-                    {v.nombre}
-                  </option>
-                ))}
-            </select>
-          </div>
+          {userRol !== "vendedor" && (
+            <>
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase">
+                  Provincia
+                </label>
+                <select
+                  className="w-full h-9 border rounded-md px-2 text-xs bg-white mt-1 outline-none font-medium"
+                  value={filtros.provinciaId}
+                  onChange={(e) =>
+                    setFiltros({
+                      ...filtros,
+                      provinciaId: e.target.value,
+                      cantonId: "",
+                    })
+                  }
+                >
+                  <option value="">Todas</option>
+                  {catalogos?.provincias?.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase">
+                  Cantón
+                </label>
+                <select
+                  disabled={!filtros.provinciaId}
+                  className="w-full h-9 border rounded-md px-2 text-xs bg-white mt-1 outline-none font-medium disabled:bg-gray-100 disabled:opacity-50"
+                  value={filtros.cantonId}
+                  onChange={(e) =>
+                    setFiltros({ ...filtros, cantonId: e.target.value })
+                  }
+                >
+                  <option value="">Todos</option>
+                  {cantonesDisponibles.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-500 uppercase">
+                  Vendedor
+                </label>
+                <select
+                  className="w-full h-9 border rounded-md px-2 text-xs bg-white mt-1 outline-none font-medium"
+                  value={filtros.vendedorId}
+                  onChange={(e) =>
+                    setFiltros({ ...filtros, vendedorId: e.target.value })
+                  }
+                >
+                  <option value="">Todos los Vendedores</option>
+                  {Array.isArray(vendedores) &&
+                    vendedores.map((v: any) => (
+                      <option key={v.id} value={v.id}>
+                        {v.nombre}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </>
+          )}
+
           <div>
             <label className="text-[10px] font-bold text-gray-500 uppercase">
               Tipo de Venta
@@ -242,7 +232,7 @@ export function DashboardComercial() {
         </div>
       ) : (
         <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* 🟢 FILA 1: TARJETAS FINANCIERAS (AHORA SON NAVEGABLES) 🟢 */}
+          {/*  FILA 1: TARJETAS FINANCIERAS SON NAVEGABLES */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div
               onClick={() => router.push("/ventas")}
@@ -356,7 +346,7 @@ export function DashboardComercial() {
             </div>
           </div>
 
-          {/* 🟢 FILA 2: GRÁFICOS Y EMBUDO 🟢 */}
+          {/* FILA 2: GRÁFICOS Y EMBUDO  */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
               <h3 className="text-xs font-black text-gray-800 uppercase mb-4">

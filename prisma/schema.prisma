@@ -561,3 +561,14 @@ model Notificacion {
   createdAt        DateTime @default(now()) @map("created_at")
   @@map("notificaciones")
 }
+model CatalogoElectro {
+  id          Int      @id @default(autoincrement())
+  codigo      String   @unique // El SKU o Código único del equipo
+  producto    String
+  familia     String   // Ej: Audiovisual, Cómputo, Laboratorio
+  marcaModelo String   // Ej: Epson PowerLite, Lenovo ThinkPad
+  garantia    String   // Ej: 12 Meses, Sin Garantía
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

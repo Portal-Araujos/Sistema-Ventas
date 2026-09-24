@@ -13,7 +13,11 @@ export async function GET(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const userIdLogueado = String(payload.id);
+    const configBodegas = await prisma.configuracionSeguridad.findFirst();
+    const encargadoTextil = configBodegas?.encargadoBodegaTextilId;
+    const encargadoElectro = configBodegas?.encargadoBodegaElectroId;
     const { searchParams } = new URL(request.url);
     const estadoFiltro = searchParams.get("estado") || "TODOS";
     const fechaInicio = searchParams.get("fechaInicio");
@@ -30,6 +34,21 @@ export async function GET(request: Request) {
       pedido: { estado: { not: "Borrador" } },
       estadoOperacion: { not: "Entregado" },
     };
+
+    if (fechaInicio || fechaFin) {
+      const startStr = fechaInicio ? `${fechaInicio}T00:00:00-05:00` : "1970-01-01T00:00:00-05:00";
+      const endStr = fechaFin ? `${fechaFin}T23:59:59.999-05:00` : "2099-12-31T23:59:59.999-05:00";
+      whereBase.createdAt = { gte: new Date(startStr), lte: new Date(endStr) };
+    }
+    if (userIdLogueado === encargadoElectro) {
+      whereBase.bordado = "ELECTRO";
+    } else if (userIdLogueado === encargadoTextil) {
+      whereBase.OR = [
+        { bordado: { not: "ELECTRO" } },
+        { bordado: null },
+        { bordado: "" }
+      ];
+    }
 
     if (fechaInicio || fechaFin) {
       const startStr = fechaInicio

@@ -145,7 +145,6 @@ export async function GET(request: Request) {
         ? new Date(ped.fechaRequerida).toISOString().split("T")[0]
         : "sin-fecha";
 
-      // 🔥 REGLA DE AGRUPAMIENTO BLINDADA 🔥
       let grupoKey = instId;
       if (ped.estado !== "Borrador") {
         grupoKey = `${instId}_${fr}`;
@@ -192,8 +191,8 @@ export async function GET(request: Request) {
 
         mapaGrupos.set(grupoKey, {
           id: grupoKey,
-          institucionId: instId, // Enviado al frontend para el DELETE
-          vendedorId: ped.usuarioId, // Enviado al frontend para el PUT/DELETE
+          institucionId: instId, 
+          vendedorId: ped.usuarioId, 
           codigoPedido:
             ped.estado === "Borrador"
               ? `PED-${instId.slice(0, 6).toUpperCase()}`

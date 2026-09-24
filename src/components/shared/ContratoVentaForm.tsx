@@ -52,7 +52,6 @@ export default function ContratoVentaForm({
       const m = parseInt(newData.meses) || 12;
       newData.cuotaMensual = m > 0 ? ((v - a) / m).toFixed(2) : "0.00";
     }
-
     if (campo === "estadoClienteId") {
       const estadoSel = catalogos?.estadosCliente?.find(
         (e: any) => e.id.toString() === valor?.toString(),
@@ -74,14 +73,19 @@ export default function ContratoVentaForm({
   );
   const estadoNombre = estadoSeleccionado?.nombre?.toLowerCase() || "";
   const hasEstadoSeleccionado = estadoNombre.trim() !== "";
-  const isPedidoElectro =
-    hasEstadoSeleccionado && estadoNombre.includes("electro");
-  const isPedidoTextil =
-    hasEstadoSeleccionado && estadoNombre.includes("textil");
-  const isEntregado =
-    hasEstadoSeleccionado && estadoNombre.includes("entregado");
+  const isEntregado = hasEstadoSeleccionado && estadoNombre.includes("entregado");
+  const [tipoEntregaDirecta, setTipoEntregaDirecta] = useState<'textil' | 'electro'>('textil');
+  const prendasActualesBloqueo = data.prendas || data.detalles || [];
+  const hayItemsEnCarrito = prendasActualesBloqueo.length > 0;
+  const carritoEsElectro = hayItemsEnCarrito && prendasActualesBloqueo[0]?.bordado === "ELECTRO";
+  const carritoEsTextil = hayItemsEnCarrito && prendasActualesBloqueo[0]?.bordado !== "ELECTRO";
+  const isPedidoElectro = 
+    carritoEsElectro || 
+    (!hayItemsEnCarrito && ((hasEstadoSeleccionado && estadoNombre.includes("electro")) || (isEntregado && tipoEntregaDirecta === 'electro')));
+  const isPedidoTextil = 
+    carritoEsTextil || 
+    (!hayItemsEnCarrito && ((hasEstadoSeleccionado && estadoNombre.includes("textil")) || (isEntregado && tipoEntregaDirecta === 'textil')));
   const requierePedido = isPedidoElectro || isPedidoTextil || isEntregado;
-  const [allSkus, setAllSkus] = useState<any[]>([]);
   const [draftPrenda, setDraftPrenda] = useState({
     skuCodigo: "",
     tipoRopa: "",
@@ -93,9 +97,9 @@ export default function ContratoVentaForm({
     observacion: "",
     entregadoHoy: isEntregado,
   });
-
   const [draftElectro, setDraftElectro] = useState({
     codigo: "",
+    producto: "",
     familia: "",
     marcaModelo: "",
     descripcion: "",
@@ -103,22 +107,25 @@ export default function ContratoVentaForm({
     cantidad: 1,
     entregadoHoy: isEntregado,
   });
-
   const [busquedaPrenda, setBusquedaPrenda] = useState("");
   const [mostrarDropdownPrenda, setMostrarDropdownPrenda] = useState(false);
-
   useEffect(() => {
-    const fetchSkus = async () => {
+    const fetchInventarios = async () => {
       try {
-        const res = await fetch("/api/pedidos/sku");
-        const json = await res.json();
-        const lista = json.raw || json.data || json || [];
-        setAllSkus(Array.isArray(lista) ? lista : []);
+        const [resTextil, resElectro] = await Promise.all([
+          fetch("/api/pedidos/sku"),
+          fetch("/api/pedidos/electro")
+        ]);
+        const jsonTextil = await resTextil.json();
+        const jsonElectro = await resElectro.json();
+
+        setSkusTextil(Array.isArray(jsonTextil.raw) ? jsonTextil.raw : []);
+        setSkusElectro(Array.isArray(jsonElectro.raw) ? jsonElectro.raw : []);
       } catch (e) {
-        console.error("Error cargando SKUs", e);
+        console.error("Error cargando inventarios", e);
       }
     };
-    fetchSkus();
+    fetchInventarios();
   }, []);
 
   useEffect(() => {
@@ -126,82 +133,65 @@ export default function ContratoVentaForm({
     setDraftElectro((prev) => ({ ...prev, entregadoHoy: isEntregado }));
   }, [isEntregado]);
 
-  const tiposRopaDisp = Array.from(new Set(allSkus.map((s) => s.tipoRopa)))
-    .filter(Boolean)
-    .sort();
-  const coloresDisp = Array.from(
-    new Set(
-      allSkus
-        .filter((s) => s.tipoRopa === draftPrenda.tipoRopa)
-        .map((s) => s.color),
-    ),
-  )
-    .filter(Boolean)
-    .sort();
-  const generosDisp = Array.from(
-    new Set(
-      allSkus
-        .filter(
-          (s) =>
-            s.tipoRopa === draftPrenda.tipoRopa &&
-            s.color === draftPrenda.color,
-        )
-        .map((s) => s.genero),
-    ),
-  )
-    .filter(Boolean)
-    .sort();
-  const tallasDisp = Array.from(
-    new Set(
-      allSkus
-        .filter(
-          (s) =>
-            s.tipoRopa === draftPrenda.tipoRopa &&
-            s.color === draftPrenda.color &&
-            s.genero === draftPrenda.genero,
-        )
-        .map((s) => s.talla),
-    ),
-  )
-    .filter(Boolean)
-    .sort();
-  const tiposRopaFiltrados = tiposRopaDisp.filter((t: any) =>
-    t.toLowerCase().includes(busquedaPrenda.toLowerCase()),
-  );
+ //  1. SEPARAMOS LOS INVENTARIOS 
+  const [skusTextil, setSkusTextil] = useState<any[]>([]);
+  const [skusElectro, setSkusElectro] = useState<any[]>([]);
 
+  // 2. LISTAS DINÁMICAS PARA TEXTIL 
+  const tiposRopaDisp = Array.from(new Set(skusTextil.map((s) => s.tipoRopa))).filter(Boolean).sort();
+  const coloresDisp = Array.from(new Set(skusTextil.filter((s) => s.tipoRopa === draftPrenda.tipoRopa).map((s) => s.color))).filter(Boolean).sort();
+  const generosDisp = Array.from(new Set(skusTextil.filter((s) => s.tipoRopa === draftPrenda.tipoRopa && s.color === draftPrenda.color).map((s) => s.genero))).filter(Boolean).sort();
+  const tallasDisp = Array.from(new Set(skusTextil.filter((s) => s.tipoRopa === draftPrenda.tipoRopa && s.color === draftPrenda.color && s.genero === draftPrenda.genero).map((s) => s.talla))).filter(Boolean).sort();
+  
+  const tiposRopaFiltrados = tiposRopaDisp.filter((t: any) => t.toLowerCase().includes(busquedaPrenda.toLowerCase()));
+
+  // 3. LISTAS DINÁMICAS PARA ELECTRO 
+  // 3. LISTAS DINÁMICAS PARA ELECTRO 
+  const [busquedaElectro, setBusquedaElectro] = useState("");
+  const [mostrarDropdownElectro, setMostrarDropdownElectro] = useState(false);
+
+  // 🔥 AQUÍ CORREGIMOS EL ERROR DEL BUSCADOR: AHORA LEE .familia Y AÑADIMOS PRODUCTO 🔥
+  const familiasDisp = Array.from(new Set(skusElectro.map((s) => s.familia))).filter(Boolean).sort();
+  const familiasFiltradas = familiasDisp.filter((t: any) => t.toLowerCase().includes(busquedaElectro.toLowerCase()));
+  
+  const productosDisp = Array.from(new Set(skusElectro.filter((s) => s.familia === draftElectro.familia).map((s) => s.producto))).filter(Boolean).sort();
+  const marcasDisp = Array.from(new Set(skusElectro.filter((s) => s.familia === draftElectro.familia && s.producto === draftElectro.producto).map((s) => s.marcaModelo))).filter(Boolean).sort();
+  const garantiasDisp = Array.from(new Set(skusElectro.filter((s) => s.familia === draftElectro.familia && s.producto === draftElectro.producto && s.marcaModelo === draftElectro.marcaModelo).map((s) => s.garantia))).filter(Boolean).sort();
+
+  const seleccionarFamiliaElectro = (familia: string) => {
+    setBusquedaElectro(familia);
+    setMostrarDropdownElectro(false);
+    setDraftElectro({ ...draftElectro, familia, producto: "", marcaModelo: "", garantia: "", codigo: "" });
+  };
+
+  const handleDraftElectroChange = (field: string, value: string) => {
+    let newDraft = { ...draftElectro, [field]: value };
+    if (field === "producto") { newDraft = { ...newDraft, marcaModelo: "", garantia: "", codigo: "" }; }
+    else if (field === "marcaModelo") { newDraft = { ...newDraft, garantia: "", codigo: "" }; }
+    else if (field === "garantia") {
+      const matchedSku = skusElectro.find((s) => s.familia === newDraft.familia && s.producto === newDraft.producto && s.marcaModelo === newDraft.marcaModelo && s.garantia === value);
+      newDraft.codigo = matchedSku?.codigo || "";
+    }
+    setDraftElectro(newDraft);
+  };
   const seleccionarTipoRopa = (tipo: string) => {
     setBusquedaPrenda(tipo);
     setMostrarDropdownPrenda(false);
-    setDraftPrenda({
-      ...draftPrenda,
-      tipoRopa: tipo,
-      color: "",
-      genero: "",
-      talla: "",
-      skuCodigo: "",
-    });
+    setDraftPrenda({ ...draftPrenda, tipoRopa: tipo, color: "", genero: "", talla: "", skuCodigo: "" });
   };
-
+ 
   const handleDraftChange = (field: string, value: string) => {
     let newDraft = { ...draftPrenda, [field]: value };
-
-    if (field === "color") {
-      newDraft = { ...newDraft, genero: "", talla: "", skuCodigo: "" };
-    } else if (field === "genero") {
-      newDraft = { ...newDraft, talla: "", skuCodigo: "" };
-    } else if (field === "talla") {
-      const matchedSku = allSkus.find(
-        (s) =>
-          s.tipoRopa === newDraft.tipoRopa &&
-          s.color === newDraft.color &&
-          s.genero === newDraft.genero &&
-          s.talla === value,
-      );
+    if (field === "color") newDraft = { ...newDraft, genero: "", talla: "", skuCodigo: "" };
+    else if (field === "genero") newDraft = { ...newDraft, talla: "", skuCodigo: "" };
+    else if (field === "talla") {
+      const matchedSku = skusTextil.find((s) => s.tipoRopa === newDraft.tipoRopa && s.color === newDraft.color && s.genero === newDraft.genero && s.talla === value);
       newDraft.skuCodigo = matchedSku?.codigo || "";
     }
     setDraftPrenda(newDraft);
   };
 
+  
   const handleAgregarPrenda = () => {
     if (
       !draftPrenda.tipoRopa ||
@@ -258,13 +248,13 @@ export default function ContratoVentaForm({
   const handleAgregarElectro = () => {
     if (
       !draftElectro.codigo ||
+      !draftElectro.producto ||
       !draftElectro.familia ||
-      !draftElectro.marcaModelo ||
-      !draftElectro.descripcion
+      !draftElectro.marcaModelo 
     ) {
       showToast(
         "error",
-        "Completa Código, Familia, Marca/Modelo y Descripción.",
+        "Completa Código, Familia, Marca/Modelo.",
       );
       return;
     }
@@ -276,7 +266,7 @@ export default function ContratoVentaForm({
     const nuevoItem = {
       skuCodigo: draftElectro.codigo,
       tipoRopa: draftElectro.familia,
-      color: draftElectro.marcaModelo,
+      color: `${draftElectro.producto} - ${draftElectro.marcaModelo}`, 
       genero: draftElectro.garantia || "S/G",
       talla: "N/A",
       cantidad: draftElectro.cantidad,
@@ -294,6 +284,7 @@ export default function ContratoVentaForm({
 
     setDraftElectro({
       codigo: "",
+      producto: "",
       familia: "",
       marcaModelo: "",
       descripcion: "",
@@ -776,68 +767,92 @@ export default function ContratoVentaForm({
             <Monitor size={16} /> Armar Pedido (Tecnología / Equipos)
           </h4>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 bg-white p-4 rounded-lg border border-purple-100 mb-3 shadow-sm">
-            <div>
+
+
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-white p-3 rounded-lg border border-purple-100 mb-3 shadow-sm">
+            <div className="col-span-2 relative">
               <Label className="text-[10px] font-bold uppercase text-gray-600">
-                Código / SKU *
+                1. Familia / Categoría (Buscar) *
               </Label>
               <Input
-                className="h-8 text-[11px] mt-1 uppercase"
-                placeholder="Ej: EPS-118"
-                value={draftElectro.codigo}
-                onChange={(e) =>
-                  setDraftElectro({ ...draftElectro, codigo: e.target.value })
-                }
+                className="w-full h-8 border border-gray-300 rounded px-2 text-[11px] bg-white mt-1 outline-none font-bold uppercase"
+                placeholder="Ej: AUDIO, Tecnologia..."
+                value={busquedaElectro}
+                onChange={(e) => {
+                  setBusquedaElectro(e.target.value);
+                  setMostrarDropdownElectro(true);
+                  if (e.target.value === "") setDraftElectro({ ...draftElectro, familia: "", marcaModelo: "", garantia: "", codigo: "" });
+                }}
+                onFocus={() => setMostrarDropdownElectro(true)}
+                onBlur={() => setTimeout(() => setMostrarDropdownElectro(false), 200)}
               />
-            </div>
-            <div>
-              <Label className="text-[10px] font-bold uppercase text-gray-600">
-                Familia / Categoría *
-              </Label>
-              <select
-                className="w-full h-8 border border-gray-300 rounded px-1 text-[10px] bg-white mt-1 uppercase font-bold"
-                value={draftElectro.familia}
-                onChange={(e) =>
-                  setDraftElectro({ ...draftElectro, familia: e.target.value })
-                }
-              >
-                <option value="">Seleccione...</option>
-                <option value="Audiovisual">Audiovisual</option>
-                <option value="Cómputo">Cómputo</option>
-                <option value="Laboratorio">Laboratorio</option>
-                <option value="Mobiliario">Mobiliario</option>
-                <option value="Pizarras">Pizarras</option>
-              </select>
-            </div>
-            <div>
-              <Label className="text-[10px] font-bold uppercase text-gray-600">
-                Marca / Modelo *
-              </Label>
-              <Input
-                className="h-8 text-[11px] mt-1 uppercase"
-                placeholder="Ej: Epson PowerLite"
-                value={draftElectro.marcaModelo}
-                onChange={(e) =>
-                  setDraftElectro({
-                    ...draftElectro,
-                    marcaModelo: e.target.value,
-                  })
-                }
-              />
+              {mostrarDropdownElectro && familiasFiltradas.length > 0 && (
+                <div className="absolute left-0 right-0 z-50 bg-white border border-purple-300 rounded-lg shadow-2xl max-h-48 overflow-y-auto mt-1 divide-y divide-gray-100">
+                  {familiasFiltradas.map((fam: string) => (
+                    <div
+                      key={fam}
+                      className="p-2.5 text-[11px] uppercase hover:bg-purple-50 cursor-pointer font-bold text-gray-700 transition-colors"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        seleccionarFamiliaElectro(fam);
+                      }}
+                    >
+                      {fam}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="col-span-2 md:col-span-1">
-              <Label className="text-[10px] font-bold uppercase text-gray-600">
-                Garantía
-              </Label>
-              <Input
-                className="h-8 text-[11px] mt-1"
-                placeholder="Ej: 12 Meses"
-                value={draftElectro.garantia}
-                onChange={(e) =>
-                  setDraftElectro({ ...draftElectro, garantia: e.target.value })
-                }
-              />
+              <Label className="text-[10px] font-bold uppercase text-gray-600">2. Producto *</Label>
+              <select disabled={!draftElectro.familia} className="w-full h-8 border border-gray-300 rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100 disabled:opacity-50 uppercase font-bold" value={draftElectro.producto} onChange={(e) => handleDraftElectroChange("producto", e.target.value)}>
+                <option value="">Seleccione...</option>
+                {productosDisp.map((p: any) => <option key={p} value={p}>{p}</option>)}
+              </select>
             </div>
+
+            <div className="col-span-2 md:col-span-1">
+              <Label className="text-[10px] font-bold uppercase text-gray-600">
+                2. Marca / Modelo *
+              </Label>
+              <select
+                disabled={!draftElectro.familia}
+                className="w-full h-8 border border-gray-300 rounded px-1 text-[10px] bg-white mt-1 disabled:bg-gray-100 disabled:opacity-50 outline-none uppercase font-bold"
+                value={draftElectro.marcaModelo}
+                onChange={(e) => handleDraftElectroChange("marcaModelo", e.target.value)}
+              >
+                <option value="">Seleccione...</option>
+                {marcasDisp.map((m: any) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-span-2 md:col-span-1">
+              <Label className="text-[10px] font-bold uppercase text-gray-600">
+                3. Garantía *
+              </Label>
+              <select
+                disabled={!draftElectro.marcaModelo}
+                className="w-full h-8 border border-purple-400 rounded px-1 text-[11px] bg-purple-50 text-purple-900 mt-1 disabled:bg-gray-100 disabled:border-gray-200 disabled:text-gray-400 outline-none uppercase font-black"
+                value={draftElectro.garantia}
+                onChange={(e) => handleDraftElectroChange("garantia", e.target.value)}
+              >
+                <option value="">Garantía...</option>
+                {garantiasDisp.map((g: any) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-span-2 md:col-span-1">
+              <Label className="text-[10px] font-bold uppercase text-gray-600">
+                Cód / SKU asignado
+              </Label>
+              <Input disabled className="h-8 text-[11px] mt-1 font-mono font-bold bg-gray-100" placeholder="Auto..." value={draftElectro.codigo} />
+            </div>
+
             <div className="col-span-2 md:col-span-1">
               <Label className="text-[10px] font-bold uppercase text-gray-600">
                 Cantidad *
@@ -847,12 +862,7 @@ export default function ContratoVentaForm({
                   type="number"
                   min="1"
                   value={draftElectro.cantidad}
-                  onChange={(e) =>
-                    setDraftElectro({
-                      ...draftElectro,
-                      cantidad: parseInt(e.target.value) || 1,
-                    })
-                  }
+                  onChange={(e) => setDraftElectro({ ...draftElectro, cantidad: parseInt(e.target.value) || 1 })}
                   className="h-8 text-xs font-bold text-center border-purple-300 w-full"
                 />
                 <Button
@@ -864,21 +874,14 @@ export default function ContratoVentaForm({
                 </Button>
               </div>
             </div>
-            <div className="col-span-2 md:col-span-3">
-              <Label className="text-[10px] font-bold uppercase text-gray-600">
-                Descripción Larga del Equipo *
-              </Label>
+
+            <div className="col-span-2 md:col-span-4">
               <Input
                 type="text"
-                placeholder="Ej: Proyector interactivo de 3000 lúmenes..."
+                placeholder="Observación o detalle técnico adicional (Opcional)..."
                 value={draftElectro.descripcion}
-                onChange={(e) =>
-                  setDraftElectro({
-                    ...draftElectro,
-                    descripcion: e.target.value,
-                  })
-                }
-                className="h-8 text-[11px] mt-1 bg-gray-50 border-gray-200"
+                onChange={(e) => setDraftElectro({ ...draftElectro, descripcion: e.target.value })}
+                className="h-8 text-[10px] mt-1 bg-gray-50 border-gray-200"
               />
             </div>
           </div>
@@ -890,9 +893,37 @@ export default function ContratoVentaForm({
           <p className="text-sm font-black text-emerald-800 uppercase">
             Mercadería Entregada Directamente
           </p>
-          <p className="text-xs text-emerald-600 mt-1">
-            Ingresa a continuación las prendas que sacaste del inventario móvil.
-          </p>
+          {hayItemsEnCarrito ? (
+            <p className="text-xs text-amber-600 font-bold mt-1 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+              ⚠️ Contrato asignado para {carritoEsElectro ? 'Tecnología' : 'Textil'}. Crea un contrato nuevo para otro pedido.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-emerald-600 mt-1 mb-3">
+                ¿Qué tipo de mercadería le entregaste al cliente?
+              </p>
+              <div className="flex gap-2">
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  variant={tipoEntregaDirecta === 'textil' ? 'default' : 'outline'} 
+                  className={tipoEntregaDirecta === 'textil' ? 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold' : 'text-emerald-700 border-emerald-300 font-bold'} 
+                  onClick={() => setTipoEntregaDirecta('textil')}
+                >
+                  Ropa / Uniformes
+                </Button>
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  variant={tipoEntregaDirecta === 'electro' ? 'default' : 'outline'} 
+                  className={tipoEntregaDirecta === 'electro' ? 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold' : 'text-emerald-700 border-emerald-300 font-bold'} 
+                  onClick={() => setTipoEntregaDirecta('electro')}
+                >
+                  Tecnología / Equipos
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
       {mostrarPrendas && requierePedido && (

@@ -69,14 +69,14 @@ function PedidosPageContent() {
     prioridad: "Alta",
     mensaje: "",
   });
-  // 🔥 ESTADOS PARA BÚSQUEDA DE USUARIOS 🔥
+  // ESTADOS PARA BÚSQUEDA DE USUARIOS 
   const [usuariosLista, setUsuariosLista] = useState<any[]>([]);
   const [usuariosSeleccionados, setUsuariosSeleccionados] = useState<any[]>([]);
   const [busquedaUser, setBusquedaUser] = useState('');
   const [resultadosUser, setResultadosUser] = useState<any[]>([]);
   const [dropdownUser, setDropdownUser] = useState(false);
 
-  // 🔥 LÓGICA DE BÚSQUEDA DE USUARIOS 🔥
+  //  LÓGICA DE BÚSQUEDA DE USUARIOS 
   const normalizarTexto = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   
   const handleBuscarUsuario = (termino: string) => {
@@ -105,7 +105,7 @@ function PedidosPageContent() {
     setUsuariosSeleccionados(prev => prev.filter(u => u.id !== userId));
   };
 
-  // 🔥 ACTUALIZAMOS LA FUNCIÓN DE ABRIR PARA QUE LIMPIE LA SELECCIÓN 🔥
+  //ACTUALIZAMOS LA FUNCIÓN DE ABRIR PARA QUE LIMPIE LA SELECCIÓN 
   const handleAbrirTicketContextual = (prenda: any, contrato: any, grupo: any) => {
     setPrendaParaTicket({
       institucionId: grupo.institucionId, institucionNombre: grupo.institucionNombre, contrato: contrato.numContrato,
@@ -115,7 +115,7 @@ function PedidosPageContent() {
     setModalTicketOpen(true);
   };
 
-  // 🔥 ACTUALIZAMOS LA FUNCIÓN DE CREAR PARA QUE ENVÍE LOS IDs SELECCIONADOS 🔥
+  // ACTUALIZAMOS LA FUNCIÓN DE CREAR PARA QUE ENVÍE LOS IDs SELECCIONADOS 
   const handleCrearTicketContextual = async () => {
     if (!ticketData.tipoModulo) return showToast('error', 'Seleccione el Área Responsable (ej. Operaciones).');
     if (ticketData.motivo === 'Cambio de Talla' && !ticketData.nuevaTalla) return showToast('error', 'Especifique la nueva talla requerida.');
@@ -180,7 +180,7 @@ function PedidosPageContent() {
       const dataUsu = await resUsu.json();
       const arrayUsuarios = Array.isArray(dataUsu) ? dataUsu : (dataUsu.data || []);
       
-      // 🔥 Normalizamos los datos para que el buscador encuentre el "rolNombre"
+      // Normalizamos los datos para que el buscador encuentre el "rolNombre"
       const usuariosFormateados = arrayUsuarios.map((u: any) => ({
         ...u,
         rolNombre: u.rolNombre || u.rol?.nombre || 'Usuario'
@@ -336,7 +336,7 @@ function PedidosPageContent() {
       const res = await fetch("/api/pedidos", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        // 🔥 Ahora pasamos el vendedorId
+        // Ahora pasamos el vendedorId
         body: JSON.stringify({
           modo: "masivo",
           institucionId: pedido.institucionId,
@@ -354,34 +354,31 @@ function PedidosPageContent() {
   };
 
   const handleGuardarContrato = async () => {
-    if (!globalFechaRequerida) {
-      showToast(
-        "error",
-        "Falta la Fecha de Entrega Global de la escuela (Arriba).",
-      );
-      return;
+    const estadoSel = catalogos?.estadosCliente?.find((e: any) => e.id.toString() === contratoData.estadoClienteId?.toString());
+    const esEntregado = estadoSel?.nombre?.toLowerCase().includes('entregado');
+
+    let fechaFinalParaBackend = globalFechaRequerida;
+
+    // Si es entrega inmediata y no puso fecha, el sistema le asigna la fecha de hoy automáticamente
+    if (esEntregado && !globalFechaRequerida) {
+       fechaFinalParaBackend = new Date().toISOString().split('T')[0];
+    } else if (!globalFechaRequerida) {
+       showToast('error', 'Falta la Fecha de Entrega Global de la escuela (Arriba).'); 
+       return; 
     }
-    if (!contratoData.numContrato) {
-      showToast("error", "Ingresa el Número de Contrato.");
-      return;
-    }
-    if (!contratoData.prendas || contratoData.prendas.length === 0) {
-      showToast(
-        "error",
-        "No puedes guardar un contrato vacío. Agrega prendas.",
-      );
-      return;
-    }
+
+    if (!contratoData.numContrato) { showToast('error', 'Ingresa el Número de Contrato.'); return; }
+    if (!contratoData.prendas || contratoData.prendas.length === 0) { showToast('error', 'No puedes guardar un contrato vacío. Agrega prendas.'); return; }
 
     setSaving(true);
     try {
       const payload: any = {
-        modo: "individual",
-        id: pedidoEditSelId !== "NUEVO" ? pedidoEditSelId : undefined,
+        modo: 'individual',
+        id: pedidoEditSelId !== 'NUEVO' ? pedidoEditSelId : undefined,
         institucionId: grupoEdit.institucionId || grupoEdit.id,
-        fechaRequerida: globalFechaRequerida,
+        fechaRequerida: fechaFinalParaBackend, 
         ...contratoData,
-        detalles: contratoData.prendas,
+        detalles: contratoData.prendas 
       };
 
       const res = await fetch("/api/pedidos", {
@@ -606,13 +603,13 @@ function PedidosPageContent() {
           onClick={() => setTabActiva("Borrador")}
           className={`pb-3 px-3 text-sm font-black transition-all border-b-2 ${tabActiva === "Borrador" ? "border-amber-500 text-amber-600" : "border-transparent text-gray-500"}`}
         >
-          📝 Borradores Pendientes
+          Borradores Pendientes
         </button>
         <button
           onClick={() => setTabActiva("Operaciones")}
           className={`pb-3 px-3 text-sm font-black transition-all border-b-2 ${tabActiva === "Operaciones" ? "border-emerald-500 text-emerald-600" : "border-transparent text-gray-500"}`}
         >
-          🏭 Enviados a Operaciones
+          Enviados a Operaciones
         </button>
       </div>
 
@@ -632,7 +629,7 @@ function PedidosPageContent() {
             value={selectedInstFilter}
             onChange={(e) => setSelectedInstFilter(e.target.value)}
           >
-            <option value="">🏫 Todas las Instituciones</option>
+            <option value=""> Todas las Instituciones</option>
             {institucionesList.map((inst: any) => (
               <option key={inst.id} value={inst.id}>
                 {inst.nombre}
@@ -756,8 +753,6 @@ function PedidosPageContent() {
                           <span className="font-bold text-blue-600">
                             {item.fechaRequeridaTexto}
                           </span>
-
-                          {/* 🔥 ALERTA DE OBSERVACIÓN (CAMBIO DE FECHA) 🔥 */}
                           {item.pedidosAsociados?.some((p: any) =>
                             p.observacion?.trim(),
                           ) && (
@@ -1396,7 +1391,7 @@ function PedidosPageContent() {
           </div>
         </DialogContent>
       </Dialog>
-      {/* 🔥 MODAL DE TICKET CONTEXTUAL 🔥 */}
+      {/*  MODAL DE TICKET CONTEXTUAL  */}
       <Dialog open={modalTicketOpen} onOpenChange={setModalTicketOpen}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
           <DialogHeader>
@@ -1423,10 +1418,10 @@ function PedidosPageContent() {
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-bold text-gray-500 uppercase">Motivo</Label>
                 <select className="w-full h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold bg-white" value={ticketData.motivo} onChange={e => setTicketData({...ticketData, motivo: e.target.value})}>
-                  <option value="Cambio de Talla">🔄 Cambio de Talla</option>
-                  <option value="Prenda Defectuosa">⚠️ Prenda Defectuosa</option>
-                  <option value="Error de Bodega">❌ Error de Bodega</option>
-                  <option value="Faltante de Paquete">📦 Faltante</option>
+                  <option value="Cambio de Talla">Cambio de Talla</option>
+                  <option value="Prenda Defectuosa">Prenda Defectuosa</option>
+                  <option value="Error de Bodega">Error de Bodega</option>
+                  <option value="Faltante de Paquete">Faltante</option>
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -1437,7 +1432,7 @@ function PedidosPageContent() {
                 </select>
               </div>
 
-              {/* 🔥 NUEVO BUSCADOR DE USUARIOS 🔥 */}
+              {/*NUEVO BUSCADOR DE USUARIOS  */}
               <div className="space-y-1.5 relative sm:col-span-2">
                 <Label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
                   <User size={12}/> Asignar Específicamente a... (Opcional)

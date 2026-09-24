@@ -32,7 +32,7 @@ const MENU_OPCIONES = [
     id: "bodegas",
     icon: <ShieldCheck size={18} />,
     label: "Asignación Bodegas",
-  }, // 🔥 NUEVO BOTÓN
+  }, // NUEVO BOTÓN
   { id: "reglaTamano", icon: <Sliders size={18} />, label: "Rangos de Tamaño" },
   { id: "sostenimiento", icon: <Layers size={18} />, label: "Sostenimiento" },
   { id: "jornada", icon: <Layers size={18} />, label: "Jornada" },
@@ -89,11 +89,9 @@ const MENU_OPCIONES = [
 ];
 
 export default function ConfiguracionPage() {
-  const [activeTab, setActiveTab] = useState("bodegas"); // 🔥 INICIA EN LA NUEVA PESTAÑA
+  const [activeTab, setActiveTab] = useState("bodegas"); 
   const [catalogos, setCatalogos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  // 🔥 ESTADO DE BODEGAS 🔥
   const [bodegasForm, setBodegasForm] = useState({
     textilId: "",
     electroId: "",
@@ -206,7 +204,6 @@ export default function ConfiguracionPage() {
     }
   };
 
-  // 🔥 GUARDAR CONFIGURACIÓN DE BODEGAS 🔥
   const handleGuardarBodegas = async () => {
     setSaving(true);
     try {
