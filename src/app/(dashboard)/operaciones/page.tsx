@@ -54,7 +54,6 @@ function OperacionesPageContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  // 🔥 ORDENAMIENTO DE COLUMNAS 🔥
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: "asc" | "desc";
@@ -105,6 +104,7 @@ function OperacionesPageContent() {
   const [prendasCustomCount, setPrendasCustomCount] = useState(0);
   const [fechaStockProduccion, setFechaStockProduccion] = useState("");
   const [saving, setSaving] = useState(false);
+  const [busquedaContrato, setBusquedaContrato] = useState("");
   const [toast, setToast] = useState<{
     tipo: "exito" | "error";
     texto: string;
@@ -121,12 +121,10 @@ function OperacionesPageContent() {
   const abrirModalFechaMasiva = () => {
     if (!grupoDetalle || !grupoDetalle.pedidosAsociados) return;
 
-    // Extraemos todos los IDs de los contratos de este grupo
     const ids = Array.from(grupoDetalle.pedidosAsociados.values()).map(
       (p: any) => p.id,
     );
     setPedidoIdsReq(ids);
-
     // Tomamos la fecha del primer contrato como referencia
     const primerPedido = Array.from(
       grupoDetalle.pedidosAsociados.values(),
@@ -238,6 +236,7 @@ function OperacionesPageContent() {
     setContratoExpandido(null);
     setPrendasSeleccionadas([]);
     setModalDetalleOpen(true);
+    setBusquedaContrato("");
   };
   const handleOpenStock = (grupo: any) => {
     setGrupoStock(grupo);
@@ -408,8 +407,6 @@ function OperacionesPageContent() {
     return matchSearch && matchInst;
   });
 
-  // ▼ 1. COPIA Y PEGA DESDE AQUÍ HASTA paginatedData ▼
-  // 🔥 LÓGICA DE ORDENAMIENTO MEJORADA 🔥
   const sortedData = [...filteredData].sort((a, b) => {
     // Si el usuario hizo clic en una columna, usamos ese orden
     if (sortConfig) {
@@ -481,7 +478,7 @@ function OperacionesPageContent() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
-  // ▲ FIN DE LA COPIA ▲
+  
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
@@ -1062,173 +1059,210 @@ function OperacionesPageContent() {
                 Completa
               </Button>
             </div>
-
-            <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">
-              Desglose por Contrato y Prendas:
-            </p>
-            <div className="space-y-3">
-              {grupoDetalle?.pedidosAsociados?.map((ped: any) => {
-                const isExpanded = contratoExpandido === ped.id;
-                return (
-                  <div
-                    key={ped.id}
-                    className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
-                  >
-                    <div className="p-3.5 flex justify-between items-center bg-gray-50/80 border-b border-gray-100">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-3">
-                          <Badge
-                            variant="outline"
-                            className="font-black text-blue-700 bg-blue-50 border-blue-200"
-                          >
-                            Contrato #{ped.numContrato}
-                          </Badge>
-                          <span className="text-xs font-bold text-gray-800">
-                            {ped.nombreCliente}
-                          </span>
-                          <Badge
-                            className={`ml-2 text-[10px] ${getEstadoColor(ped.estadoGlobalContrato)}`}
-                          >
-                            {ped.estadoGlobalContrato}
-                          </Badge>
-                        </div>
-                        {ped.motivoCambioFecha && (
-                          <p className="text-[10px] text-red-700 font-bold mt-1 flex items-center gap-1">
-                            <AlertTriangle size={12} /> Motivo de
-                            reprogramación: {ped.motivoCambioFecha}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-xs font-bold text-primary flex items-center gap-1 shrink-0"
-                        onClick={() =>
-                          setContratoExpandido(isExpanded ? null : ped.id)
-                        }
-                      >
-                        <Eye size={14} />{" "}
-                        {isExpanded ? "Ocultar" : "Ver Prendas"}
-                      </Button>
-                    </div>
-                    {isExpanded && (
-                      <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto space-y-3">
-                        <table className="w-full text-left text-xs border-collapse min-w-650px">
-                          <thead>
-                            <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase text-[10px]">
-                              <th className="p-2 text-center w-8">Sel.</th>
-                              <th className="p-2">Código</th>
-                              <th className="p-2">Prenda</th>
-                              <th className="p-2">Color / Talla / Genero</th>
-                              <th className="p-2 text-center">Cant.</th>
-                              <th className="p-2">Bordado</th>
-                              <th className="p-2">Observación</th>
-                              <th className="p-2 text-center">
-                                Estado Operación
-                              </th>
-                              <th className="p-2 text-center">
-                                Fecha Confección
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {[...ped.detalles]
-                              .sort((a: any, b: any) =>
-                                (a.skuCodigo || "").localeCompare(
-                                  b.skuCodigo || "",
-                                ),
-                              )
-                              .map((p: any) => (
-                                <tr key={p.id} className="hover:bg-white">
-                                  <td className="p-2 text-center">
-                                    <input
-                                      type="checkbox"
-                                      className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer"
-                                      checked={prendasSeleccionadas.includes(
-                                        p.id,
-                                      )}
-                                      onChange={() =>
-                                        toggleSeleccionPrenda(p.id)
-                                      }
-                                    />
-                                  </td>
-                                  <td className="p-2 font-mono font-bold text-blue-600">
-                                    {p.skuCodigo || "S/N"}
-                                  </td>
-                                  <td className="p-2 font-bold text-gray-800">
-                                    {p.tipoRopa}
-                                  </td>
-                                  <td className="p-2 text-gray-600">
-                                    {p.color} ({p.talla}) ({p.genero})
-                                  </td>
-                                  <td className="p-2 text-center font-black">
-                                    {p.cantidad}
-                                  </td>
-                                  <td className="p-2 text-[11px]">
-                                    {p.bordado ? (
-                                      <span className="font-bold text-purple-700">
-                                        {p.bordado}
-                                      </span>
-                                    ) : (
-                                      <span className="text-gray-400 italic">
-                                        Sin bordado
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="p-2 text-[11px]">
-                                    {p.observacion ||
-                                    p.observacionOperaciones ? (
-                                      <span className="text-gray-800 font-medium">
-                                        {p.observacion ||
-                                          p.observacionOperaciones}
-                                      </span>
-                                    ) : (
-                                      <span className="text-gray-400 italic">
-                                        Sin observaciones
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="p-2 text-center">
-                                    <Badge
-                                      variant="outline"
-                                      className={`font-bold text-[10px] ${getEstadoColor(p.estadoOperacion)}`}
-                                    >
-                                      {p.estadoOperacion}
-                                    </Badge>
-                                  </td>
-                                  <td className="p-2 text-center font-semibold text-gray-700">
-                                    {p.fechaEstimadaConfeccionTexto}
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                        <div className="flex justify-end pt-2">
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              const seleccionadasDeEsteContrato =
-                                prendasSeleccionadas.filter((id) =>
-                                  ped.detalles.some((p: any) => p.id === id),
-                                );
-                              if (seleccionadasDeEsteContrato.length === 0)
-                                return showToast(
-                                  "error",
-                                  "Seleccione al menos una prenda marcando las casillas de la izquierda.",
-                                );
-                              abrirModalGestion(seleccionadasDeEsteContrato);
-                            }}
-                            className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs h-8"
-                          >
-                            Actualizar Seleccionadas
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            {/* 🔥 ENCABEZADO Y BUSCADOR INTELIGENTE 🔥 */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-200 pb-2">
+              <p className="text-xs font-black uppercase text-gray-500">
+                Desglose por Contrato y Prendas:
+              </p>
+              <div className="relative w-full sm:w-64">
+                <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                <Input
+                  className="pl-8 h-9 text-xs bg-white border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                  placeholder="Buscar por cliente o contrato..."
+                  value={busquedaContrato}
+                  onChange={(e) => setBusquedaContrato(e.target.value)}
+                />
+              </div>
             </div>
+
+            <div className="space-y-3 pt-2">
+              {(() => {
+                // Lógica del filtro en tiempo real
+                const pedidosFiltrados = grupoDetalle?.pedidosAsociados?.filter((ped: any) => {
+                  if (!busquedaContrato) return true;
+                  const term = busquedaContrato.toLowerCase();
+                  const matchContrato = ped.numContrato?.toLowerCase().includes(term);
+                  const matchCliente = ped.nombreCliente?.toLowerCase().includes(term);
+                  return matchContrato || matchCliente;
+                }) || [];
+
+                // Mensaje de estado vacío si no encuentra nada
+                if (pedidosFiltrados.length === 0) {
+                  return (
+                    <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                      <p className="text-xs text-gray-500 font-bold">
+                        No se encontraron resultados para "{busquedaContrato}"
+                      </p>
+                    </div>
+                  );
+                }
+
+                // Dibuja los contratos filtrados
+                return pedidosFiltrados.map((ped: any) => {
+                  const isExpanded = contratoExpandido === ped.id;
+                  return (
+                    <div
+                      key={ped.id}
+                      className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
+                    >
+                      <div className="p-3.5 flex justify-between items-center bg-gray-50/80 border-b border-gray-100">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-3">
+                            <Badge
+                              variant="outline"
+                              className="font-black text-blue-700 bg-blue-50 border-blue-200"
+                            >
+                              Contrato #{ped.numContrato}
+                            </Badge>
+                            <span className="text-xs font-bold text-gray-800">
+                              {ped.nombreCliente}
+                            </span>
+                            <Badge
+                              className={`ml-2 text-[10px] ${getEstadoColor(ped.estadoGlobalContrato)}`}
+                            >
+                              {ped.estadoGlobalContrato}
+                            </Badge>
+                          </div>
+                          {ped.motivoCambioFecha && (
+                            <p className="text-[10px] text-red-700 font-bold mt-1 flex items-center gap-1">
+                              <AlertTriangle size={12} /> Motivo de
+                              reprogramación: {ped.motivoCambioFecha}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs font-bold text-primary flex items-center gap-1 shrink-0"
+                          onClick={() =>
+                            setContratoExpandido(isExpanded ? null : ped.id)
+                          }
+                        >
+                          <Eye size={14} />{" "}
+                          {isExpanded ? "Ocultar" : "Ver Prendas"}
+                        </Button>
+                      </div>
+                      {isExpanded && (
+                        <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto space-y-3">
+                          <table className="w-full text-left text-xs border-collapse min-w-650px">
+                            <thead>
+                              <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase text-[10px]">
+                                <th className="p-2 text-center w-8">Sel.</th>
+                                <th className="p-2">Código</th>
+                                <th className="p-2">Prenda</th>
+                                <th className="p-2">Color / Talla / Genero</th>
+                                <th className="p-2 text-center">Cant.</th>
+                                <th className="p-2">Bordado</th>
+                                <th className="p-2">Observación</th>
+                                <th className="p-2 text-center">
+                                  Estado Operación
+                                </th>
+                                <th className="p-2 text-center">
+                                  Fecha Confección
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {[...ped.detalles]
+                                .sort((a: any, b: any) =>
+                                  (a.skuCodigo || "").localeCompare(
+                                    b.skuCodigo || "",
+                                  ),
+                                )
+                                .map((p: any) => (
+                                  <tr key={p.id} className="hover:bg-white">
+                                    <td className="p-2 text-center">
+                                      <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer"
+                                        checked={prendasSeleccionadas.includes(
+                                          p.id,
+                                        )}
+                                        onChange={() =>
+                                          toggleSeleccionPrenda(p.id)
+                                        }
+                                      />
+                                    </td>
+                                    <td className="p-2 font-mono font-bold text-blue-600">
+                                      {p.skuCodigo || "S/N"}
+                                    </td>
+                                    <td className="p-2 font-bold text-gray-800">
+                                      {p.tipoRopa}
+                                    </td>
+                                    <td className="p-2 text-gray-600">
+                                      {p.color} ({p.talla}) ({p.genero})
+                                    </td>
+                                    <td className="p-2 text-center font-black">
+                                      {p.cantidad}
+                                    </td>
+                                    <td className="p-2 text-[11px]">
+                                      {p.bordado ? (
+                                        <span className="font-bold text-purple-700">
+                                          {p.bordado}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-400 italic">
+                                          Sin bordado
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-2 text-[11px]">
+                                      {p.observacion ||
+                                      p.observacionOperaciones ? (
+                                        <span className="text-gray-800 font-medium">
+                                          {p.observacion ||
+                                            p.observacionOperaciones}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-400 italic">
+                                          Sin observaciones
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-2 text-center">
+                                      <Badge
+                                        variant="outline"
+                                        className={`font-bold text-[10px] ${getEstadoColor(p.estadoOperacion)}`}
+                                      >
+                                        {p.estadoOperacion}
+                                      </Badge>
+                                    </td>
+                                    <td className="p-2 text-center font-semibold text-gray-700">
+                                      {p.fechaEstimadaConfeccionTexto}
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                          <div className="flex justify-end pt-2">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                const seleccionadasDeEsteContrato =
+                                  prendasSeleccionadas.filter((id) =>
+                                    ped.detalles.some((p: any) => p.id === id),
+                                  );
+                                if (seleccionadasDeEsteContrato.length === 0)
+                                  return showToast(
+                                    "error",
+                                    "Seleccione al menos una prenda marcando las casillas de la izquierda.",
+                                  );
+                                abrirModalGestion(seleccionadasDeEsteContrato);
+                              }}
+                              className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs h-8"
+                            >
+                              Actualizar Seleccionadas
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            
           </div>
           <DialogFooter className="mt-4">
             <Button

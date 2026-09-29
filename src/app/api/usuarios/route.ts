@@ -27,6 +27,7 @@ export async function GET() {
       bloqueado: u.bloqueado,
       departamentoId: u.departamentoId,
       departamento: u.departamento,
+      esJefe: u.esJefe,
     }));
 
     return NextResponse.json(data);
@@ -40,8 +41,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { nombre, email, password, rolId, departamentoId } =
-      await request.json();
+    const { nombre, email, password, rolId, departamentoId, esJefe } = await request.json();
     const emailExiste = await prisma.usuario.findUnique({ where: { email } });
     if (emailExiste)
       return NextResponse.json(
@@ -56,6 +56,7 @@ export async function POST(request: Request) {
         passwordHash: hashedPassword,
         rolId: parseInt(rolId),
         departamentoId: departamentoId ? parseInt(departamentoId) : null,
+        esJefe: esJefe ? true : false,
       },
     });
 
@@ -82,13 +83,13 @@ export async function PUT(request: Request) {
         { status: 403 },
       );
     }
-    const { id, nombre, email, rolId, activo, password, departamentoId } =
-      await request.json();
+    const { id, nombre, email, rolId, activo, password, departamentoId, esJefe } = await request.json();
     const updateData: any = {};
     if (nombre) updateData.nombre = nombre;
     if (email) updateData.email = email;
     if (rolId) updateData.rolId = parseInt(rolId);
     if (activo !== undefined) updateData.activo = activo;
+    if (esJefe !== undefined) updateData.esJefe = esJefe;
     if (departamentoId !== undefined) {
       updateData.departamentoId = departamentoId
         ? parseInt(departamentoId)

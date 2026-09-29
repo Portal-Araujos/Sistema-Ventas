@@ -274,7 +274,6 @@ export default function ContratoVentaForm({
       observacion: draftElectro.descripcion,
       entregadoHoy: draftElectro.entregadoHoy,
     };
-
     const prendasActuales = data.prendas || data.detalles || [];
     onChange({
       ...data,

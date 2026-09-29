@@ -3,36 +3,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Home,
-  Building2,
-  CalendarDays,
-  MapPin,
-  BarChart2,
-  User,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  LogOut,
-  DollarSign,
-  Shield,
-  Menu,
-  X,
-  Ticket,
-  BookCheck,
-  Factory,
-  Barcode,
-  Briefcase,
-  Package,
-  Scissors,
-  Truck,
-  ChevronDown,
-  ChevronUp,
-  Badge,
-  FileUser,
-  HandCoins,
-  Bell,
-} from "lucide-react";
+import {Home,Building2, CalendarDays,MapPin,BarChart2,User,Settings,ChevronLeft,ChevronRight,
+  LogOut,DollarSign,Shield,Menu,X,Ticket,BookCheck,Factory,Barcode,Briefcase,Package,
+  Scissors,Truck,ChevronDown,ChevronUp,Badge,FileUser,HandCoins,Bell} from "lucide-react";
 
 const menuStructure = [
   {
@@ -180,8 +153,6 @@ export function Sidebar() {
     CONFIGURACIONES: false,
     TICKETS: false,
   });
-
-  // 🔥 NUEVOS ESTADOS DE ALERTAS UNIVERSALES 🔥
   const [alertasGenerales, setAlertasGenerales] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -237,8 +208,8 @@ export function Sidebar() {
             mensaje: n.mensaje,
             tipoModulo: n.tipoModulo,
             urlDestino: n.urlDestino,
-            estado: null, // Agregado para igualar el tipo de dato
-            remitente: null, // Agregado para igualar el tipo de dato
+            estado: null, 
+            remitente: null, 
             createdAt: n.createdAt,
             esERP: true,
             leido: n.leido,
@@ -349,8 +320,6 @@ export function Sidebar() {
     if (isCollapsed) setIsCollapsed(false);
     setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
   };
-
-  // 🔥 ICONOGRAFÍA DINÁMICA 🔥
   const getIconoModulo = (modulo: string) => {
     switch (modulo) {
       case "TICKETS":
@@ -476,7 +445,7 @@ export function Sidebar() {
               </button>
               {isNotificationsOpen && (
                 <div className="absolute top-12 left-0 sm:-left-48 w-80 bg-white border border-gray-200 shadow-2xl rounded-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                  <div className="bg-slate-900 px-4 py-3 border-b flex justify-between items-center">
+                  <div className="bg-red-500 px-4 py-3 border-b flex justify-between items-center">
                     <span className="text-xs font-black text-white uppercase tracking-wider">
                       Centro de Notificaciones
                     </span>
@@ -484,8 +453,7 @@ export function Sidebar() {
                       {unreadCount} Nuevas
                     </Badge>
                   </div>
-                  {/* 🔥 SCROLL PERFECTO DE ESCRITORIO 🔥 */}
-                  <div className="max-h-[60vh] overflow-y-auto overscroll-contain">
+                  <div className="max-h-[60vh] overflow-y-auto overscroll-contain"> 
                     <RendersListaAlertas />
                   </div>
                 </div>

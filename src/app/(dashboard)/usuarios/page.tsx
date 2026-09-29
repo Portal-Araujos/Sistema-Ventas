@@ -42,18 +42,13 @@ export default function UsuariosPage() {
   const [activeTab, setActiveTab] = useState<TabType>("personal");
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [rolesDinamicos, setRolesDinamicos] = useState<any[]>([]);
-
-  // 🔥 NUEVO ESTADO: Departamentos 🔥
   const [departamentos, setDepartamentos] = useState<any[]>([]);
   const [modalDeptoOpen, setModalDeptoOpen] = useState(false);
   const [nuevoDeptoNombre, setNuevoDeptoNombre] = useState("");
   const [savingDepto, setSavingDepto] = useState(false);
-
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
-
-  // 🔥 SE AGREGÓ departamentoId 🔥
   const initialForm = {
     id: "",
     nombre: "",
@@ -62,6 +57,7 @@ export default function UsuariosPage() {
     rolId: "",
     departamentoId: "",
     activo: true,
+    esJefe: false,
   };
   const [formUser, setFormUser] = useState(initialForm);
 
@@ -317,10 +313,19 @@ export default function UsuariosPage() {
                         >
                           {u.rolNombre.replace("_", " ")}
                         </Badge>
-                        {/* 🔥 MOSTRAR EL DEPARTAMENTO ASIGNADO 🔥 */}
+                        
+                        {/* Departamento */}
                         {u.departamento && (
                           <div className="text-[10px] text-gray-500 font-bold mt-1 uppercase flex items-center justify-center gap-1">
                             <Briefcase size={10} /> {u.departamento.nombre}
+                          </div>
+                        )}
+
+                        {u.esJefe && (
+                          <div className="mt-1 flex justify-center">
+                            <Badge className="bg-amber-100 text-amber-800 text-[9px] font-black border-amber-200 uppercase">
+                              👑 Jefe de Área
+                            </Badge>
                           </div>
                         )}
                       </TableCell>
@@ -353,6 +358,7 @@ export default function UsuariosPage() {
                                   rolId: u.rolId.toString(),
                                   departamentoId:
                                     u.departamentoId?.toString() || "",
+                                  esJefe: !!u.esJefe,
                                 });
                                 setModalOpen(true);
                               }}
@@ -770,6 +776,24 @@ export default function UsuariosPage() {
                   ))}
                 </select>
               </div>
+            </div>
+            <div className="flex items-center gap-3 bg-blue-50/50 p-3 rounded-xl border mt-2">
+              <Label className="text-xs font-bold text-gray-700 uppercase">
+                Privilegios de Jefe:
+              </Label>
+              <select
+                className="h-9 border border-blue-200 rounded-lg px-2 text-xs font-bold text-blue-800 bg-white outline-none"
+                value={formUser.esJefe ? "true" : "false"}
+                onChange={(e) =>
+                  setFormUser({
+                    ...formUser,
+                    esJefe: e.target.value === "true",
+                  })
+                }
+              >
+                <option value="false">Usuario Normal</option>
+                <option value="true">Es Jefe de Área</option>
+              </select>
             </div>
 
             {formUser.id && (

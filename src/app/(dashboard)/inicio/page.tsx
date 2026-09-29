@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-
-// 🔥 AHORA LLAMAMOS AL NUEVO DASHBOARD COMERCIAL 🔥
 import { DashboardComercial } from "@/app/features/dashboard/components/DashboardComercial";
 
 export default function InicioPage() {
@@ -41,8 +39,6 @@ export default function InicioPage() {
           </p>
         </div>
       </div>
-
-      {/* 🔥 RENDERIZAMOS EL NUEVO COMPONENTE 🔥 */}
       <DashboardComercial key={refreshKey} />
     </div>
   );

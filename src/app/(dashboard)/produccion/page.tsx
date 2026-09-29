@@ -55,6 +55,7 @@ function ProduccionPageContent() {
   const [kpiFilter, setKpiFilter] = useState<string>("TODOS");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+  const [busquedaContrato, setBusquedaContrato] = useState("");
 
   // PAGINACIÓN
   const [currentPage, setCurrentPage] = useState(1);
@@ -983,181 +984,215 @@ function ProduccionPageContent() {
                 </span>
               </div>
             </div>
+            {/* 🔥 ENCABEZADO Y BUSCADOR INTELIGENTE 🔥 */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-200 pb-2">
+              <p className="text-xs font-black uppercase text-gray-500">
+                Prendas por Contrato:
+              </p>
+              <div className="relative w-full sm:w-64">
+                <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                <Input
+                  className="pl-8 h-9 text-xs bg-white border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                  placeholder="Buscar por cliente o contrato..."
+                  value={busquedaContrato}
+                  onChange={(e) => setBusquedaContrato(e.target.value)}
+                />
+              </div>
+            </div>
 
-            <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">
-              Prendas por Contrato:
-            </p>
+            <div className="space-y-3 pt-2">
+              {(() => {
+                // Lógica del filtro en tiempo real
+                const pedidosFiltrados = grupoDetalle?.pedidosAsociados?.filter((ped: any) => {
+                  if (!busquedaContrato) return true;
+                  const term = busquedaContrato.toLowerCase();
+                  const matchContrato = ped.numContrato?.toLowerCase().includes(term);
+                  const matchCliente = ped.nombreCliente?.toLowerCase().includes(term);
+                  return matchContrato || matchCliente;
+                }) || [];
 
-            <div className="space-y-3">
-              {grupoDetalle?.pedidosAsociados?.map((ped: any) => {
-                const isExpanded = contratoExpandido === ped.id;
-
-                return (
-                  <div
-                    key={ped.id}
-                    className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
-                  >
-                    <div className="p-3.5 flex justify-between items-center bg-gray-50/80">
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant="outline"
-                          className="font-black text-blue-700 bg-blue-50 border-blue-200"
-                        >
-                          C. #{ped.numContrato}
-                        </Badge>
-                        <span className="text-xs font-bold text-gray-800">
-                          {ped.nombreCliente}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[10px] font-bold text-gray-700"
-                          onClick={() =>
-                            imprimirHojaTallerPDF(grupoDetalle, ped)
-                          }
-                        >
-                          <Printer size={12} className="mr-1" /> PDF Contrato
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-xs font-bold text-primary flex items-center gap-1"
-                          onClick={() =>
-                            setContratoExpandido(isExpanded ? null : ped.id)
-                          }
-                        >
-                          <Eye size={14} />{" "}
-                          {isExpanded ? "Ocultar" : "Ver Prendas"}
-                        </Button>
-                      </div>
+                // Mensaje de estado vacío si no encuentra nada
+                if (pedidosFiltrados.length === 0) {
+                  return (
+                    <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                      <p className="text-xs text-gray-500 font-bold">
+                        No se encontraron resultados para "{busquedaContrato}"
+                      </p>
                     </div>
+                  );
+                }
 
-                    {isExpanded && (
-                      <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse min-w-900px">
-                          <thead>
-                            <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase text-[10px]">
-                              <th className="p-2 text-center w-8">Sel.</th>
-                              <th className="p-2">SKU</th>
-                              <th className="p-2">Prenda</th>
-                              <th className="p-2">Talla/Color/ Genero</th>
-                              <th className="p-2 text-center">Cant.</th>
-                              <th className="p-2">Bordado</th>
-                              <th className="p-2">Observación</th>
-                              <th className="p-2 text-center">Operario</th>
-                              <th className="p-2 text-center">Estado Taller</th>
-                              <th className="p-2 text-center">Acción</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {[...(ped.detalles || [])]
-                              .sort((a: any, b: any) =>
-                                (a.skuCodigo || "").localeCompare(
-                                  b.skuCodigo || "",
-                                ),
-                              )
-                              .map((p: any) => (
-                                <tr key={p.id} className="hover:bg-white">
-                                  <td className="p-2 text-center">
-                                    <input
-                                      type="checkbox"
-                                      className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer"
-                                      checked={prendasSeleccionadas.includes(
-                                        p.id,
-                                      )}
-                                      onChange={() =>
-                                        toggleSeleccionPrenda(p.id)
-                                      }
-                                    />
-                                  </td>
-                                  <td className="p-2 font-mono font-bold text-blue-600">
-                                    {p.skuCodigo || "S/N"}
-                                  </td>
-                                  <td className="p-2 font-bold text-gray-800">
-                                    {p.tipoRopa}
-                                  </td>
-                                  <td className="p-2 text-gray-600">
-                                    {p.talla} ({p.color || "-"}) ({p.genero})
-                                  </td>
-                                  <td className="p-2 text-center font-black">
-                                    {p.cantidad}
-                                  </td>
-                                  <td className="p-2 text-[11px]">
-                                    {p.bordado ? (
-                                      <span className="font-bold text-purple-700">
-                                        {p.bordado}
-                                      </span>
-                                    ) : (
-                                      <span className="text-gray-400 italic">
-                                        Sin bordado
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="p-2 text-[11px]">
-                                    {p.observacion ||
-                                    p.observacionOperaciones ? (
-                                      <span className="text-gray-800 font-medium">
-                                        {p.observacion ||
-                                          p.observacionOperaciones}
-                                      </span>
-                                    ) : (
-                                      <span className="text-gray-400 italic">
-                                        Sin observaciones
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="p-2 text-center font-bold text-blue-700">
-                                    {p.operarioAsignado?.nombre ||
-                                      "Sin Asignar"}
-                                  </td>
-                                  <td className="p-2 text-center">
-                                    <Badge
-                                      variant="outline"
-                                      className={getEstadoColor(
-                                        p.estadoProduccion,
-                                      )}
-                                    >
-                                      {p.estadoProduccion}
-                                    </Badge>
-                                  </td>
-                                  <td className="p-2 text-center">
-                                    <Button
-                                      size="sm"
-                                      className="h-7 text-[10px] bg-purple-600 hover:bg-purple-700 text-white font-bold"
-                                      onClick={() =>
-                                        handleMandarEmpaqueIndividual(p.id)
-                                      }
-                                    >
-                                      A Despacho
-                                    </Button>
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
+                // Dibuja los contratos filtrados
+                return pedidosFiltrados.map((ped: any) => {
+                  const isExpanded = contratoExpandido === ped.id;
 
-                        <div className="flex justify-end pt-3">
+                  return (
+                    <div
+                      key={ped.id}
+                      className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
+                    >
+                      <div className="p-3.5 flex justify-between items-center bg-gray-50/80">
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            variant="outline"
+                            className="font-black text-blue-700 bg-blue-50 border-blue-200"
+                          >
+                            C. #{ped.numContrato}
+                          </Badge>
+                          <span className="text-xs font-bold text-gray-800">
+                            {ped.nombreCliente}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
                           <Button
                             size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px] font-bold text-gray-700"
                             onClick={() =>
-                              abrirModalEstado(
-                                prendasSeleccionadas.filter((id) =>
-                                  ped.detalles.some((p: any) => p.id === id),
-                                ),
-                              )
+                              imprimirHojaTallerPDF(grupoDetalle, ped)
                             }
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-8"
                           >
-                            ⚙️ Cambiar Estado Taller (Seleccionadas)
+                            <Printer size={12} className="mr-1" /> PDF Contrato
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs font-bold text-primary flex items-center gap-1"
+                            onClick={() =>
+                              setContratoExpandido(isExpanded ? null : ped.id)
+                            }
+                          >
+                            <Eye size={14} />{" "}
+                            {isExpanded ? "Ocultar" : "Ver Prendas"}
                           </Button>
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+
+                      {isExpanded && (
+                        <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse min-w-900px">
+                            <thead>
+                              <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase text-[10px]">
+                                <th className="p-2 text-center w-8">Sel.</th>
+                                <th className="p-2">SKU</th>
+                                <th className="p-2">Prenda</th>
+                                <th className="p-2">Talla/Color/ Genero</th>
+                                <th className="p-2 text-center">Cant.</th>
+                                <th className="p-2">Bordado</th>
+                                <th className="p-2">Observación</th>
+                                <th className="p-2 text-center">Operario</th>
+                                <th className="p-2 text-center">Estado Taller</th>
+                                <th className="p-2 text-center">Acción</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {[...(ped.detalles || [])]
+                                .sort((a: any, b: any) =>
+                                  (a.skuCodigo || "").localeCompare(
+                                    b.skuCodigo || "",
+                                  ),
+                                )
+                                .map((p: any) => (
+                                  <tr key={p.id} className="hover:bg-white">
+                                    <td className="p-2 text-center">
+                                      <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-gray-300 text-primary cursor-pointer"
+                                        checked={prendasSeleccionadas.includes(
+                                          p.id,
+                                        )}
+                                        onChange={() =>
+                                          toggleSeleccionPrenda(p.id)
+                                        }
+                                      />
+                                    </td>
+                                    <td className="p-2 font-mono font-bold text-blue-600">
+                                      {p.skuCodigo || "S/N"}
+                                    </td>
+                                    <td className="p-2 font-bold text-gray-800">
+                                      {p.tipoRopa}
+                                    </td>
+                                    <td className="p-2 text-gray-600">
+                                      {p.talla} ({p.color || "-"}) ({p.genero})
+                                    </td>
+                                    <td className="p-2 text-center font-black">
+                                      {p.cantidad}
+                                    </td>
+                                    <td className="p-2 text-[11px]">
+                                      {p.bordado ? (
+                                        <span className="font-bold text-purple-700">
+                                          {p.bordado}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-400 italic">
+                                          Sin bordado
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-2 text-[11px]">
+                                      {p.observacion ||
+                                      p.observacionOperaciones ? (
+                                        <span className="text-gray-800 font-medium">
+                                          {p.observacion ||
+                                            p.observacionOperaciones}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-400 italic">
+                                          Sin observaciones
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-2 text-center font-bold text-blue-700">
+                                      {p.operarioAsignado?.nombre ||
+                                        "Sin Asignar"}
+                                    </td>
+                                    <td className="p-2 text-center">
+                                      <Badge
+                                        variant="outline"
+                                        className={getEstadoColor(
+                                          p.estadoProduccion,
+                                        )}
+                                      >
+                                        {p.estadoProduccion}
+                                      </Badge>
+                                    </td>
+                                    <td className="p-2 text-center">
+                                      <Button
+                                        size="sm"
+                                        className="h-7 text-[10px] bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                                        onClick={() =>
+                                          handleMandarEmpaqueIndividual(p.id)
+                                        }
+                                      >
+                                        A Despacho
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+
+                          <div className="flex justify-end pt-3">
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                abrirModalEstado(
+                                  prendasSeleccionadas.filter((id) =>
+                                    ped.detalles.some((p: any) => p.id === id),
+                                  ),
+                                )
+                              }
+                              className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-8"
+                            >
+                              ⚙️ Cambiar Estado Taller (Seleccionadas)
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
           <DialogFooter className="mt-4">

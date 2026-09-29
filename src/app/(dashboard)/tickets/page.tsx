@@ -108,7 +108,7 @@ export default function TicketsPage() {
       const data = await res.json();
       if (res.ok) {
         alert(
-          `✅ Mantenimiento exitoso: Se eliminaron ${data.borrados} archivos.`,
+          `Mantenimiento exitoso: Se eliminaron ${data.borrados} archivos.`,
         );
         setModalMantenimientoOpen(false);
         cargarDatos();
@@ -383,7 +383,7 @@ export default function TicketsPage() {
       return true;
     }
   });
-  // 🔥 ORDEN INTELIGENTE (3 NIVELES) 🔥
+  // ORDEN INTELIGENTE (3 NIVELES) 
   const sortedTickets = [...ticketsFiltrados].sort((a, b) => {
     if (sortConfig) {
       let aVal = a[sortConfig.key];
@@ -603,7 +603,7 @@ export default function TicketsPage() {
                 onClick={() => setTabActiva("General")}
                 className={`px-4 py-2 text-sm font-black transition-all rounded-t-xl whitespace-nowrap ${tabActiva === "General" ? "border-b-2 border-primary text-primary bg-primary/5" : "text-gray-500 hover:bg-gray-100"}`}
               >
-                🌍 Vista Global
+                 Vista Global
               </button>
               {departamentos.map((d) => (
                 <button
@@ -620,7 +620,7 @@ export default function TicketsPage() {
               onClick={() => setTabActiva("Mios")}
               className={`px-4 py-2 text-sm font-black transition-all rounded-t-xl whitespace-nowrap border-b-2 border-primary text-primary bg-primary/5`}
             >
-              👤 Mis Tickets Asignados
+               Mis Tickets Asignados
             </button>
           ) : (
             <>
@@ -827,9 +827,25 @@ export default function TicketsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-primary hover:bg-primary/10 font-bold h-8"
+                          className="text-primary hover:bg-primary/10 font-bold h-8 relative"
                         >
                           Abrir Chat <ChevronRight size={16} className="ml-1" />
+                          {(() => {
+                            const soyCreador = t.creadorId === currentUser.id;
+                            const soyAsignado = t.asignados?.some((a: any) => a.id === currentUser.id);
+                            let misNoLeidos = 0;
+                            if (soyCreador) misNoLeidos = t.noLeidosCreador;
+                            else if (soyAsignado) misNoLeidos = t.noLeidosAsignados;
+
+                            if (misNoLeidos > 0) {
+                              return (
+                                <span className="absolute -top-2 -right-1 bg-red-500 text-white text-[10px] font-black min-w-18px h-18px px-1 flex items-center justify-center rounded-full shadow-sm animate-in zoom-in">
+                                  {misNoLeidos}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                         </Button>
                       </td>
                     </tr>
@@ -972,7 +988,7 @@ export default function TicketsPage() {
               )}
             </div>
 
-            {/* 🔥 ASIGNACIÓN MÚLTIPLE DE USUARIOS 🔥 */}
+            {/*  ASIGNACIÓN MÚLTIPLE DE USUARIOS  */}
             <div className="space-y-2 relative">
               <Label className="text-[11px] font-bold text-gray-700 uppercase">
                 Asignar a (Múltiple) *

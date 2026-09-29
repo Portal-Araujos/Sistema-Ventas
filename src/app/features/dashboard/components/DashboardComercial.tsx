@@ -218,7 +218,6 @@ export function DashboardComercial() {
           <FilterX size={14} /> Limpiar
         </button>
       </div>
-
       {loading ? (
         <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-3">
           <Activity size={32} className="animate-spin text-primary" />
@@ -232,7 +231,6 @@ export function DashboardComercial() {
         </div>
       ) : (
         <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/*  FILA 1: TARJETAS FINANCIERAS SON NAVEGABLES */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div
               onClick={() => router.push("/ventas")}
@@ -345,8 +343,6 @@ export function DashboardComercial() {
               </p>
             </div>
           </div>
-
-          {/* FILA 2: GRÁFICOS Y EMBUDO  */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
               <h3 className="text-xs font-black text-gray-800 uppercase mb-4">
@@ -394,7 +390,6 @@ export function DashboardComercial() {
                 </div>
               </div>
             </div>
-
             <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-between">
               <h3 className="text-xs font-black text-gray-800 uppercase mb-4">
                 Gestión de Campo

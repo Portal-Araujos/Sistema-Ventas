@@ -75,6 +75,8 @@ function PedidosPageContent() {
   const [busquedaUser, setBusquedaUser] = useState('');
   const [resultadosUser, setResultadosUser] = useState<any[]>([]);
   const [dropdownUser, setDropdownUser] = useState(false);
+  const [busquedaDetalle, setBusquedaDetalle] = useState("");
+  const [busquedaEdit, setBusquedaEdit] = useState("");
 
   //  LÓGICA DE BÚSQUEDA DE USUARIOS 
   const normalizarTexto = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -939,113 +941,142 @@ function PedidosPageContent() {
                 </span>
               </div>
             </div>
-
-            <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">
-              Contratos Vinculados:
-            </p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-200 pb-2">
+              <p className="text-xs font-black uppercase text-gray-500">
+                Contratos Vinculados:
+              </p>
+              <div className="relative w-full sm:w-64">
+                <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                <Input
+                  className="pl-8 h-9 text-xs bg-white border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                  placeholder="Buscar por cliente o contrato..."
+                  value={busquedaDetalle}
+                  onChange={(e) => setBusquedaDetalle(e.target.value)}
+                />
+              </div>
+            </div>
             <div className="space-y-3">
-              {grupoDetalle?.pedidosAsociados?.map((ped: any) => {
-                const isExpanded = contratoExpandido === ped.id;
-                return (
-                  <div
-                    key={ped.id}
-                    className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
-                  >
-                    <div className="p-3.5 flex justify-between items-center bg-gray-50/80">
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant="outline"
-                          className="font-black text-blue-700 bg-blue-50 border-blue-200"
-                        >
-                          Contrato #{ped.numContrato}
-                        </Badge>
-                        <span className="text-xs font-bold text-gray-800">
-                          {ped.nombreCliente}
-                        </span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-xs font-bold text-primary flex items-center gap-1"
-                        onClick={() =>
-                          setContratoExpandido(isExpanded ? null : ped.id)
-                        }
-                      >
-                        <Eye size={14} />{" "}
-                        {isExpanded ? "Ocultar Prendas" : "Ver Prendas"}
-                      </Button>
+              {(() => {
+                const pedidosFiltrados = grupoDetalle?.pedidosAsociados?.filter((ped: any) => {
+                  if (!busquedaDetalle) return true;
+                  const term = busquedaDetalle.toLowerCase();
+                  const matchContrato = ped.numContrato?.toLowerCase().includes(term);
+                  const matchCliente = ped.nombreCliente?.toLowerCase().includes(term);
+                  return matchContrato || matchCliente;
+                }) || [];
+                if (pedidosFiltrados.length === 0) {
+                  return (
+                    <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                      <p className="text-xs text-gray-500 font-bold">
+                        No se encontraron resultados para "{busquedaDetalle}"
+                      </p>
                     </div>
-                    {isExpanded && (
-                      <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse min-w-650px">
-                          <thead>
-                            <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase">
-                              <th className="pb-2">SKU</th>
-                              <th className="pb-2">Prenda</th>
-                              <th className="pb-2">Color</th>
-                              <th className="pb-2">Talla/Género</th>
-                              <th className="pb-2 text-center">Cant.</th>
-                              <th className="pb-2">Obser/Bordado</th>
-                              <th className="pb-2 text-center">
-                                Estado Actual
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {ped.detalles?.length === 0 ? (
-                              <tr>
-                                <td
-                                  colSpan={7}
-                                  className="py-3 text-center text-gray-400 italic"
-                                >
-                                  No hay prendas.
-                                </td>
+                  );
+                }
+                return pedidosFiltrados.map((ped: any) => {
+                  const isExpanded = contratoExpandido === ped.id;
+                  return (
+                    <div
+                      key={ped.id}
+                      className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
+                    >
+                      <div className="p-3.5 flex justify-between items-center bg-gray-50/80">
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            variant="outline"
+                            className="font-black text-blue-700 bg-blue-50 border-blue-200"
+                          >
+                            Contrato #{ped.numContrato}
+                          </Badge>
+                          <span className="text-xs font-bold text-gray-800">
+                            {ped.nombreCliente}
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs font-bold text-primary flex items-center gap-1"
+                          onClick={() =>
+                            setContratoExpandido(isExpanded ? null : ped.id)
+                          }
+                        >
+                          <Eye size={14} />{" "}
+                          {isExpanded ? "Ocultar Prendas" : "Ver Prendas"}
+                        </Button>
+                      </div>
+                      
+                      {isExpanded && (
+                        <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse min-w-650px">
+                            <thead>
+                              <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase">
+                                <th className="pb-2">SKU</th>
+                                <th className="pb-2">Prenda</th>
+                                <th className="pb-2">Color</th>
+                                <th className="pb-2">Talla/Género</th>
+                                <th className="pb-2 text-center">Cant.</th>
+                                <th className="pb-2">Obser/Bordado</th>
+                                <th className="pb-2 text-center">
+                                  Estado Actual
+                                </th>
                               </tr>
-                            ) : (
-                              ped.detalles?.map((p: any, i: number) => (
-                                <tr key={i} className="hover:bg-white">
-                                  <td className="py-2 font-mono font-bold text-blue-600">
-                                    {p.skuCodigo}
-                                  </td>
-                                  <td className="py-2 font-bold text-gray-800">
-                                    {p.tipoRopa}
-                                  </td>
-                                  <td className="py-2 text-gray-600">
-                                    {p.color}
-                                  </td>
-                                  <td className="py-2 font-semibold text-purple-700">
-                                    {p.talla} ({p.genero})
-                                  </td>
-                                  <td className="py-2 text-center font-black">
-                                    {p.cantidad}
-                                  </td>
-                                  <td className="py-2 text-[10px]">
-                                    <div className="font-bold text-purple-700">
-                                      {p.observacion || "-"}
-                                    </div>
-                                    <div className="text-gray-500 italic mt-0.5">
-                                      {p.bordado || "Sin bordado"}
-                                    </div>
-                                  </td>
-                                  <td className="py-2 text-center">
-                                    <Badge
-                                      variant="outline"
-                                      className={`text-[9px] uppercase ${getEstadoColor(p.estadoOperacion)}`}
-                                    >
-                                      {p.estadoOperacion ||
-                                        "Pendiente en revision"}
-                                    </Badge>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {ped.detalles?.length === 0 ? (
+                                <tr>
+                                  <td
+                                    colSpan={7}
+                                    className="py-3 text-center text-gray-400 italic"
+                                  >
+                                    No hay prendas.
                                   </td>
                                 </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                              ) : (
+                                ped.detalles?.map((p: any, i: number) => (
+                                  <tr key={i} className="hover:bg-white">
+                                    <td className="py-2 font-mono font-bold text-blue-600">
+                                      {p.skuCodigo}
+                                    </td>
+                                    <td className="py-2 font-bold text-gray-800">
+                                      {p.tipoRopa}
+                                    </td>
+                                    <td className="py-2 text-gray-600">
+                                      {p.color}
+                                    </td>
+                                    <td className="py-2 font-semibold text-purple-700">
+                                      {p.talla} ({p.genero})
+                                    </td>
+                                    <td className="py-2 text-center font-black">
+                                      {p.cantidad}
+                                    </td>
+                                    <td className="py-2 text-[10px]">
+                                      <div className="font-bold text-purple-700">
+                                        {p.observacion || "-"}
+                                      </div>
+                                      <div className="text-gray-500 italic mt-0.5">
+                                        {p.bordado || "Sin bordado"}
+                                      </div>
+                                    </td>
+                                    <td className="py-2 text-center">
+                                      <Badge
+                                        variant="outline"
+                                        className={`text-[9px] uppercase ${getEstadoColor(p.estadoOperacion)}`}
+                                      >
+                                        {p.estadoOperacion ||
+                                          "Pendiente en revision"}
+                                      </Badge>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
           <DialogFooter className="mt-4">
@@ -1313,57 +1344,84 @@ function PedidosPageContent() {
               onChange={(e) => setGlobalFechaRequerida(e.target.value)}
             />
           </div>
-
           <div className="flex flex-col lg:flex-row gap-6 mt-4">
             <div className="w-full lg:w-1/3 border-r lg:pr-4 space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center mb-2">
                 <Label className="text-xs font-bold text-gray-500 uppercase">
                   1. Selecciona un Contrato
                 </Label>
                 <Button
                   size="sm"
                   onClick={prepararNuevoContrato}
-                  className="h-7 text-[10px] bg-blue-100 text-blue-700 hover:bg-blue-200 font-bold px-2 rounded-lg"
+                  className="h-7 text-[10px] bg-blue-100 text-blue-700 hover:bg-blue-200 font-bold px-2 rounded-lg shrink-0"
                 >
                   <PlusCircle size={12} className="mr-1" /> Nuevo
                 </Button>
               </div>
-
+              <div className="relative w-full mb-3">
+                <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                <Input
+                  className="pl-8 h-9 text-xs bg-white border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary outline-none w-full shadow-sm"
+                  placeholder="Buscar contrato o cliente..."
+                  value={busquedaEdit}
+                  onChange={(e) => setBusquedaEdit(e.target.value)}
+                />
+              </div>
               <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-                {grupoEdit?.pedidosAsociados?.map((ped: any) => (
-                  <button
-                    key={ped.id}
-                    onClick={() => seleccionarContratoParaEditar(ped)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${pedidoEditSelId === ped.id ? "border-primary bg-primary/5 shadow-sm" : "border-gray-200 bg-white hover:border-primary/50"}`}
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <p className="text-[10px] text-primary font-black uppercase">
-                        Contrato #{ped.numContrato || "S/N"}
+                {(() => {
+                  const contratosFiltrados = grupoEdit?.pedidosAsociados?.filter((ped: any) => {
+                    if (!busquedaEdit) return true;
+                    const term = busquedaEdit.toLowerCase();
+                    const matchContrato = ped.numContrato?.toLowerCase().includes(term);
+                    const matchCliente = ped.nombreCliente?.toLowerCase().includes(term);
+                    return matchContrato || matchCliente;
+                  }) || [];
+                  if (grupoEdit?.pedidosAsociados?.length === 0) {
+                    return (
+                      <p className="text-xs text-gray-400 italic text-center py-4">
+                        No hay contratos registrados aún.
                       </p>
-                    </div>
-                    <p className="text-xs font-bold text-gray-900 leading-tight">
-                      {ped.nombreCliente}
-                    </p>
-                    <div className="mt-2 flex justify-between items-center text-[11px] font-black">
-                      <span
-                        className={
-                          ped.totalUnidadesContrato > 0
-                            ? "text-emerald-600"
-                            : "text-red-500"
-                        }
-                      >
-                        {ped.totalUnidadesContrato > 0
-                          ? `${ped.totalUnidadesContrato} prendas`
-                          : "Vacío"}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-                {grupoEdit?.pedidosAsociados?.length === 0 && (
-                  <p className="text-xs text-gray-400 italic text-center py-4">
-                    No hay contratos registrados aún.
-                  </p>
-                )}
+                    );
+                  }
+                  if (contratosFiltrados.length === 0) {
+                    return (
+                      <div className="text-center py-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                        <p className="text-[10px] text-gray-500 font-bold">
+                          Sin resultados
+                        </p>
+                      </div>
+                    );
+                  }
+                  return contratosFiltrados.map((ped: any) => (
+                    <button
+                      key={ped.id}
+                      onClick={() => seleccionarContratoParaEditar(ped)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all ${pedidoEditSelId === ped.id ? "border-primary bg-primary/5 shadow-sm" : "border-gray-200 bg-white hover:border-primary/50"}`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <p className="text-[10px] text-primary font-black uppercase">
+                          Contrato #{ped.numContrato || "S/N"}
+                        </p>
+                      </div>
+                      <p className="text-xs font-bold text-gray-900 leading-tight">
+                        {ped.nombreCliente}
+                      </p>
+                      <div className="mt-2 flex justify-between items-center text-[11px] font-black">
+                        <span
+                          className={
+                            ped.totalUnidadesContrato > 0
+                              ? "text-emerald-600"
+                              : "text-red-500"
+                          }
+                        >
+                          {ped.totalUnidadesContrato > 0
+                            ? `${ped.totalUnidadesContrato} prendas`
+                            : "Vacío"}
+                        </span>
+                      </div>
+                    </button>
+                  ));
+                })()}
               </div>
             </div>
             <div className="w-full lg:w-2/3 space-y-5">

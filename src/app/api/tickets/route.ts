@@ -88,6 +88,7 @@ export async function GET(request: Request) {
       include: { departamento: true },
     });
     const miDepartamento = dbUser?.departamento?.nombre || "General";
+    const esJefe = dbUser?.esJefe || false;
     const ticketId = searchParams.get("id");
 
     if (ticketId) {
@@ -121,6 +122,17 @@ export async function GET(request: Request) {
           { error: "Ticket no encontrado" },
           { status: 404 },
         );
+      
+
+      // 🔥 1. EL "VISTO" DE WHATSAPP: RESETEAR CONTADOR AL ABRIR 🔥
+      const soyCreadorTicket = ticket.creadorId === userId;
+      const soyAsignadoTicket = ticket.asignados.some((a: any) => a.id === userId);
+
+      if (soyCreadorTicket && ticket.noLeidosCreador > 0) {
+        await prisma.ticketGestion.update({ where: { id: ticket.id }, data: { noLeidosCreador: 0 } });
+      } else if (soyAsignadoTicket && ticket.noLeidosAsignados > 0) {
+        await prisma.ticketGestion.update({ where: { id: ticket.id }, data: { noLeidosAsignados: 0 } });
+      }
 
       const ticketFormateado = {
         ...ticket,
@@ -146,18 +158,19 @@ export async function GET(request: Request) {
     const estadoFiltro = searchParams.get("estado");
     const whereClause: any = {};
     if (estadoFiltro) whereClause.estado = estadoFiltro;
-
-    const esSuperAdmin =
-      userRol === "super_admin" || userPermisos.includes("ver_todos_tickets");
+    const esSuperAdmin = 
+      userRol === "super_admin" || 
+      userRol === "administrador" || 
+      userPermisos.includes("ver_todos_tickets")|| userPermisos.includes("ver_todos_tickets");
     if (!esSuperAdmin) {
-      if (userRol === "vendedor") {
+      if (esJefe) {
         whereClause.OR = [
+          { tipo: miDepartamento },
           { asignados: { some: { id: userId } } },
           { creadorId: userId },
         ];
       } else {
         whereClause.OR = [
-          { tipo: miDepartamento },
           { asignados: { some: { id: userId } } },
           { creadorId: userId },
         ];
@@ -170,8 +183,8 @@ export async function GET(request: Request) {
       where: whereClause,
       include: {
         institucion: { select: { nombre: true } },
-        asignados: { select: { nombre: true } },
-        creador: { select: { nombre: true } },
+        asignados: { select: { id: true, nombre: true } },
+        creador: { select: { id: true, nombre: true } },   
       },
       orderBy: { updatedAt: "desc" },
     });
@@ -183,6 +196,7 @@ export async function GET(request: Request) {
         rol: userRol,
         departamento: miDepartamento,
         esSuperAdmin,
+        esJefe 
       },
     });
   } catch (error) {
@@ -244,12 +258,6 @@ export async function POST(request: Request) {
           }
         });
         
-        await prisma.ticketGestion.update({
-          where: { id: parseInt(ticketId) },
-          data: { updatedAt: new Date() }
-        });
-
-        // 🔥 GATILLO AUTOMÁTICO: NOTIFICAR RESPUESTA DE CHAT 🔥
         const ticketRelacionado = await prisma.ticketGestion.findUnique({
           where: { id: parseInt(ticketId) },
           include: { asignados: { select: { id: true } } }
@@ -258,8 +266,16 @@ export async function POST(request: Request) {
         if (ticketRelacionado) {
           const soyCreador = ticketRelacionado.creadorId === userId;
           
+          await prisma.ticketGestion.update({
+            where: { id: parseInt(ticketId) },
+            data: { 
+              updatedAt: new Date(),
+              // Si yo creé el ticket, le sumo 1 a los asignados. Si no, le sumo 1 al creador.
+              noLeidosAsignados: soyCreador ? { increment: 1 } : ticketRelacionado.noLeidosAsignados,
+              noLeidosCreador: !soyCreador ? { increment: 1 } : ticketRelacionado.noLeidosCreador
+            }
+          });
           if (soyCreador) {
-            // Si yo creé el ticket y estoy respondiendo, le aviso a los asignados
             for (const asignado of ticketRelacionado.asignados) {
               await prisma.notificacion.create({
                 data: {
