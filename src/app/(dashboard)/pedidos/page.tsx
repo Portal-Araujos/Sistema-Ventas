@@ -80,6 +80,9 @@ function PedidosPageContent() {
 
   //  LÓGICA DE BÚSQUEDA DE USUARIOS 
   const normalizarTexto = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const [modalEnviarOpen, setModalEnviarOpen] = useState(false);
+  const [grupoAEnviar, setGrupoAEnviar] = useState<any>(null);
+  const [clientesContactados, setClientesContactados] = useState("");
   
   const handleBuscarUsuario = (termino: string) => {
     setBusquedaUser(termino);
@@ -323,35 +326,45 @@ function PedidosPageContent() {
     }
   };
 
-  const handleEnviarOperaciones = async (pedido: any) => {
-    if (!confirm(`¿Seguro que quieres enviar esta escuela a Operaciones?`))
-      return;
+  const handleEnviarOperaciones = (pedido: any) => {
     if (!pedido.fechaRequerida) {
-      showToast(
-        "error",
-        "Debes asignar la Fecha de Entrega antes de enviarlo a Operaciones.",
-      );
+      showToast("error", "Debes asignar la Fecha de Entrega Global antes de enviarlo a Operaciones.");
       return;
     }
-    const fechaLimpia = pedido.fechaRequerida.split("T")[0];
+    setGrupoAEnviar(pedido);
+    setClientesContactados("");
+    setModalEnviarOpen(true);
+  };
+
+  const confirmarEnvioOperaciones = async () => {
+    const numContactados = parseInt(clientesContactados);
+    if (isNaN(numContactados) || numContactados <= 0) {
+      return showToast("error", "Por favor, ingresa un número válido de clientes contactados.");
+    }
+    
+    setSaving(true);
+    const fechaLimpia = grupoAEnviar.fechaRequerida.split("T")[0];
     try {
       const res = await fetch("/api/pedidos", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        // Ahora pasamos el vendedorId
         body: JSON.stringify({
           modo: "masivo",
-          institucionId: pedido.institucionId,
-          vendedorId: pedido.vendedorId,
+          institucionId: grupoAEnviar.institucionId,
+          vendedorId: grupoAEnviar.vendedorId,
           fechaRequerida: fechaLimpia,
+          clientesContactados: numContactados, // 🔥 SE ENVÍA AL BACKEND
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      showToast("exito", "¡Pedido enviado a Producción / Bodega!");
+      showToast("exito", "¡Pedido enviado a Operaciones!");
+      setModalEnviarOpen(false);
       cargarDatos();
     } catch (e: any) {
       showToast("error", e.message || "Error al enviar a Operaciones.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1571,6 +1584,59 @@ function PedidosPageContent() {
               onClick={handleCrearTicketContextual}
             >
               {saving ? "Enviando..." : "Generar Ticket"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* 🔥 MODAL DE CONFIRMACIÓN Y ATRIBUCIÓN DE CONVERSIÓN 🔥 */}
+      <Dialog open={modalEnviarOpen} onOpenChange={setModalEnviarOpen}>
+        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-emerald-600 flex items-center gap-2 border-b pb-3">
+              <Send size={20} /> Confirmar Envío de Lote
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-2">
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
+              <p className="text-sm text-emerald-800">
+                Estás a punto de enviar <strong>{grupoAEnviar?.contratosTotal} contratos</strong> de la escuela <strong>{grupoAEnviar?.institucionNombre}</strong> a Producción y Bodega.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-gray-700 uppercase">
+                ¿Con cuántos clientes hablaste en total para lograr estas ventas? *
+              </Label>
+              <Input 
+                className="h-11 font-black text-lg bg-gray-50 border-gray-300 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" 
+                placeholder="Ej: 50" 
+                type="number" 
+                min="1"
+                value={clientesContactados}
+                onChange={(e) => setClientesContactados(e.target.value)}
+              />
+              <p className="text-[10px] text-gray-500 leading-tight">
+                Ingresa el número total de clientes a los que visitaste. <strong>Solo numeros enteros.</strong> 
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4 border-t pt-4 flex gap-2">
+            <Button 
+              onClick={() => setModalEnviarOpen(false)} 
+              variant="outline"
+              disabled={saving}
+              className="h-10 font-bold"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 shadow-md" 
+              disabled={saving} 
+              onClick={confirmarEnvioOperaciones}
+            >
+              {saving ? "Enviando..." : "Cerrar y Enviar a Operaciones"}
             </Button>
           </DialogFooter>
         </DialogContent>

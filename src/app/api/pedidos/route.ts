@@ -334,6 +334,7 @@ export async function PUT(request: Request) {
       tieneCedula,
       numeroCedula,
       observacion,
+      clientesContactados,
     } = body;
 
     if (modo === "recepcion_vendedor") {
@@ -380,7 +381,6 @@ export async function PUT(request: Request) {
         : null;
 
     if (modo === "masivo") {
-      // 🔥 Aislamos la acción solo para los borradores de ese vendedor específico
       const whereMasivo: any = { institucionId, estado: "Borrador" };
       if (body.vendedorId) whereMasivo.usuarioId = body.vendedorId;
       else if (userRol === "vendedor") whereMasivo.usuarioId = userIdFallback;
@@ -396,10 +396,9 @@ export async function PUT(request: Request) {
           data: {
             estado: "Pendiente en revisión",
             fechaRequerida: fechaParseada,
+            clientesContactados: parseInt(clientesContactados) || 0,
           },
         });
-
-        // (Aquí sigue el código del gatillo que hicimos antes para avisar a Operaciones)
         const primerPedido = pedidosAEnviar[0];
         const codigoOP = `PED-${primerPedido.id.slice(0, 6).toUpperCase()}`;
         const nombreEscuela =

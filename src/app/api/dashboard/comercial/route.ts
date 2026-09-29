@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     if (cantonId) whereGlobalInst.parroquia = { cantonId: parseInt(cantonId) };
 
     const whereVentas: any = { fechaVenta: { gte: start, lte: end } };
-    const whereVisitas: any = { createdAt: { gte: start, lte: end } }; // Para visitas realizadas
+    const whereVisitas: any = { createdAt: { gte: start, lte: end } }; 
     const whereAsignaciones: any = {}; // Para calcular la cobertura
     const whereTickets: any = { createdAt: { gte: start, lte: end } };
     const wherePedidos: any = { fechaPedido: { gte: start, lte: end } };
@@ -125,6 +125,8 @@ export async function GET(request: Request) {
           estado: true,
           fechaRequerida: true,
           fechaEnvioOperaciones: true,
+          numContrato: true,
+          clientesContactados: true,
         },
       }),
       // G. Metas
@@ -179,38 +181,25 @@ export async function GET(request: Request) {
     const cumplimientoPotencial =
       metaComercial > 0 ? (ventasRegistradas / metaComercial) * 100 : 0;
 
-    // ==========================================
     // 4. GESTIÓN DE CAMPO Y EMBUDO
-    // ==========================================
-    const instAsignadas = institucionesTotales.filter(
-      (i) => i.vendedorId,
-    ).length;
-    const visitasRealizadas = visitas.length;
+    const instAsignadas = institucionesTotales.filter((i) => i.vendedorId).length;
     const instVisitadasSet = new Set(visitas.map((v) => v.institucionId));
     const instVisitadas = instVisitadasSet.size;
-    const coberturaTerritorial =
-      instAsignadas > 0 ? (instVisitadas / instAsignadas) * 100 : 0;
-
+    const coberturaTerritorial = instAsignadas > 0 ? (instVisitadas / instAsignadas) * 100 : 0;
     const visitasLibres = visitas.filter((v) => v.esVisitaLibre).length;
-
-    // Visitas Vencidas (Agenda vieja que quedó Pendiente)
     const visitasVencidas = visitasAgendaRaw.filter((v) => {
-      const isPendiente = ["Pendiente", "No Visitada", "No visitada"].includes(
-        v.estadoGestion,
-      );
-      const fecha = v.fechaProximoContacto
-        ? new Date(v.fechaProximoContacto)
-        : new Date(v.fechaProgramada);
+      const isPendiente = ["Pendiente", "No Visitada", "No visitada"].includes(v.estadoGestion);
+      const fecha = v.fechaProximoContacto ? new Date(v.fechaProximoContacto) : new Date(v.fechaProgramada);
       return isPendiente && fecha < hoy;
     }).length;
 
+    const visitasRealizadas = visitas.length;
+    const pedidosCerrados = pedidos.filter((p) => p.estado !== "Borrador");
+    const prospectosContactados = pedidosCerrados.reduce((sum, ped) => sum + (ped.clientesContactados || 0), 0);
     const cierres = ventas.length;
-    const tasaConversion =
-      visitasRealizadas > 0 ? (cierres / visitasRealizadas) * 100 : 0;
+    const tasaConversion = prospectosContactados > 0 ? (cierres / prospectosContactados) * 100 : 0;
 
-    // ==========================================
     // 5. COMPROMISOS Y FORMALIZACIÓN
-    // ==========================================
     const pedidosBorrador = pedidos.filter(
       (p) => p.estado === "Borrador",
     ).length;
@@ -243,10 +232,7 @@ export async function GET(request: Request) {
 
     const indiceFormalizacion =
       ventasRegistradas > 0 ? (ventasValidadas / ventasRegistradas) * 100 : 0;
-
-    // ==========================================
     // 6. RANKING DE VENDEDORES (Rendimiento)
-    // ==========================================
     const mapVendedores = new Map();
     // Pre-llenar con las ventas
     ventas.forEach((v) => {
@@ -348,9 +334,10 @@ export async function GET(request: Request) {
         visitasVencidas,
         tasaConversion: Math.round(tasaConversion * 100) / 100,
         cierres,
+        prospectosContactados,
       },
       formalizacion: {
-        contratosPendientesEnvio: ventas.length - pedidos.length, // Lógica simple referencial
+        contratosPendientesEnvio: ventas.length - pedidos.length, 
         pendientesAuditoria: ventas.filter(
           (v) => v.estadoTicket === "Pendiente Facturación",
         ).length,

@@ -79,6 +79,19 @@ export function DashboardComercial() {
       vendedorId: "",
       tipoVentaId: "",
     });
+  const irA = (rutaBase: string, extras: Record<string, string> = {}) => {
+    const params = new URLSearchParams();
+    // 1. Heredamos las fechas
+    if (filtros.fechaDesde) params.append("fechaInicio", filtros.fechaDesde);
+    if (filtros.fechaHasta) params.append("fechaFin", filtros.fechaHasta);
+    // 2. Heredamos el vendedor (si el Super Admin seleccionó uno)
+    if (filtros.vendedorId) params.append("vendedorId", filtros.vendedorId);
+    
+    // 3. Agregamos parámetros extra (como ?tab=vencidas o ?tarjeta=Aprobadas)
+    Object.entries(extras).forEach(([key, value]) => params.append(key, value));
+    
+    router.push(`${rutaBase}?${params.toString()}`);
+  };
   const cantonesDisponibles =
     filtros.provinciaId && catalogos?.provincias
       ? catalogos.provincias.find(
@@ -233,7 +246,7 @@ export function DashboardComercial() {
         <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div
-              onClick={() => router.push("/ventas")}
+              onClick={() => irA("/ventas")}
               className="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm border-t-4 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer"
             >
               <div className="flex items-center gap-2 mb-2">
@@ -253,7 +266,7 @@ export function DashboardComercial() {
             </div>
 
             <div
-              onClick={() => router.push("/ventas?tarjeta=Aprobadas")}
+              onClick={() => irA("/ventas", { tarjeta: "Aprobadas" })}
               className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm border-t-4 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer"
             >
               <div className="flex items-center gap-2 mb-2">
@@ -273,7 +286,7 @@ export function DashboardComercial() {
             </div>
 
             <div
-              onClick={() => router.push("/ventas?tarjeta=Pendientes")}
+              onClick={() => irA("/ventas", { tarjeta: "Pendientes" })}
               className="bg-white p-4 rounded-xl border border-amber-200 shadow-sm border-t-4 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer"
             >
               <div className="flex items-center gap-2 mb-2">
@@ -408,7 +421,7 @@ export function DashboardComercial() {
                 </div>
                 <div
                   className="flex items-start gap-2 cursor-pointer hover:opacity-70"
-                  onClick={() => router.push("/agenda?tab=visitadas")}
+                  onClick={() => irA("/agenda", { tab: "visitadas" })}
                 >
                   <Users size={20} className="text-blue-500" />
                   <div>
@@ -433,7 +446,7 @@ export function DashboardComercial() {
                 </div>
                 <div
                   className="flex items-start gap-2 cursor-pointer hover:opacity-70"
-                  onClick={() => router.push("/agenda?tab=vencidas")}
+                  onClick={() => irA("/agenda", { tab: "vencidas" })}
                 >
                   <CalendarX size={20} className="text-red-500" />
                   <div>
@@ -464,7 +477,7 @@ export function DashboardComercial() {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center text-center">
+           <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center text-center">
               <h3 className="text-xs font-black text-gray-800 uppercase mb-2 w-full text-left">
                 Tasa de Conversión
               </h3>
@@ -475,8 +488,8 @@ export function DashboardComercial() {
                 {data.campo?.tasaConversion}%
               </p>
               <p className="text-[11px] text-gray-500 font-medium">
-                {data.campo?.cierres} cierres de {data.campo?.visitasRealizadas}{" "}
-                visitas realizadas
+                {data.campo?.cierres} cierres de {data.campo?.prospectosContactados || 0}{" "}
+                clientes visitados
               </p>
             </div>
 
@@ -486,7 +499,7 @@ export function DashboardComercial() {
               </h3>
               <div
                 className="flex flex-col items-center gap-1.5 w-full cursor-pointer hover:opacity-90"
-                onClick={() => router.push("/agenda")}
+                onClick={() => irA("/agenda")}
               >
                 <div className="bg-emerald-500 text-white text-[11px] font-bold py-1.5 w-full text-center rounded-sm shadow-sm flex justify-between px-3">
                   <span>{data.campo?.instAsignadas}</span>{" "}
@@ -605,7 +618,7 @@ export function DashboardComercial() {
                 </div>
                 <div
                   className="flex justify-between items-center text-xs cursor-pointer hover:opacity-80"
-                  onClick={() => router.push("/ventas?tarjeta=Novedades")}
+                  onClick={() => irA("/ventas", { tarjeta: "Novedades" })}
                 >
                   <span className="text-red-500 font-bold underline decoration-red-200">
                     Contratos con novedades
@@ -650,7 +663,7 @@ export function DashboardComercial() {
               <div className="space-y-3">
                 <div
                   className="flex justify-between items-center text-xs cursor-pointer hover:text-purple-600"
-                  onClick={() => router.push("/pedidos")}
+                  onClick={() => irA("/pedidos")}
                 >
                   <span className="text-gray-600 font-medium underline decoration-gray-300">
                     Pedidos en borrador

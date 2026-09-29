@@ -365,6 +365,7 @@ model Pedido {
   fechaPedido        DateTime        @default(now()) @map("fecha_pedido")
   estado             String          @default("Borrador") // Borrador, En Operaciones, En Taller, Entregado
   observacion        String?         @db.Text
+  clientesContactados Int            @default(0) @map("clientes_contactados")
   createdAt          DateTime        @default(now()) @map("created_at")
   updatedAt          DateTime        @updatedAt @map("updated_at")
   institucion        Institution     @relation(fields: [institucionId], references: [id], onDelete: Cascade)

@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       whereVisitas.institucion = { provinciaId: parseInt(provinciaId) };
       whereVentas.institucion = { provinciaId: parseInt(provinciaId) };
     }
-    const [visitas, ventas] = await Promise.all([
+    const [visitas, ventas, pedidosCerrados] = await Promise.all([
       prisma.visitaAgenda.findMany({
         where: whereVisitas,
         include: { usuario: true },
@@ -55,6 +55,19 @@ export async function GET(request: Request) {
         where: whereVentas,
         include: { vendedor: true, institucion: true },
       }),
+      prisma.pedido.findMany({
+        where: {
+          estado: { not: "Borrador" },
+          ...(vendedorId ? { usuarioId: vendedorId } : {}),
+          ...(fechaInicio && fechaFin ? {
+            fechaPedido: {
+              gte: new Date(`${fechaInicio}T00:00:00-05:00`),
+              lte: new Date(`${fechaFin}T23:59:59-05:00`),
+            }
+          } : {}),
+        },
+        select: { clientesContactados: true, numContrato: true }
+      })
     ]);
     const totalVisitas = visitas.length;
     const totalContratos = ventas.length;
@@ -63,8 +76,8 @@ export async function GET(request: Request) {
       const num = parseFloat(numStr);
       return acc + (isNaN(num) ? 0 : num);
     }, 0);
-    const tasaCierre =
-      totalVisitas > 0 ? Math.round((totalContratos / totalVisitas) * 100) : 0;
+    const totalProspectosLotes = pedidosCerrados.reduce((acc, p) => acc + (p.clientesContactados || 0), 0);
+    const tasaCierre = totalProspectosLotes > 0 ? Math.round((totalContratos / totalProspectosLotes) * 100) : 0;
     const prendas = await prisma.detallePedido.findMany({
       where: wherePrendas,
     });
