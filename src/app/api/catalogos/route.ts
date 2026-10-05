@@ -11,11 +11,21 @@ export async function GET() {
     const token = cookieStore.get("session_token")?.value;
     let userRol = "vendedor";
     let userPermisos: string[] = [];
+    let userNombre = "";
     if (token) {
       try {
         const { payload } = await jwtVerify(token, JWT_SECRET);
         userRol = (payload.rol as string) || "vendedor";
         userPermisos = (payload.permisos as string[]) || [];
+        if (payload.id) {
+          const currentUser = await prisma.usuario.findUnique({
+            where: { id: payload.id as string },
+            select: { nombre: true }
+          });
+          if (currentUser) {
+            userNombre = currentUser.nombre;
+          }
+        }
       } catch (e) {}
     }
     const provincias = await prisma.provincia.findMany({
@@ -172,6 +182,7 @@ export async function GET() {
     return NextResponse.json({
       userRol,
       userPermisos,
+      userNombre,
       provincias,
       niveles,
       areas,

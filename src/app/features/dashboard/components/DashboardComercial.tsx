@@ -532,17 +532,18 @@ export function DashboardComercial() {
                   Rendimiento por Vendedor
                 </h3>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-[11px]">
-                  <thead className="bg-gray-50 text-gray-500 uppercase border-b border-gray-200">
+              <div className="overflow-x-auto overflow-y-auto max-h-[300px]">
+                <table className="w-full text-left text-[12px] relative">
+                  <thead className="text-gray-500 uppercase sticky top-0 z-10 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                     <tr>
-                      <th className="p-3 font-bold">Vendedor</th>
-                      <th className="p-3 font-bold text-right">Venta Val.</th>
-                      <th className="p-3 font-bold text-center">% Cumpl.</th>
-                      <th className="p-3 font-bold text-center">Visitas</th>
-                      <th className="p-3 font-bold text-center">Nuevas (%)</th>
+                      <th className="p-3 font-bold bg-gray-50">Vendedor</th>
+                      <th className="p-3 font-bold text-right bg-gray-50">Venta Val.</th>
+                      <th className="p-3 font-bold text-center bg-gray-50">% Cumpl.</th>
+                      <th className="p-3 font-bold text-center bg-gray-50">Visitas</th>
+                      <th className="p-3 font-bold text-center bg-gray-50">Nuevas (%)</th>
                     </tr>
                   </thead>
+                  
                   <tbody className="divide-y divide-gray-100">
                     {data.ranking?.length === 0 ? (
                       <tr>

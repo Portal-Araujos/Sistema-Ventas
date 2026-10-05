@@ -144,6 +144,7 @@ const menuStructure = [
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userRol, setUserRol] = useState<string>("vendedor");
+  const [userUsuario, setUsuario] = useState<string>("");
   const [userPermisos, setUserPermisos] = useState<string[]>([]);
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -251,6 +252,9 @@ export function Sidebar() {
       .then((data) => {
         if (data.userRol) setUserRol(data.userRol);
         if (data.userPermisos) setUserPermisos(data.userPermisos);
+        if (data.userNombre || data.usuarioNombre || data.nombre) {
+          setUsuario(data.userNombre || data.usuarioNombre || data.nombre);
+        }
       })
       .catch((err) => console.error(err));
   }, []);
@@ -412,19 +416,19 @@ export function Sidebar() {
           {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
 
-        <div className="flex h-20 items-center justify-between border-b border-border px-4 shrink-0">
-          <div className="flex items-center gap-2">
+        <div className="flex h-20 items-center justify-between px-5 shrink-0">
+          <div className="flex items-center gap-4">
             <img
               src="/logo.png"
               alt="Logo"
-              className="h-10 w-10 object-contain shrink-0"
+              className="h-10 w-13 object-contain shrink-0"
             />
             {!isCollapsed && (
               <div className="flex flex-col overflow-hidden">
-                <span className="font-bold text-base text-foreground tracking-wide truncate">
+                <span className="text-[13px] font-bold text-base text-foreground tracking-wide truncate">
                   ARAUJOS
                 </span>
-                <span className="text-[10px] text-muted-foreground truncate font-semibold">
+                <span className="text-[12px] text-muted-foreground truncate font-semibold">
                   SISTEMA VENTAS
                 </span>
               </div>
@@ -461,6 +465,13 @@ export function Sidebar() {
             </div>
           )}
         </div>
+        {!isCollapsed && (
+          <div className="px-4 py-2 border-b border-border bg-slate-50/50 flex flex-col gap-0.5">
+            <span className="text-[13px] font-bold text-base text-foreground tracking-wide truncater">
+              Bienvenido/a {userUsuario  || "Usuario"} 
+            </span>
+          </div>
+        )}      
 
         <nav className="flex-1 p-3 overflow-y-auto overflow-x-hidden space-y-1">
           {permittedMenu.map((group: any) => {
@@ -636,19 +647,19 @@ export function Sidebar() {
           ></div>
           <div className="relative bg-white w-full rounded-t-3xl p-5 pb-8 shadow-2xl animate-in slide-in-from-bottom max-h-[85vh] flex flex-col">
             <div className="flex justify-between items-center mb-5 border-b border-border pb-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 overflow-hidden">
                 <img
                   src="/logo.png"
                   alt="Logo"
-                  className="h-8 w-auto object-contain"
+                  className="h-8 w-auto object-contain shrink-0"
                 />
-                <span className="font-bold text-foreground text-sm">
-                  Menú Principal
+                <span className="font-bold text-foreground text-sm truncate flex items-center gap-1">
+                  ¡Hola, {userUsuario ? userUsuario.split(' ')[0] : "Usuario"}!
                 </span>
               </div>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="bg-muted text-muted-foreground hover:bg-gray-200 p-2 rounded-full transition-colors"
+                className="bg-muted text-muted-foreground hover:bg-gray-200 p-2 rounded-full transition-colors shrink-0"
               >
                 <X size={20} />
               </button>
