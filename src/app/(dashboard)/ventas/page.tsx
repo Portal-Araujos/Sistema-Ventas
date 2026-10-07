@@ -175,7 +175,14 @@ export default function VentasPage() {
     modalidad: "",
     escuela: "",
   });
+  
   const [isImportingBase, setIsImportingBase] = useState(false);
+  const [baseConfirmModal, setBaseConfirmModal] = useState({
+    open: false,
+    nuevos: [] as any[],
+    modificados: [] as any[],
+    mappedData: [] as any[]
+  });
   const [modalBaseManual, setModalBaseManual] = useState(false);
   const [formBase, setFormBase] = useState({
     id: "",
@@ -187,7 +194,43 @@ export default function VentasPage() {
   });
   const [searchInstModal, setSearchInstModal] = useState("");
   const [showInstDropdown, setShowInstDropdown] = useState(false);
+  const [resultadosInstModal, setResultadosInstModal] = useState<any[]>([]);
+  const handleBuscarInstitucionModal = async (termino: string) => {
+  setSearchInstModal(termino);
 
+  if (termino.trim().length < 2) {
+    setResultadosInstModal([]);
+    setShowInstDropdown(false);
+
+    if (termino.trim() === "") {
+      setFormBase((prev) => ({
+        ...prev,
+        institucionId: "",
+      }));
+    }
+
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `/api/instituciones?search=${encodeURIComponent(termino)}&limit=50`,
+    );
+
+    const json = await res.json();
+
+    const lista = Array.isArray(json)
+      ? json
+      : json.data || [];
+
+    setResultadosInstModal(lista);
+    setShowInstDropdown(true);
+  } catch (error) {
+    console.error("Error buscando institución:", error);
+    setResultadosInstModal([]);
+    setShowInstDropdown(false);
+  }
+};
   const handleOpenCreateBase = () => {
     setFormBase({
       id: "",
@@ -198,6 +241,7 @@ export default function VentasPage() {
       institucionId: "",
     });
     setSearchInstModal("");
+    setResultadosInstModal([]);
     setShowInstDropdown(false);
     setModalBaseManual(true);
   };
@@ -213,6 +257,7 @@ export default function VentasPage() {
     });
 
     setSearchInstModal(cliente.institucion?.nombre || "");
+    setResultadosInstModal([]);
     setShowInstDropdown(false);
     setModalBaseManual(true);
   };
@@ -284,19 +329,30 @@ export default function VentasPage() {
       setLoading(false);
     }
   };
-  const cargarBaseConsultas = async () => {
+  const cargarBaseConsultas = async (search = "") => {
     try {
-      const res = await fetch("/api/base-consultas");
+      const res = await fetch(
+        `/api/base-consultas?search=${encodeURIComponent(search)}&limit=100`
+      );
+
       const data = await res.json();
+
       setBaseConsultas(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error(e);
+      console.error("Error buscando clientes:", e);
     }
   };
 
   useEffect(() => {
-    if (activeTab === "base") cargarBaseConsultas();
-  }, [activeTab]);
+  if (activeTab !== "base") return;
+
+  const timer = setTimeout(() => {
+    cargarBaseConsultas(searchBase);
+    setCurrentPageBase(1);
+  }, 300);
+
+  return () => clearTimeout(timer);
+}, [searchBase, activeTab]);
 
   const handleUploadBaseExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -342,37 +398,60 @@ export default function VentasPage() {
   };
 
   // 2. Transforma la data según lo que el usuario eligió y la manda al Backend
-  const ejecutarImportacionBase = async () => {
+  // 2. Transforma la data, cruza con la base de datos y MUESTRA RESUMEN DE CAMBIOS
+  const analizarCambiosExcel = () => {
     if (!baseMapping.identificacion || !baseMapping.nombres) {
-      return showToast(
-        "alerta",
-        "Es obligatorio enlazar la Identificación y los Nombres.",
-      );
+      return showToast("alerta", "Es obligatorio enlazar la Identificación y los Nombres.");
     }
 
-    setIsImportingBase(true);
-
-    // 🔥 Traducimos el Excel a nuestro formato estándar 🔥
     const mappedData = baseRawData.map((row) => ({
-      identificacion: row[baseMapping.identificacion],
-      nombres: row[baseMapping.nombres],
-      liquidoPagar: baseMapping.liquidoPagar
-        ? row[baseMapping.liquidoPagar]
-        : 0,
-      modalidad: baseMapping.modalidad ? row[baseMapping.modalidad] : "",
-      escuela: baseMapping.escuela ? row[baseMapping.escuela] : "",
-    }));
+      identificacion: String(row[baseMapping.identificacion] || "").trim(),
+      nombres: String(row[baseMapping.nombres] || "").trim(),
+      liquidoPagar: baseMapping.liquidoPagar ? parseFloat(row[baseMapping.liquidoPagar]) || 0 : 0,
+      modalidad: baseMapping.modalidad ? String(row[baseMapping.modalidad] || "").trim() : "",
+      escuela: baseMapping.escuela ? String(row[baseMapping.escuela] || "").trim() : "",
+    })).filter(r => r.identificacion && r.nombres); // Filtramos filas vacías
 
+    const nuevos: any[] = [];
+    const modificados: any[] = [];
+
+    // Cruzamos la data contra lo que ya está en pantalla (baseConsultas)
+    mappedData.forEach(excelRow => {
+      const clienteBD = baseConsultas.find(c => String(c.identificacion).trim() === excelRow.identificacion);
+      
+      if (clienteBD) {
+        const saldoAnterior = parseFloat(clienteBD.liquidoPagar) || 0;
+        // Solo avisamos si el saldo realmente cambia
+        if (saldoAnterior !== excelRow.liquidoPagar) {
+          modificados.push({
+            identificacion: excelRow.identificacion,
+            nombres: excelRow.nombres,
+            saldoAnterior: saldoAnterior,
+            saldoNuevo: excelRow.liquidoPagar
+          });
+        }
+      } else {
+        nuevos.push(excelRow);
+      }
+    });
+
+    setBaseConfirmModal({ open: true, nuevos, modificados, mappedData });
+    setBaseImportModal(false); // Oculta el modal de mapeo
+  };
+
+  // 3. Envío definitivo a la Base de Datos tras confirmar
+  const confirmarImportacionBase = async () => {
+    setIsImportingBase(true);
     try {
       const res = await fetch("/api/base-consultas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ masivo: mappedData }),
+        body: JSON.stringify({ masivo: baseConfirmModal.mappedData }),
       });
 
       if (!res.ok) throw new Error();
-      showToast("exito", "Base de datos importada y actualizada con éxito.");
-      setBaseImportModal(false);
+      showToast("exito", "Base de datos actualizada con éxito.");
+      setBaseConfirmModal(prev => ({ ...prev, open: false }));
       cargarBaseConsultas();
     } catch (error) {
       showToast("error", "Hubo un error procesando el Excel en el servidor.");
@@ -1517,7 +1596,7 @@ export default function VentasPage() {
             <Button
               size="sm"
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-              onClick={ejecutarImportacionBase}
+              onClick={analizarCambiosExcel}
               disabled={
                 isImportingBase ||
                 !baseMapping.identificacion ||
@@ -1525,6 +1604,99 @@ export default function VentasPage() {
               }
             >
               {isImportingBase ? "Importando..." : "Subir Base de Datos"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* 🔥 NUEVO MODAL: RESUMEN DE CAMBIOS ANTES DE GUARDAR 🔥 */}
+      <Dialog open={baseConfirmModal.open} onOpenChange={(val) => !isImportingBase && setBaseConfirmModal(prev => ({...prev, open: val}))}>
+        <DialogContent className="sm:max-w-3xl bg-white p-6 rounded-xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <Database className="text-emerald-600" /> Resumen de Actualización
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto space-y-5 mt-2 pr-2">
+            <p className="text-sm text-gray-600 font-medium">
+              Por favor revisa el impacto que tendrá este Excel en la base de datos antes de confirmar:
+            </p>
+
+            {/* SECCIÓN 1: Saldos Modificados */}
+            <div className="bg-amber-50 rounded-xl border border-amber-200 overflow-hidden">
+              <div className="p-3 bg-amber-100/50 border-b border-amber-200 flex justify-between items-center">
+                <h3 className="text-sm font-bold text-amber-900 flex items-center gap-2">
+                  <AlertCircle size={16}/> {baseConfirmModal.modificados.length} Saldos Cambiarán
+                </h3>
+              </div>
+              <div className="max-h-40 overflow-y-auto p-2">
+                {baseConfirmModal.modificados.length === 0 ? (
+                  <p className="text-xs text-amber-700 p-2 italic text-center">Ningún saldo existente será modificado.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead className="text-amber-800 border-b border-amber-200/50">
+                      <tr>
+                        <th className="p-2">Identificación</th>
+                        <th className="p-2">Cliente</th>
+                        <th className="p-2 text-right">Sueldo Anterior</th>
+                        <th className="p-2 text-right">Nuevo Sueldo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {baseConfirmModal.modificados.map((m, i) => (
+                        <tr key={i} className="border-b border-amber-100 last:border-0 hover:bg-amber-100/50">
+                          <td className="p-2 font-mono">{m.identificacion}</td>
+                          <td className="p-2 font-bold truncate max-w-150px">{m.nombres}</td>
+                          <td className="p-2 text-right text-gray-500 line-through">${m.saldoAnterior.toFixed(2)}</td>
+                          <td className="p-2 text-right font-black text-amber-600">${m.saldoNuevo.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: Nuevos Clientes */}
+            <div className="bg-emerald-50 rounded-xl border border-emerald-200 overflow-hidden">
+              <div className="p-3 bg-emerald-100/50 border-b border-emerald-200 flex justify-between items-center">
+                <h3 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
+                  <Plus size={16}/> {baseConfirmModal.nuevos.length} Nuevos Clientes Detectados
+                </h3>
+              </div>
+              <div className="max-h-40 overflow-y-auto p-2">
+                {baseConfirmModal.nuevos.length === 0 ? (
+                  <p className="text-xs text-emerald-700 p-2 italic text-center">No se creará ningún cliente nuevo.</p>
+                ) : (
+                  <table className="w-full text-left text-xs">
+                    <thead className="text-emerald-800 border-b border-emerald-200/50">
+                      <tr>
+                        <th className="p-2">Identificación</th>
+                        <th className="p-2">Cliente</th>
+                        <th className="p-2 text-right">Liquido a Pagar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {baseConfirmModal.nuevos.slice(0, 50).map((n, i) => (
+                        <tr key={i} className="border-b border-emerald-100 last:border-0 hover:bg-emerald-100/50">
+                          <td className="p-2 font-mono">{n.identificacion}</td>
+                          <td className="p-2 font-bold truncate max-w-200px">{n.nombres}</td>
+                          <td className="p-2 text-right font-black text-emerald-600">${n.liquidoPagar.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4 pt-4 border-t flex justify-end gap-2 shrink-0">
+            <Button variant="outline" onClick={() => setBaseConfirmModal(prev => ({...prev, open: false}))} disabled={isImportingBase}>
+              Cancelar
+            </Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" onClick={confirmarImportacionBase} disabled={isImportingBase}>
+              {isImportingBase ? "Guardando en Base de Datos..." : "Confirmar y Procesar Cambios"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1603,38 +1775,52 @@ export default function VentasPage() {
                   ))}
                 </select>
               </div>
+
+
+
+
+              
               <div className="space-y-1 relative">
                 <Label className="text-xs font-bold text-red-700">
                   Vincular a Institución / Escuela
                 </Label>
+
                 <div className="relative">
                   <Search
                     size={16}
                     className="absolute left-3 top-2.5 text-gray-400"
                   />
+
                   <Input
-                    placeholder="Ej. Simón Bolívar..."
+                    placeholder="Ej. Pomasqui, Simón Bolívar..."
                     className="pl-9 pr-8 h-10 text-sm bg-gray-50 focus:bg-white border-gray-300 focus:border-emerald-500"
                     value={searchInstModal}
                     onChange={(e) => {
-                      setSearchInstModal(e.target.value);
-                      if (e.target.value === "")
-                        setFormBase({ ...formBase, institucionId: "" });
-                      setShowInstDropdown(e.target.value.trim().length > 0);
+                      handleBuscarInstitucionModal(e.target.value);
                     }}
-                    onFocus={(e) => {
-                      if (e.target.value.trim().length > 0)
+                    onFocus={() => {
+                      if (
+                        searchInstModal.trim().length >= 2 &&
+                        resultadosInstModal.length > 0
+                      ) {
                         setShowInstDropdown(true);
+                      }
                     }}
                     autoComplete="off"
                   />
+
                   {searchInstModal && (
                     <button
                       type="button"
                       className="absolute right-3 top-3 text-gray-400 hover:text-red-500 transition-colors"
                       onClick={() => {
-                        setFormBase({ ...formBase, institucionId: "" });
+                        setFormBase((prev) => ({
+                          ...prev,
+                          institucionId: "",
+                        }));
+
                         setSearchInstModal("");
+                        setResultadosInstModal([]);
                         setShowInstDropdown(false);
                       }}
                     >
@@ -1643,24 +1829,46 @@ export default function VentasPage() {
                   )}
                 </div>
 
-                {showInstDropdown && searchInstModal.trim().length > 0 && (
-                  <ul className="absolute z-50 w-full bg-white border border-gray-200 shadow-xl rounded-lg mt-1 max-h-48 overflow-y-auto">
-                    {institucionesDisponibles
-                      ?.filter((i: any) =>
-                        i.nombre
-                          .toLowerCase()
-                          .includes(searchInstModal.toLowerCase()),
-                      )
-                      .slice(0, 50)
-                      .map((inst: any) => (
+                {showInstDropdown && searchInstModal.trim().length >= 2 && (
+                  <ul
+                    className="
+                      absolute
+                      z-50
+                      w-full
+                      bg-white
+                      border
+                      border-gray-200
+                      shadow-xl
+                      rounded-lg
+                      mt-1
+                      max-h-64
+                      overflow-y-auto
+                    "
+                  >
+                    {resultadosInstModal.length === 0 ? (
+                      <li className="px-4 py-3 text-xs text-gray-500 text-center italic">
+                        No se encontraron escuelas...
+                      </li>
+                    ) : (
+                      resultadosInstModal.map((inst: any) => (
                         <li
                           key={inst.id}
-                          className="px-4 py-2.5 hover:bg-emerald-50/50 cursor-pointer border-b border-gray-50 last:border-0 transition-colors"
+                          className="
+                            px-4
+                            py-2.5
+                            hover:bg-emerald-50
+                            cursor-pointer
+                            border-b
+                            border-gray-100
+                            last:border-0
+                            transition-colors
+                          "
                           onClick={() => {
-                            setFormBase({
-                              ...formBase,
+                            setFormBase((prev) => ({
+                              ...prev,
                               institucionId: inst.id,
-                            });
+                            }));
+
                             setSearchInstModal(inst.nombre);
                             setShowInstDropdown(false);
                           }}
@@ -1668,19 +1876,8 @@ export default function VentasPage() {
                           <p className="text-sm font-bold text-gray-800">
                             {inst.nombre}
                           </p>
-                          <p className="text-[10px] text-emerald-600 font-medium tracking-wide">
-                            Hacer clic para vincular
-                          </p>
                         </li>
-                      ))}
-                    {institucionesDisponibles?.filter((i: any) =>
-                      i.nombre
-                        .toLowerCase()
-                        .includes(searchInstModal.toLowerCase()),
-                    ).length === 0 && (
-                      <li className="px-4 py-3 text-xs text-gray-500 text-center italic border-t border-gray-50">
-                        No se encontraron escuelas...
-                      </li>
+                      ))
                     )}
                   </ul>
                 )}
