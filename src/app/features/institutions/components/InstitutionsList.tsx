@@ -610,8 +610,13 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     if (onRefreshNeeded) onRefreshNeeded();
   };
 
-  const esAdmin = userRol === "super_admin" || userRol === "administrador" || (catalogos?.userPermisos || []).includes("instituciones:gestionar_asignaciones");
-  const todosSeleccionados = institutions.length > 0 && institutions.every((i) => selectedIds.includes(i.id));
+  const isSysAdmin = userRol === "super_admin" || userRol === "administrador";
+  const perms = catalogos?.userPermisos || [];
+  const puedeAsignar = isSysAdmin || perms.includes("instituciones:gestionar_asignaciones");
+  const puedeEditar = isSysAdmin || perms.includes("instituciones:editar");
+  const puedeCrearMasivo = isSysAdmin || perms.includes("instituciones:crear");
+
+  const todosSeleccionados =institutions.length > 0 && institutions.every((i) => selectedIds.includes(i.id));
 
   if (loading)
     return (
@@ -623,7 +628,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
   return (
     <>
       <div className="flex flex-col gap-4 pb-20">
-        {esAdmin && (
+        {puedeCrearMasivo && (
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
@@ -665,7 +670,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           >
             <TableHeader className="bg-muted/50">
               <TableRow>
-                {esAdmin && (
+                {puedeAsignar && (
                   <TableHead className="w-50px text-center px-2">
                     <input
                       type="checkbox"
@@ -701,7 +706,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
                   key={inst.id}
                   className={`hover:bg-muted/30 ${selectedIds.includes(inst.id) ? "bg-primary/5" : ""}`}
                 >
-                  {esAdmin && (
+                  {puedeAsignar && (
                     <TableCell className="text-center px-2">
                       <input
                         type="checkbox"
@@ -767,35 +772,35 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
                       >
                         <Eye size={16} />
                       </Button>
-                      {esAdmin && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-blue-600 hover:bg-blue-50 rounded-lg h-8 w-8"
-                            onClick={() => handleOpenEdit(inst)}
-                            title="Editar Institución"
-                          >
-                            <Pencil size={16} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-emerald-600 hover:bg-emerald-50 rounded-lg h-8 w-8"
-                            onClick={() => {
-                              setSelectedVendedor(inst.vendedorId || "");
-                              setAssignModal({
-                                open: true,
-                                instId: inst.id,
-                                instNombre: inst.nombre,
-                                vendedorIdActual: inst.vendedorId,
-                              });
-                            }}
-                            title="Reasignar Vendedor"
-                          >
-                            <UserCheck size={16} />
-                          </Button>
-                        </>
+                      {puedeEditar && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-blue-600 hover:bg-blue-50 rounded-lg h-8 w-8"
+                          onClick={() => handleOpenEdit(inst)}
+                          title="Editar Institución"
+                        >
+                          <Pencil size={16} />
+                        </Button>
+                      )}
+                      {puedeAsignar && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-emerald-600 hover:bg-emerald-50 rounded-lg h-8 w-8"
+                          onClick={() => {
+                            setSelectedVendedor(inst.vendedorId || "");
+                            setAssignModal({
+                              open: true,
+                              instId: inst.id,
+                              instNombre: inst.nombre,
+                              vendedorIdActual: inst.vendedorId,
+                            });
+                          }}
+                          title="Reasignar Vendedor"
+                        >
+                          <UserCheck size={16} />
+                        </Button>
                       )}
                     </div>
                   </TableCell>
@@ -844,8 +849,8 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           )}
         </div>
 
-        {/* 🔥 BARRA FLOTANTE MÁGICA DE ASIGNACIÓN MASIVA 🔥 */}
-        {esAdmin && selectedIds.length > 0 && (
+        {/*  BARRA FLOTANTE MÁGICA DE ASIGNACIÓN MASIVA */}
+        {puedeAsignar && selectedIds.length > 0 && (
           <div className="fixed bottom-4 md:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-full shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-6 animate-in slide-in-from-bottom-10 fade-in w-[95%] md:w-auto max-w-400px md:max-w-none">
             <div className="flex items-center justify-between w-full md:w-auto gap-2">
               <div className="flex items-center gap-2">

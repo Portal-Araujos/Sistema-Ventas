@@ -37,10 +37,7 @@ export default function InstitucionesPage() {
 
   const handleRefresh = () => setRefreshKey((prev) => prev + 1);
   const handleResetFiltros = () => setFiltros(estadoInicialFiltros);
-  const puedeCrear = 
-    userRol === "super_admin" || 
-    userRol === "administrador" || 
-    userPermisos.includes("instituciones:gestionar_asignaciones");
+  const puedeCrear = userRol === "super_admin" || userRol === "administrador" || userPermisos.includes("instituciones:crear");
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6">

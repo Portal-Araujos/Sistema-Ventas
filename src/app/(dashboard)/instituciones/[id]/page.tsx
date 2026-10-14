@@ -180,7 +180,11 @@ export default function FichaTecnicaPage({
     }
   };
 
-  const esAdmin = userRol === "super_admin" || userRol === "administrador" || userPermisos.includes("instituciones:gestionar_asignaciones");
+  // 🔥 Separamos Editar de Eliminar
+  const isSysAdmin = userRol === "super_admin" || userRol === "administrador";
+  
+  const puedeEditar = isSysAdmin || userPermisos.includes("instituciones:editar");
+  const puedeEliminar = isSysAdmin; // Por seguridad, solo Super Admins borran historiales
 
   if (loading)
     return (
@@ -242,31 +246,21 @@ export default function FichaTecnicaPage({
   return (
     <div className="p-4 md:p-8 min-h-screen flex flex-col gap-6 bg-background">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/agenda")}
-          className="text-secondary hover:bg-gray-200 flex items-center gap-2"
-        >
+        <Button variant="ghost" onClick={() => router.push("/agenda")}>
           <ArrowLeft size={18} /> Volver a Lista
         </Button>
-        {esAdmin && (
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleOpenEdit}
-              className="text-blue-600 border-blue-200 hover:bg-blue-50 flex items-center gap-1.5 font-bold"
-            >
+        <div className="flex gap-2">
+          {puedeEditar && (
+            <Button variant="outline" onClick={handleOpenEdit} className="text-blue-600 border-blue-200 hover:bg-blue-50 flex items-center gap-1.5 font-bold">
               <Pencil size={16} /> Editar Escuela
             </Button>
-            <Button
-              variant="outline"
-              onClick={handleEliminar}
-              className="text-primary border-primary/20 hover:bg-primary/5 flex items-center gap-1.5 font-bold"
-            >
+          )}
+          {puedeEliminar && (
+            <Button variant="outline" onClick={handleEliminar} className="text-primary border-primary/20 hover:bg-primary/5 flex items-center gap-1.5 font-bold">
               <Trash2 size={16} /> Eliminar
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="bg-card p-6 md:p-8 rounded-2xl border border-border shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
