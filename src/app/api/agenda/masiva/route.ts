@@ -14,9 +14,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
     const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.rol !== "super_admin" && payload.rol !== "administrador") {
+    const userRol = payload.rol as string;
+    const userPermisos = (payload.permisos as string[]) || [];
+    const tienePermiso = 
+      userRol === "super_admin" || 
+      userRol === "administrador" || 
+      userPermisos.includes("instituciones:gestionar_asignaciones");
+
+    if (!tienePermiso) {
       return NextResponse.json(
-        { error: "Solo los administradores pueden armar rutas" },
+        { error: "No tienes permisos para realizar asignaciones masivas o armar rutas." },
         { status: 403 },
       );
     }

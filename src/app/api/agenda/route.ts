@@ -15,11 +15,12 @@ export async function GET(request: Request) {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const userRol = payload.rol as string;
     const userIdSession = payload.id as string;
+    const userPermisos = (payload.permisos as string[]) || [];
     const { searchParams } = new URL(request.url);
     const vendedorId = searchParams.get("vendedorId");
     const fechaDesde = searchParams.get("fechaDesde");
     const fechaHasta = searchParams.get("fechaHasta");
-    const esAdmin = userRol === "super_admin" || userRol === "administrador";
+    const esAdmin = userRol === "super_admin" || userRol === "administrador" || userPermisos.includes("instituciones:gestionar_asignaciones");
     const targetUserId =
       esAdmin && vendedorId ? vendedorId : !esAdmin ? userIdSession : null;
 
@@ -36,8 +37,6 @@ export async function GET(request: Request) {
     if (targetUserId) baseWhereVisita.usuarioId = targetUserId;
 
     const estadosPendientes = ["Pendiente", "No Visitada", "No visitada"];
-
-    // Obtenemos TODAS las realizadas para validar si hay promesas rotas
     const todasRealizadas = await prisma.visitaAgenda.findMany({
       where: {
         ...baseWhereVisita,
@@ -54,7 +53,7 @@ export async function GET(request: Request) {
       }
     });
 
-    // 🔥 NUEVA LÓGICA DE VALIDACIÓN 🔥
+    //  NUEVA LÓGICA DE VALIDACIÓN 
     const isNotFulfilled = (v: any) => {
       const lastVisit = lastVisitMap.get(v.institucionId);
       if (!lastVisit) return true;
@@ -68,7 +67,7 @@ export async function GET(request: Request) {
       return fechaTarget > lastVisit;
     };
 
-    // 🔥 RUTA RAW (Con nueva inteligencia y ORDEN POR HORA) 🔥
+    // RUTA RAW (Con nueva inteligencia y ORDEN POR HORA) 
     const rutaRaw = await prisma.visitaAgenda.findMany({
       where: {
         ...baseWhereVisita,
@@ -113,7 +112,7 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    // 🔥 PRÓXIMAS RAW 🔥
+    //  PRÓXIMAS RAW 
     const proximasRaw = await prisma.visitaAgenda.findMany({
       where: {
         ...baseWhereVisita,
@@ -140,7 +139,7 @@ export async function GET(request: Request) {
       orderBy: [{ fechaProgramada: "asc" }, { horaProgramada: "asc" }],
     });
 
-    // 🔥 VENCIDAS RAW 🔥
+    // VENCIDAS RAW 
     const vencidasRaw = await prisma.visitaAgenda.findMany({
       where: {
         ...baseWhereVisita,
@@ -235,7 +234,7 @@ export async function GET(request: Request) {
       return d.toLocaleDateString("es-EC", { timeZone: "America/Guayaquil" });
     };
 
-    // 🔥 TRADUCTOR DE ESTADOS PARA EL FRONTEND 🔥
+    // TRADUCTOR DE ESTADOS PARA EL FRONTEND 
     const mapVisita = (v: any, forceRealState = false) => {
       let estadoVirtual = v.estadoGestion;
       let dateToShow = formatearFechaExacta(v.fechaProgramada);

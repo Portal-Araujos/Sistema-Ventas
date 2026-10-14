@@ -200,8 +200,6 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       setSelectedIds((prev) => prev.filter((id) => !idsOnPage.includes(id)));
     }
   };
-
-  // 🔥 ARMAR RUTA CONECTADA AL ESCUDO DEL BACKEND 🔥
   const handleArmarRutaGuardar = async () => {
     if (!rutaData.vendedorId) {
       showToast("alerta", "Debes seleccionar el vendedor.");
@@ -261,7 +259,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
           rutaData.tipoAsignacion === "dia" ? rutaData.hora : "17:00",
       };
 
-      // 🚀 LLAMAMOS A LA RUTA MASIVA DONDE PUSIMOS EL ESCUDO
+      //  LLAMAMOS A LA RUTA MASIVA DONDE PUSIMOS EL ESCUDO
       // (Asegúrate de haber creado el archivo: src/app/api/agenda/masiva/route.ts con el código de mi mensaje anterior)
       const res = await fetch("/api/agenda/masiva", {
         method: "POST",
@@ -283,7 +281,7 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
       );
       fetchInstituciones(true);
     } catch (e: any) {
-      showToast("error", e.message); // 🔥 Mostrará la alerta roja del escudo
+      showToast("error", e.message); //  Mostrará la alerta roja del escudo
     } finally {
       setSavingRuta(false);
     }
@@ -612,10 +610,8 @@ export function InstitutionsList({ filtros, userRol, onRefreshNeeded }: Props) {
     if (onRefreshNeeded) onRefreshNeeded();
   };
 
-  const esAdmin = userRol === "super_admin" || userRol === "administrador";
-  const todosSeleccionados =
-    institutions.length > 0 &&
-    institutions.every((i) => selectedIds.includes(i.id));
+  const esAdmin = userRol === "super_admin" || userRol === "administrador" || (catalogos?.userPermisos || []).includes("instituciones:gestionar_asignaciones");
+  const todosSeleccionados = institutions.length > 0 && institutions.every((i) => selectedIds.includes(i.id));
 
   if (loading)
     return (

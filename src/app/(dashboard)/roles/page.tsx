@@ -39,6 +39,7 @@ const MODULOS_PERMISOS = [
       { id: "instituciones:ver", label: "Ver Base de Instituciones" },
       { id: "instituciones:crear", label: "Registrar Nuevas Instituciones" },
       { id: "instituciones:editar", label: "Editar Instituciones" },
+      { id: "instituciones:gestionar_asignaciones", label: "Asignar Vendedores (Masivo / Individual)" },
       { id: "agenda:ver", label: "Ver Agenda y Registrar Visitas" },
       { id: "ventas:ver", label: "Ver Historial de Ventas" },
       { id: "ventas:crear", label: "Crear Contratos / Ventas" },

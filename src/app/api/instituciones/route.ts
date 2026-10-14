@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     }
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "15"); // 99999 si es exportación Excel
+    const limit = parseInt(searchParams.get("limit") || "15"); 
     const skip = (page - 1) * limit;
     const search = searchParams.get("search") || "";
     const provinciaId = searchParams.get("provinciaId");

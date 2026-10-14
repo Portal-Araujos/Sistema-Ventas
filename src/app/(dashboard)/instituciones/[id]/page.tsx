@@ -10,7 +10,6 @@ import {
   Trash2,
   CalendarCheck,
   Calendar,
-  Navigation,
   DollarSign,
   FileText,
   CheckCircle2,
@@ -19,7 +18,6 @@ import {
   Save,
   ChevronLeft,
   ChevronRight,
-  ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +42,7 @@ export default function FichaTecnicaPage({
   const [catalogos, setCatalogos] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [userRol, setUserRol] = useState("vendedor");
+  const [userPermisos, setUserPermisos] = useState<string[]>([]);
 
   // PAGINACIÓN HISTORIAL (5)
   const [currentPage, setCurrentPage] = useState(1);
@@ -74,6 +73,7 @@ export default function FichaTecnicaPage({
       const dataInst = await resInst.json();
       const dataCat = await resCat.json();
       if (dataCat.userRol) setUserRol(dataCat.userRol);
+      if (dataCat.userPermisos) setUserPermisos(dataCat.userPermisos);
       setCatalogos(dataCat);
       setInst(dataInst);
     } catch (e) {
@@ -180,7 +180,7 @@ export default function FichaTecnicaPage({
     }
   };
 
-  const esAdmin = userRol === "super_admin" || userRol === "administrador";
+  const esAdmin = userRol === "super_admin" || userRol === "administrador" || userPermisos.includes("instituciones:gestionar_asignaciones");
 
   if (loading)
     return (
@@ -195,7 +195,7 @@ export default function FichaTecnicaPage({
       </div>
     );
 
-  // 🔥 FILTRO INTELIGENTE: Ignorar "Asignación Masiva" en el historial 🔥
+  //  FILTRO INTELIGENTE: Ignorar "Asignación Masiva" en el historial 
   const historial: any[] = [];
 
   if (inst.visitas) {

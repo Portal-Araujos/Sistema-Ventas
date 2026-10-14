@@ -22,22 +22,25 @@ const estadoInicialFiltros: FiltrosAvanzadosState = {
 
 export default function InstitucionesPage() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [filtros, setFiltros] = useState<FiltrosAvanzadosState>(estadoInicialFiltros);
   const [userRol, setUserRol] = useState("vendedor");
-  const [filtros, setFiltros] =
-    useState<FiltrosAvanzadosState>(estadoInicialFiltros);
+  const [userPermisos, setUserPermisos] = useState<string[]>([]); 
 
   useEffect(() => {
     fetch("/api/catalogos")
       .then((res) => res.json())
       .then((data) => {
         if (data.userRol) setUserRol(data.userRol);
+        if (data.userPermisos) setUserPermisos(data.userPermisos);
       });
   }, []);
 
   const handleRefresh = () => setRefreshKey((prev) => prev + 1);
   const handleResetFiltros = () => setFiltros(estadoInicialFiltros);
-
-  const puedeCrear = userRol === "super_admin" || userRol === "administrador";
+  const puedeCrear = 
+    userRol === "super_admin" || 
+    userRol === "administrador" || 
+    userPermisos.includes("instituciones:gestionar_asignaciones");
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6">
