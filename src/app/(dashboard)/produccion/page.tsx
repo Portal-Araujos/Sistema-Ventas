@@ -984,7 +984,7 @@ function ProduccionPageContent() {
                 </span>
               </div>
             </div>
-            {/* 🔥 ENCABEZADO Y BUSCADOR INTELIGENTE 🔥 */}
+            {/* ENCABEZADO Y BUSCADOR INTELIGENTE */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-200 pb-2">
               <p className="text-xs font-black uppercase text-gray-500">
                 Prendas por Contrato:

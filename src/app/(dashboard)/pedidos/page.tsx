@@ -76,6 +76,7 @@ function PedidosPageContent() {
   const [resultadosUser, setResultadosUser] = useState<any[]>([]);
   const [dropdownUser, setDropdownUser] = useState(false);
   const [busquedaDetalle, setBusquedaDetalle] = useState("");
+  const [busquedaRecepcion, setBusquedaRecepcion] = useState("");
   const [busquedaEdit, setBusquedaEdit] = useState("");
 
   //  LÓGICA DE BÚSQUEDA DE USUARIOS 
@@ -694,13 +695,9 @@ function PedidosPageContent() {
                   <th className="p-3.5 text-center bg-gray-100">Contratos</th>
                   <th className="p-3.5 text-center bg-gray-100">Paquetes</th>
                   <th className="p-3.5 text-center bg-gray-100">Prendas</th>
-                  <th className="p-3.5 text-center bg-gray-100">
-                    Estado y Resumen
-                  </th>
+                  <th className="p-3.5 text-center bg-gray-100">Estado y Resumen</th>
                   <th className="p-3.5 bg-gray-100">Última Actualización</th>
-                  <th className="p-3.5 text-center bg-gray-100">
-                    Entrega Pautada
-                  </th>
+                  <th className="p-3.5 text-center bg-gray-100">Entrega Pautada</th>
                   <th className="p-3.5 text-center bg-gray-100">Acciones</th>
                 </tr>
               </thead>
@@ -1104,206 +1101,257 @@ function PedidosPageContent() {
         </DialogContent>
       </Dialog>
 
+
+
+
+
+
       <Dialog open={modalRecepcionOpen} onOpenChange={setModalRecepcionOpen}>
         <DialogContent className="sm:max-w-5xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[85vh]">
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-gray-900 border-b pb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ClipboardCheck className="text-amber-500" /> Confirmación de
-                Entregas (Vendedor)
+                <ClipboardCheck className="text-amber-500" /> Confirmación de Entregas (Vendedor)
               </div>
               <Badge className="bg-primary text-white text-xs">
                 {grupoRecepcion?.codigoPedido}
               </Badge>
             </DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4 mt-2">
-            <div className="flex justify-between items-center bg-amber-50 border border-amber-200 p-3 rounded-xl">
-              <p className="text-xs text-amber-800">
-                A continuación se muestran las prendas que{" "}
-                <strong>Bodega ya despachó</strong>. Revisa físicamente tu
-                paquete y dale "Check" a lo que te haya llegado.
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-amber-50 border border-amber-200 p-3 rounded-xl">
+              <p className="text-xs text-amber-800 flex-1">
+                A continuación se muestran las prendas que <strong>Bodega ya despachó</strong>. Revisa físicamente tu paquete y dale "Check" a lo que te haya llegado.
               </p>
               <Button
                 size="sm"
                 variant="outline"
-                className="text-xs font-bold text-gray-700 bg-white"
+                className="text-xs font-bold text-gray-700 bg-white shrink-0"
                 onClick={() => imprimirActaRecepcionPDF(grupoRecepcion)}
               >
                 <Printer size={14} className="mr-1" /> Imprimir Acta PDF
               </Button>
             </div>
 
-            <div className="space-y-3">
-              {grupoRecepcion?.pedidosAsociados?.map((ped: any) => {
-                const isExpanded = contratoExpandido === ped.id;
+            {/* ENCABEZADO Y BUSCADOR INTELIGENTE */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-200 pb-2">
+              <p className="text-xs font-black uppercase text-gray-500">
+                Contratos a Recibir:
+              </p>
+              <div className="relative w-full sm:w-64">
+                <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                <Input
+                  className="pl-8 h-9 text-xs bg-white border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+                  placeholder="Buscar por cliente o contrato..."
+                  value={busquedaRecepcion}
+                  onChange={(e) => setBusquedaRecepcion(e.target.value)}
+                />
+              </div>
+            </div>
 
-                const prendasDespachadas =
-                  ped.detalles?.filter((d: any) => d.guiaDespachoId !== null) ||
-                  [];
-                if (prendasDespachadas.length === 0) return null;
+            <div className="space-y-3 pt-2">
+              {(() => {
+                //  LÓGICA DEL FILTRO EN TIEMPO REAL 
+                const pedidosFiltrados = grupoRecepcion?.pedidosAsociados?.filter((ped: any) => {
+                  if (!busquedaRecepcion) return true;
+                  const term = busquedaRecepcion.toLowerCase().trim();
+                  const matchContrato = ped.numContrato?.toLowerCase().includes(term);
+                  const matchCliente = ped.nombreCliente?.toLowerCase().includes(term);
+                  return matchContrato || matchCliente;
+                }) || [];
 
-                return (
-                  <div
-                    key={ped.id}
-                    className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
-                  >
-                    <div className="p-3.5 flex justify-between items-center bg-gray-50/80">
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant="outline"
-                          className="font-black text-blue-700 bg-blue-50 border-blue-200"
-                        >
-                          Contrato #{ped.numContrato}
-                        </Badge>
-                        <span className="text-xs font-bold text-gray-800">
-                          {ped.nombreCliente}
-                        </span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-xs font-bold text-primary flex items-center gap-1"
-                        onClick={() =>
-                          setContratoExpandido(isExpanded ? null : ped.id)
-                        }
-                      >
-                        <Eye size={14} />{" "}
-                        {isExpanded ? "Ocultar" : "Revisar Paquete"}
-                      </Button>
+                if (pedidosFiltrados.length === 0) {
+                  return (
+                    <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                      <p className="text-xs text-gray-500 font-bold">
+                        No se encontraron resultados para "{busquedaRecepcion}"
+                      </p>
                     </div>
-                    {isExpanded && (
-                      <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse min-w-650px">
-                          <thead>
-                            <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase">
-                              <th className="pb-2 text-center w-8">Tengo</th>
-                              <th className="pb-2">SKU / Prenda</th>
-                              <th className="pb-2">Color/Talla</th>
-                              <th className="pb-2 text-center">Cant.</th>
-                              <th className="pb-2">Estado de Recepción</th>
-                              <th className="pb-2 text-center text-rose-600 w-16">
-                                Soporte
-                              </th>
-                              {esModoAdmin && (
-                                <th className="pb-2 text-center text-red-600">
-                                  Admin
-                                </th>
-                              )}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {prendasDespachadas.map((p: any) => {
-                              const recibido = p.recibidoPorVendedor;
-                              return (
-                                <tr
-                                  key={p.id}
-                                  className={
-                                    recibido
-                                      ? "bg-emerald-50/40 opacity-80"
-                                      : "bg-white hover:bg-gray-50"
-                                  }
-                                >
-                                  <td className="py-3 text-center">
-                                    <input
-                                      type="checkbox"
-                                      className="h-5 w-5 rounded border-gray-300 text-emerald-600 cursor-pointer disabled:opacity-50"
-                                      disabled={recibido}
-                                      checked={
-                                        recibido ||
-                                        prendasSeleccionadas.includes(p.id)
-                                      }
-                                      onChange={() =>
-                                        toggleRecepcionPrenda(p.id)
-                                      }
-                                    />
-                                  </td>
-                                  <td className="py-3">
-                                    <div className="font-mono font-bold text-blue-600">
-                                      {p.skuCodigo}
-                                    </div>
-                                    <div className="font-bold text-gray-800">
-                                      {p.tipoRopa}
-                                    </div>
-                                  </td>
-                                  <td className="py-3 text-gray-600">
-                                    {p.color} ({p.talla})
-                                  </td>
-                                  <td className="py-3 text-center font-black text-sm">
-                                    {p.cantidad}
-                                  </td>
-                                  <td className="py-3">
-                                    {recibido ? (
-                                      <div>
-                                        <Badge className="bg-emerald-600 text-white">
-                                          <CheckCircle2
-                                            size={12}
-                                            className="mr-1"
-                                          />{" "}
-                                          Recibido
-                                        </Badge>
-                                        <p className="text-[9px] text-gray-500 mt-1">
-                                          {new Date(
-                                            p.fechaRecepcion,
-                                          ).toLocaleString("es-EC")}{" "}
-                                          por{" "}
-                                          {p.usuarioReceptor?.nombre ||
-                                            "Usuario"}
-                                        </p>
-                                      </div>
-                                    ) : (
-                                      <Badge
-                                        variant="outline"
-                                        className="text-amber-600 border-amber-300 bg-amber-50"
-                                      >
-                                        Confirmación de Recepcion
-                                      </Badge>
-                                    )}
-                                  </td>
-                                  <td className="py-3 text-center border-l border-gray-100">
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      title="Reportar Problema con esta Prenda"
-                                      className="h-8 w-8 text-rose-500 hover:bg-rose-50 border border-rose-200 shadow-sm"
-                                      onClick={() =>
-                                        handleAbrirTicketContextual(
-                                          p,
-                                          ped,
-                                          grupoRecepcion,
-                                        )
-                                      }
-                                    >
-                                      <LifeBuoy size={14} />
-                                    </Button>
-                                  </td>
-                                  {esModoAdmin && (
+                  );
+                }
+
+                return pedidosFiltrados.map((ped: any) => {
+                  const isExpanded = contratoExpandido === ped.id;
+                  const prendasDespachadas = ped.detalles?.filter((d: any) => d.guiaDespachoId !== null) || [];
+                  if (prendasDespachadas.length === 0) return null;
+
+                  //  CÁLCULOS MATEMÁTICOS DEL CONTRATO (Tot, Rec, Saldo) 
+                  const totalPrendas = ped.detalles?.reduce((acc: number, d: any) => acc + (d.cantidad || 1), 0) || 0;
+                  const prendasRecibidas = ped.detalles?.filter((d: any) => d.recibidoPorVendedor).reduce((acc: number, d: any) => acc + (d.cantidad || 1), 0) || 0;
+                  const saldo = totalPrendas - prendasRecibidas;
+
+                  return (
+                    <div
+                      key={ped.id}
+                      className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
+                    >
+                      <div className="p-3.5 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gray-50/80">
+                        <div className="flex flex-col gap-2 w-full md:w-auto">
+                          <div className="flex items-center gap-3">
+                            <Badge
+                              variant="outline"
+                              className="font-black text-blue-700 bg-blue-50 border-blue-200"
+                            >
+                              Contrato #{ped.numContrato}
+                            </Badge>
+                            <span className="text-xs font-bold text-gray-800">
+                              {ped.nombreCliente}
+                            </span>
+                            <div className="text-[10px] font-bold text-gray-500 bg-white border border-gray-200 px-2 py-1 rounded-md w-fit flex items-center gap-2 shadow-sm">
+                              <span>Tot: {totalPrendas}</span>
+                              <span className="text-gray-300">|</span>
+                              <span className="text-emerald-600">Rec: {prendasRecibidas}</span>
+                              <span className="text-gray-300">|</span>
+                              <span className={saldo > 0 ? "text-red-500" : "text-gray-400"}>Saldo: {saldo}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs font-bold text-primary flex items-center gap-1 self-end md:self-auto shrink-0"
+                          onClick={() =>
+                            setContratoExpandido(isExpanded ? null : ped.id)
+                          }
+                        >
+                          <Eye size={14} />{" "}
+                          {isExpanded ? "Ocultar Prendas" : "Revisar Paquete"}
+                        </Button>
+                      </div>
+                      
+                      {isExpanded && (
+                        <div className="p-4 border-t border-gray-200 bg-gray-50/30 overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse min-w-650px">
+                            <thead>
+                              <tr className="text-gray-500 border-b border-gray-200 font-bold uppercase">
+                                <th className="pb-2 text-center w-8">Recep|</th>
+                                <th className="pb-2">SKU/Prenda</th>
+                                <th className="pb-2">Color/Talla</th>
+                                <th className="pb-2 text-center">Cant.</th>
+                                <th className="pb-2">Estado de Recepción</th>
+                                <th className="pb-2 text-center text-rose-600 w-16">Soporte</th>
+                                {esModoAdmin && (
+                                  <th className="pb-2 text-center text-red-600">
+                                    Admin
+                                  </th>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {prendasDespachadas.map((p: any) => {
+                                const recibido = p.recibidoPorVendedor;
+                                return (
+                                  <tr
+                                    key={p.id}
+                                    className={
+                                      recibido
+                                        ? "bg-emerald-50/40 opacity-80"
+                                        : "bg-white hover:bg-gray-50"
+                                    }
+                                  >
                                     <td className="py-3 text-center">
-                                      {recibido && (
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Desbloquear Recepción"
-                                          className="h-7 w-7 text-red-500 hover:bg-red-50 border border-red-200"
-                                          onClick={() =>
-                                            handleDesbloquearRecepcion(p.id)
-                                          }
+                                      <input
+                                        type="checkbox"
+                                        className="h-5 w-5 rounded border-gray-300 text-emerald-600 cursor-pointer disabled:opacity-50"
+                                        disabled={recibido}
+                                        checked={
+                                          recibido ||
+                                          prendasSeleccionadas.includes(p.id)
+                                        }
+                                        onChange={() =>
+                                          toggleRecepcionPrenda(p.id)
+                                        }
+                                      />
+                                    </td>
+                                    <td className="py-3">
+                                      <div className="font-mono font-bold text-blue-600">
+                                        {p.skuCodigo}
+                                      </div>
+                                      <div className="font-bold text-gray-800">
+                                        {p.tipoRopa}
+                                      </div>
+                                    </td>
+                                    <td className="py-3 text-gray-600">
+                                      {p.color} ({p.talla})
+                                    </td>
+                                    <td className="py-3 text-center font-black text-sm">
+                                      {p.cantidad}
+                                    </td>
+                                    <td className="py-3">
+                                      {recibido ? (
+                                        <div>
+                                          <Badge className="bg-emerald-600 text-white">
+                                            <CheckCircle2
+                                              size={12}
+                                              className="mr-1"
+                                            />{" "}
+                                            Recibido
+                                          </Badge>
+                                          <p className="text-[9px] text-gray-500 mt-1">
+                                            {new Date(
+                                              p.fechaRecepcion,
+                                            ).toLocaleString("es-EC")}{" "}
+                                            por{" "}
+                                            {p.usuarioReceptor?.nombre ||
+                                              "Usuario"}
+                                          </p>
+                                        </div>
+                                      ) : (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-amber-600 border-amber-300 bg-amber-50"
                                         >
-                                          <LockOpen size={12} />
-                                        </Button>
+                                          Confirmación de Recepcion
+                                        </Badge>
                                       )}
                                     </td>
-                                  )}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                                    <td className="py-3 text-center border-l border-gray-100">
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        title="Reportar Problema con esta Prenda"
+                                        className="h-8 w-8 text-rose-500 hover:bg-rose-50 border border-rose-200 shadow-sm"
+                                        onClick={() =>
+                                          handleAbrirTicketContextual(
+                                            p,
+                                            ped,
+                                            grupoRecepcion,
+                                          )
+                                        }
+                                      >
+                                        <LifeBuoy size={14} />
+                                      </Button>
+                                    </td>
+                                    {esModoAdmin && (
+                                      <td className="py-3 text-center">
+                                        {recibido && (
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            title="Desbloquear Recepción"
+                                            className="h-7 w-7 text-red-500 hover:bg-red-50 border border-red-200"
+                                            onClick={() =>
+                                              handleDesbloquearRecepcion(p.id)
+                                            }
+                                          >
+                                            <LockOpen size={12} />
+                                          </Button>
+                                        )}
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
           <DialogFooter className="mt-4 flex justify-between items-center border-t pt-4">
