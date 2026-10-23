@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Trash2,
   Download,
+  Mic, Square
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,59 @@ export default function TicketChatDrawer({
   const [isCompressing, setIsCompressing] = useState(false);
   const [motivoReapertura, setMotivoReapertura] = useState("");
   const mensajesEndRef = useRef<HTMLDivElement>(null);
+  // Estados existentes...
+  const [isDragging, setIsDragging] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Lógica de grabación de audio
+  const toggleRecording = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          const audioFile = new File([audioBlob], "nota_de_voz.webm", { type: "audio/webm" });
+          setArchivoAdjunto(audioFile);
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        setIsRecording(true);
+      } catch (err) {
+        alert("Debes permitir el acceso al micrófono en tu navegador.");
+      }
+    }
+  };
+
+  // Lógica unificada para procesar archivos arrastrados o seleccionados
+  const procesarArchivo = async (file: File) => {
+    if (file.type === "application/pdf") {
+      if (file.size > 2 * 1024 * 1024) return alert("El PDF es muy pesado. Máximo 2MB.");
+      setArchivoAdjunto(file);
+    } else if (file.type.startsWith("image/")) {
+      setIsCompressing(true);
+      const compressedFile = await comprimirImagen(file);
+      setArchivoAdjunto(compressedFile);
+      setIsCompressing(false);
+    } else if (file.type.startsWith("audio/")) {
+      setArchivoAdjunto(file);
+    } else {
+      alert("Formato no soportado. Sube Imágenes, PDFs o Notas de voz.");
+    }
+  };
 
   const cargarTicket = async () => {
     if (!ticketId) return;
@@ -125,6 +179,8 @@ export default function TicketChatDrawer({
 
   const enviarMensaje = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    
+    // Si no hay texto Y TAMPOCO hay archivo, no hace nada.
     if (!mensaje.trim() && !archivoAdjunto) return;
 
     setLoading(true);
@@ -132,7 +188,14 @@ export default function TicketChatDrawer({
       const formData = new FormData();
       formData.append("accion", "enviarMensaje");
       formData.append("ticketId", String(ticketId));
-      formData.append("contenido", mensaje);
+      
+      // 🔥 ESTO ES LO NUEVO: Generar un texto automático si está vacío 🔥
+      const textoFinal = mensaje.trim() 
+        ? mensaje 
+        : (archivoAdjunto?.type.startsWith("audio/") ? "🎵 Nota de voz" : "📎 Archivo adjunto");
+        
+      formData.append("contenido", textoFinal);
+      
       if (archivoAdjunto) {
         formData.append("file", archivoAdjunto);
       }
@@ -146,6 +209,8 @@ export default function TicketChatDrawer({
         setMensaje("");
         setArchivoAdjunto(null);
         await cargarTicket();
+      } else {
+        alert("Error del servidor. Revisa si el formato de archivo está permitido.");
       }
     } catch (error) {
       alert("Error al enviar mensaje.");
@@ -302,7 +367,9 @@ export default function TicketChatDrawer({
                     <p className="whitespace-pre-wrap">{msg.contenido}</p>
                     {msg.adjuntoUrl && (
                       <div className="mt-2 border-t border-white/20 pt-2 relative group">
-                        {isImage ? (
+                        {msg.adjuntoTipo?.includes("audio") ? (
+                          <audio controls src={msg.adjuntoUrl} className="max-w-full h-10" />
+                        ) : isImage ? (
                           <div className="relative inline-block">
                             <a
                               href={msg.adjuntoUrl}
@@ -423,42 +490,42 @@ export default function TicketChatDrawer({
         )}
         <div className="bg-white border-t border-gray-200 p-3 z-10">
           {ticket?.estado !== "Cerrado" ? (
-            <form onSubmit={enviarMensaje} className="flex gap-2 items-end">
+            <form 
+              onSubmit={enviarMensaje} 
+              className={`flex gap-2 items-end relative border-2 border-dashed rounded-xl p-2 transition-colors ${isDragging ? 'border-primary bg-primary/5' : 'border-transparent'}`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                if (e.dataTransfer.files?.[0]) procesarArchivo(e.dataTransfer.files[0]);
+              }}
+            >
               <label className="cursor-pointer p-2 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full transition-colors shrink-0">
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
+                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && procesarArchivo(e.target.files[0])} />
                 <Paperclip size={18} />
               </label>
 
               <textarea
                 className="flex-1 max-h-24 min-h-40px text-sm p-2 bg-gray-50 border border-gray-200 rounded-xl resize-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-                placeholder={
-                  isCompressing
-                    ? "Comprimiendo imagen..."
-                    : "Escribe un mensaje..."
-                }
+                placeholder={isCompressing ? "Comprimiendo..." : isRecording ? "Grabando audio... (Clic al cuadrado rojo para detener)" : "Escribe o arrastra una imagen/PDF..."}
                 value={mensaje}
                 onChange={(e) => setMensaje(e.target.value)}
-                disabled={isCompressing || loading}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    enviarMensaje();
-                  }
-                }}
+                disabled={isCompressing || loading || isRecording}
               />
+
+              {/* Botón Grabadora */}
+              <Button
+                type="button"
+                onClick={toggleRecording}
+                className={`rounded-full p-2 h-10 w-10 shrink-0 flex items-center justify-center shadow-md transition-all ${isRecording ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'}`}
+              >
+                {isRecording ? <Square size={16} fill="currentColor" /> : <Mic size={18} />}
+              </Button>
 
               <Button
                 type="submit"
-                disabled={
-                  isCompressing ||
-                  loading ||
-                  (!mensaje.trim() && !archivoAdjunto)
-                }
+                disabled={isCompressing || loading || isRecording || (!mensaje.trim() && !archivoAdjunto)}
                 className="bg-primary hover:bg-primary/90 text-white rounded-full p-2 h-10 w-10 shrink-0 flex items-center justify-center shadow-md"
               >
                 <Send size={18} className="ml-1" />
@@ -517,7 +584,7 @@ export default function TicketChatDrawer({
             </div>
           )}
 
-          {/* 🔥 2. FLUJO DE APROBACIÓN CUANDO ESTÁ "RESUELTO" 🔥 */}
+          {/* 2. FLUJO DE APROBACIÓN CUANDO ESTÁ "RESUELTO */}
           {ticket?.estado === "Resuelto" && (
             <div className="mt-3 border-t border-gray-100 pt-3">
               {ticket.creadorId === currentUserId ? (
@@ -558,8 +625,7 @@ export default function TicketChatDrawer({
                 </div>
               ) : (
                 <div className="bg-gray-100 text-gray-500 text-xs font-bold py-3 rounded-lg flex items-center justify-center gap-2 border border-gray-200 shadow-inner">
-                  <Clock size={16} className="animate-spin-slow" /> ⏳ Esperando
-                  que el creador apruebe la solución...
+                  <Clock size={16} className="animate-spin-slow" /> ⏳ Esperando que el creador apruebe la solución...
                 </div>
               )}
             </div>

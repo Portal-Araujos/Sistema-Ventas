@@ -139,7 +139,8 @@ export default function TicketsPage() {
     mensajeInicial: "",
     fechaLimite: "",
   });
-
+  const [archivoNuevoTicket, setArchivoNuevoTicket] = useState<File | null>(null);
+  const [isDraggingNuevo, setIsDraggingNuevo] = useState(false);
   const [usuariosSeleccionados, setUsuariosSeleccionados] = useState<any[]>([]);
   const [busquedaInst, setBusquedaInst] = useState("");
   const [resultadosInst, setResultadosInst] = useState<any[]>([]);
@@ -265,26 +266,41 @@ export default function TicketsPage() {
   };
 
   const handleCrearTicket = async () => {
-    if (!nuevoTicket.tipo)
-      return alert("Por favor, selecciona el ÁREA RESPONSABLE.");
-    if (
-      !nuevoTicket.institucionId ||
-      !nuevoTicket.asunto ||
-      !nuevoTicket.mensajeInicial
-    )
-      return alert("Completa Institución, Asunto y Mensaje.");
-    if (nuevoTicket.asignadosIds.length === 0)
-      return alert("Debes asignar el ticket a por lo menos 1 persona.");
-    if (!nuevoTicket.fechaLimite)
-      return alert("Debes seleccionar una Fecha Límite de resolución.");
+    if (!nuevoTicket.tipo) return alert("Por favor, selecciona el ÁREA RESPONSABLE.");
+    
+    // 🔥 CAMBIO: Validamos Asunto y Escuela, pero el Mensaje es flexible si hay archivo 🔥
+    if (!nuevoTicket.institucionId || !nuevoTicket.asunto) {
+      return alert("Completa Institución y Asunto.");
+    }
+    if (!nuevoTicket.mensajeInicial.trim() && !archivoNuevoTicket) {
+      return alert("Debes escribir un mensaje o adjuntar un archivo/audio.");
+    }
+    
+    if (nuevoTicket.asignadosIds.length === 0) return alert("Debes asignar el ticket a por lo menos 1 persona.");
+    if (!nuevoTicket.fechaLimite) return alert("Debes seleccionar una Fecha Límite de resolución.");
 
     setSaving(true);
     try {
-      const res = await fetch("/api/tickets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accion: "crearTicket", ...nuevoTicket }),
-      });
+      const formData = new FormData();
+      formData.append("accion", "crearTicket");
+      formData.append("tipo", nuevoTicket.tipo);
+      formData.append("institucionId", nuevoTicket.institucionId);
+      formData.append("prioridad", nuevoTicket.prioridad);
+      formData.append("asunto", nuevoTicket.asunto);
+      formData.append("fechaLimite", nuevoTicket.fechaLimite);
+      formData.append("asignadosIds", JSON.stringify(nuevoTicket.asignadosIds));
+      
+      // 🔥 Texto automático si el vendedor solo grabó un audio 🔥
+      const textoInicial = nuevoTicket.mensajeInicial.trim() 
+        ? nuevoTicket.mensajeInicial 
+        : (archivoNuevoTicket?.type.startsWith("audio/") ? "🎵 Nota de voz de solicitud" : "📎 Archivo adjunto enviado");
+      
+      formData.append("mensajeInicial", textoInicial);
+
+      if (archivoNuevoTicket) formData.append("file", archivoNuevoTicket);
+
+      const res = await fetch("/api/tickets", { method: "POST", body: formData });
+      
       if (res.ok) {
         setNuevoModalOpen(false);
         setNuevoTicket({
@@ -299,9 +315,10 @@ export default function TicketsPage() {
         setUsuariosSeleccionados([]);
         setBusquedaInst("");
         setBusquedaUser("");
+        setArchivoNuevoTicket(null); // Limpiamos el archivo
         await cargarDatos();
       } else {
-        alert("Error al crear el ticket");
+        alert("Error al crear el ticket (Posible archivo no permitido).");
       }
     } catch (e) {
       alert("Error de conexión");
@@ -426,13 +443,10 @@ export default function TicketsPage() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
-  const conteoAbiertos = tickets.filter(
-    (t) => t.estado === "Abierto" || t.estado === "Re-Abierto",
-  ).length;
+  const conteoAbiertos = tickets.filter((t) => t.estado === "Abierto" || t.estado === "Re-Abierto").length;
   const conteoVencidos = tickets.filter((t) => t.estado === "Vencido").length;
-  const conteoPendientes = tickets.filter(
-    (t) => t.estado === "Pendiente",
-  ).length;
+  const conteoPendientes = tickets.filter((t) => t.estado === "Pendiente").length;
+  const conteoResueltos = tickets.filter((t) => t.estado === "Resuelto").length;
   const conteoCerrados = tickets.filter((t) => t.estado === "Cerrado").length;
 
   return (
@@ -464,7 +478,9 @@ export default function TicketsPage() {
           </Button>
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+      {/* 🔥 GRID DE 5 COLUMNAS PARA INCLUIR "RESUELTOS" 🔥 */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div
           onClick={() => toggleFiltroEstado("Abierto")}
           className={`bg-white p-4 rounded-2xl border cursor-pointer shadow-sm flex items-center gap-4 transition-all ${estadoFiltro === "Abierto" ? "ring-2 ring-amber-400 border-transparent bg-amber-50/30" : "border-gray-200 hover:border-amber-300"}`}
@@ -473,12 +489,8 @@ export default function TicketsPage() {
             <Inbox size={24} />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-              Abiertos
-            </p>
-            <p className="text-2xl font-black text-gray-900">
-              {conteoAbiertos}
-            </p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Abiertos</p>
+            <p className="text-2xl font-black text-gray-900">{conteoAbiertos}</p>
           </div>
         </div>
         <div
@@ -489,12 +501,8 @@ export default function TicketsPage() {
             <AlertCircle size={24} />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-              Vencidos (SLA)
-            </p>
-            <p className="text-2xl font-black text-rose-600 animate-pulse">
-              {conteoVencidos}
-            </p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Vencidos (SLA)</p>
+            <p className="text-2xl font-black text-rose-600 animate-pulse">{conteoVencidos}</p>
           </div>
         </div>
         <div
@@ -505,12 +513,20 @@ export default function TicketsPage() {
             <Clock size={24} />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-              Pendientes
-            </p>
-            <p className="text-2xl font-black text-gray-900">
-              {conteoPendientes}
-            </p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pendientes</p>
+            <p className="text-2xl font-black text-gray-900">{conteoPendientes}</p>
+          </div>
+        </div>
+        <div
+          onClick={() => toggleFiltroEstado("Resuelto")}
+          className={`bg-white p-4 rounded-2xl border cursor-pointer shadow-sm flex items-center gap-4 transition-all ${estadoFiltro === "Resuelto" ? "ring-2 ring-cyan-400 border-transparent bg-cyan-50/30" : "border-gray-200 hover:border-cyan-300"}`}
+        >
+          <div className="bg-cyan-100 p-3 rounded-xl text-cyan-600">
+            <CheckCircle2 size={24} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">X Confirmar</p>
+            <p className="text-2xl font-black text-gray-900">{conteoResueltos}</p>
           </div>
         </div>
         <div
@@ -521,12 +537,8 @@ export default function TicketsPage() {
             <CheckCircle2 size={24} />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-              Resueltos
-            </p>
-            <p className="text-2xl font-black text-gray-900">
-              {conteoCerrados}
-            </p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cerrados</p>
+            <p className="text-2xl font-black text-gray-900">{conteoCerrados}</p>
           </div>
         </div>
       </div>
@@ -734,7 +746,7 @@ export default function TicketsPage() {
                           </span>
                           {esNuevo && (
                             <span className="bg-amber-400 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md animate-bounce shadow-sm">
-                              ✨ NUEVO
+                               NUEVO
                             </span>
                           )}
                         </div>
@@ -1080,22 +1092,33 @@ export default function TicketsPage() {
                 className="h-11 text-sm font-medium border-gray-300"
               />
             </div>
-
             <div className="space-y-2">
               <Label className="text-[11px] font-bold text-gray-700 uppercase">
-                Mensaje Inicial (Instrucciones) *
+                Mensaje Inicial (Instrucciones) y Adjuntos *
               </Label>
-              <textarea
-                className="w-full h-24 border border-gray-300 rounded-lg p-3 text-sm resize-none outline-none focus:border-primary"
-                placeholder="Escribe los detalles..."
-                value={nuevoTicket.mensajeInicial}
-                onChange={(e) =>
-                  setNuevoTicket({
-                    ...nuevoTicket,
-                    mensajeInicial: e.target.value,
-                  })
-                }
-              />
+              <div 
+                className={`relative border-2 border-dashed rounded-lg transition-colors ${isDraggingNuevo ? 'border-primary bg-primary/5' : 'border-gray-300 bg-white'}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingNuevo(true); }}
+                onDragLeave={() => setIsDraggingNuevo(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingNuevo(false);
+                  if (e.dataTransfer.files?.[0]) setArchivoNuevoTicket(e.dataTransfer.files[0]);
+                }}
+              >
+                <textarea
+                  className="w-full h-24 p-3 text-sm resize-none outline-none bg-transparent"
+                  placeholder="Escribe los detalles o arrastra una imagen/PDF aquí..."
+                  value={nuevoTicket.mensajeInicial}
+                  onChange={(e) => setNuevoTicket({ ...nuevoTicket, mensajeInicial: e.target.value })}
+                />
+              </div>
+              {archivoNuevoTicket && (
+                <div className="bg-blue-50 border border-blue-200 p-2 rounded-lg flex justify-between items-center text-xs text-blue-800 font-bold">
+                  <span>📎 {archivoNuevoTicket.name}</span>
+                  <button type="button" onClick={() => setArchivoNuevoTicket(null)} className="text-red-500"><X size={14}/></button>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="mt-4 border-t border-gray-100 pt-4 flex flex-col sm:flex-row gap-2">

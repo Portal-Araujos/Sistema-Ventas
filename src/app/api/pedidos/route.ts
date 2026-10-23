@@ -1,11 +1,10 @@
+import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+
 
 const parseId = (val: any) => {
   if (!val) return null;
@@ -25,7 +24,7 @@ export async function GET(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const userRol = payload.rol as string;
     const userId = payload.id as string;
     const { searchParams } = new URL(request.url);
@@ -308,7 +307,7 @@ export async function PUT(request: Request) {
     let userRol = "";
 
     if (token) {
-      const { payload } = await jwtVerify(token, JWT_SECRET);
+      const { payload } = await jwtVerify(token, getJwtSecret());
       userIdFallback = payload.id as string;
       userRol = payload.rol as string;
     }
@@ -541,7 +540,7 @@ export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get("session_token")?.value;
-    const { payload } = await jwtVerify(token!, JWT_SECRET);
+    const { payload } = await jwtVerify(token!, getJwtSecret());
     const userId = payload.id as string;
     const userRol = payload.rol as string;
     const body = await request.json();
@@ -643,7 +642,7 @@ export async function DELETE(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const userRol = payload.rol as string;
     const userId = payload.id as string;
     const { searchParams } = new URL(request.url);

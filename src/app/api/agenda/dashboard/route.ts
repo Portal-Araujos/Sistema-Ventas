@@ -1,11 +1,10 @@
+import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+
 
 export async function GET(request: Request) {
   try {
@@ -17,7 +16,7 @@ export async function GET(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const isVendedor = payload.rol === "vendedor";
     const finalUserId = isVendedor
       ? (payload.id as string)

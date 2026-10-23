@@ -409,7 +409,7 @@ export default function ContratoVentaForm({
                 <Label className="text-[10px] font-bold text-gray-700 uppercase">
                   Tipo de Cliente
                 </Label>
-                <select
+                <select required
                   value={data.tipoClienteId || ""}
                   onChange={(e) =>
                     handleDataChange("tipoClienteId", e.target.value)
@@ -434,7 +434,7 @@ export default function ContratoVentaForm({
                 <Label className="text-[10px] font-bold text-gray-700 uppercase">
                   Valor Total *
                 </Label>
-                <Input
+                <Input required
                   type="number"
                   step="0.01"
                   value={data.valorContrato || ""}
@@ -462,7 +462,7 @@ export default function ContratoVentaForm({
                 <Label className="text-[10px] font-bold text-gray-700 uppercase">
                   Meses Plazo
                 </Label>
-                <Input
+                <Input required
                   type="number"
                   min="1"
                   value={data.meses || "12"}
@@ -510,7 +510,7 @@ export default function ContratoVentaForm({
                 <Label className="text-[10px] font-bold text-gray-700 uppercase">
                   Tipo Cobro *
                 </Label>
-                <select
+                <select required
                   value={data.tipoCobroId || ""}
                   onChange={(e) =>
                     handleDataChange("tipoCobroId", e.target.value)
@@ -536,7 +536,7 @@ export default function ContratoVentaForm({
                 >
                   Est. Entrega Venta
                 </Label>
-                <select
+                <select required
                   disabled={bloquearEstadoEntrega}
                   value={data.estadoClienteId || ""}
                   onChange={(e) =>
@@ -561,7 +561,7 @@ export default function ContratoVentaForm({
                 <Label className="text-[10px] font-bold text-gray-700 uppercase">
                   Est. Contrato
                 </Label>
-                <select
+                <select required
                   value={data.estadoContratoId || ""}
                   onChange={(e) =>
                     handleDataChange("estadoContratoId", e.target.value)

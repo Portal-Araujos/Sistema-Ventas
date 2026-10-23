@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { jwtVerify } from "jose";
-import { cookies } from "next/headers";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+import {
+  getApiSession,
+  hasPermission,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
 export async function GET() {
   try {
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "usuarios:gestionar")) {
+      return NextResponse.json({ error: "No tienes permisos" }, { status: 403 });
+    }
+
     const roles = await prisma.rol.findMany({
       include: {
         _count: { select: { usuarios: true } },
@@ -35,12 +40,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.rol !== "super_admin")
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (session.rol !== "super_admin")
       return NextResponse.json(
         { error: "Solo el Super Admin puede crear roles" },
         { status: 403 },
@@ -60,12 +62,9 @@ export async function POST(request: Request) {
 }
 export async function PUT(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.rol !== "super_admin")
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (session.rol !== "super_admin")
       return NextResponse.json(
         { error: "Solo el Super Admin puede editar roles" },
         { status: 403 },

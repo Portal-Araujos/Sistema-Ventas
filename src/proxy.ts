@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+import { getJwtSecret } from "@/lib/jwt";
 
 export async function proxy(request: NextRequest) {
   const token = request.cookies.get("session_token")?.value;
@@ -13,14 +10,26 @@ export async function proxy(request: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/login") ||
-    pathname.startsWith("/api/auth") ||
+    pathname === "/api/auth/login" ||
+    pathname === "/api/auth/logout" ||
+    pathname === "/api/auth/verify-session" ||
     pathname === "/favicon.ico"
   ) {
     return NextResponse.next();
   }
 
+  const isApiRequest = pathname.startsWith("/api/");
+  const rejectRequest = (status = 401) => {
+    const response = isApiRequest
+      ? NextResponse.json({ error: "No autorizado" }, { status })
+      : NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("session_token");
+    response.cookies.delete("last_activity");
+    return response;
+  };
+
   if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return rejectRequest();
   }
   const ahora = Date.now();
   const TIEMPO_INACTIVIDAD_MAX = 30 * 60 * 1000; // 30 Minutos en milisegundos
@@ -28,10 +37,14 @@ export async function proxy(request: NextRequest) {
   if (lastActivity) {
     const tiempoInactivo = ahora - parseInt(lastActivity, 10);
     if (tiempoInactivo > TIEMPO_INACTIVIDAD_MAX) {
-      // Pasó el tiempo. Lo botamos y borramos las cookies.
-      const response = NextResponse.redirect(
-        new URL("/login?error=inactividad", request.url),
-      );
+      const response = isApiRequest
+        ? NextResponse.json(
+            { error: "La sesión expiró por inactividad" },
+            { status: 401 },
+          )
+        : NextResponse.redirect(
+            new URL("/login?error=inactividad", request.url),
+          );
       response.cookies.delete("session_token");
       response.cookies.delete("last_activity");
       return response;
@@ -39,37 +52,44 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    const rol = payload.rol as string;
-    const permisos = (payload.permisos as string[]) || [];
-    const sessionId = payload.sessionId as string; // La llave anti-clon
-    const userId = payload.id as string;
+    const { payload } = await jwtVerify(token, getJwtSecret());
+    if (
+      typeof payload.rol !== "string" ||
+      typeof payload.sessionId !== "string" ||
+      typeof payload.id !== "string"
+    ) {
+      return rejectRequest();
+    }
+    const rol = payload.rol;
+    const permisos = Array.isArray(payload.permisos)
+      ? payload.permisos.filter((permission): permission is string =>
+          typeof permission === "string",
+        )
+      : [];
     const forwardedFor = request.headers.get("x-forwarded-for");
     const ip = forwardedFor ? forwardedFor.split(",")[0] : "127.0.0.1";
-    const verifyRes = await fetch(
-      new URL("/api/auth/verify-session", request.url),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, sessionId, ip, rol }),
-      },
-    );
-
-    if (verifyRes.ok) {
-      const verifyData = await verifyRes.json();
-      if (!verifyData.valid) {
-        // Falló la seguridad (Alguien más entró o su IP es inválida)
-        const response = NextResponse.redirect(
-          new URL(`/login?error=${verifyData.reason}`, request.url),
-        );
-        response.cookies.delete("session_token");
-        response.cookies.delete("last_activity");
-        return response;
-      }
+    const verifyRes = await fetch(new URL("/api/auth/verify-session", request.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, ip }),
+      cache: "no-store",
+    });
+    if (!verifyRes.ok) {
+      return isApiRequest
+        ? NextResponse.json(
+            { error: "No se pudo verificar la sesión" },
+            { status: 503 },
+          )
+        : NextResponse.redirect(new URL("/login?error=verificacion", request.url));
     }
+    const verifyData = await verifyRes.json();
+    if (!verifyData.valid) {
+      return rejectRequest();
+    }
+
     let response = NextResponse.next();
 
-    if (rol !== "super_admin") {
+    if (!isApiRequest && rol !== "super_admin") {
       const rutasProtegidas: Record<string, string> = {
         "/configuracion/skus": "skus:ver",
         "/pedidos": "pedidos:ver",
@@ -128,16 +148,14 @@ export async function proxy(request: NextRequest) {
 
     return response;
   } catch (error) {
-    // Si el token es inválido, manipulado o venció las 8 horas
-    const response = NextResponse.redirect(new URL("/login", request.url));
-    response.cookies.delete("session_token");
-    response.cookies.delete("last_activity");
-    return response;
+    console.error("Error al verificar la sesión:", error);
+    return rejectRequest();
   }
 }
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/uploads/:path*",
   ],
 };

@@ -1,16 +1,15 @@
+import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+
 async function isSuperAdmin() {
   const cookieStore = await cookies();
   const token = cookieStore.get("session_token")?.value;
   if (!token) return false;
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return payload.rol === "super_admin";
   } catch {
     return false;

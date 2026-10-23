@@ -20,6 +20,10 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Environment variables
+
+Configure `JWT_SECRET` in the local environment and in the deployment provider. It must contain at least 32 bytes; the application fails closed when it is missing or too short. Keep `.env` files out of Git and store production values in the deployment provider's secret manager.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

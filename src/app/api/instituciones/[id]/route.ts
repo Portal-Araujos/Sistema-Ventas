@@ -1,20 +1,40 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { jwtVerify } from "jose";
-import { cookies } from "next/headers";
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
-
+import {
+  forbiddenResponse,
+  getApiSession,
+  hasPermission,
+  isAdministrator,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await params;
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "instituciones:ver")) {
+      return forbiddenResponse();
+    }
 
-    const institucion = await prisma.institution.findUnique({
-      where: { id },
+    const { id } = await params;
+    const where: {
+      id: string;
+      OR?: Array<
+        | { vendedorId: string }
+        | { visitas: { some: { usuarioId: string } } }
+      >;
+    } = { id };
+    if (session.rol === "vendedor") {
+      where.OR = [
+        { vendedorId: session.id },
+        { visitas: { some: { usuarioId: session.id } } },
+      ];
+    }
+
+    const institucion = await prisma.institution.findFirst({
+      where,
       include: {
         parroquia: {
           include: { canton: { include: { provincia: true } } },
@@ -27,14 +47,31 @@ export async function GET(
         jurisdiccion: true,
         modalidad: true,
         accesoEdificio: true,
-        vendedor: { select: { id: true, nombre: true, email: true } },
+        vendedor: { select: { id: true, nombre: true } },
         usuarioCreador: { select: { id: true, nombre: true } },
         visitas: {
           where: { estadoGestion: { not: "No Visitada" } },
-          include: { usuario: { select: { nombre: true, email: true } } },
+          select: {
+            id: true,
+            tipoGestion: true,
+            estadoGestion: true,
+            createdAt: true,
+            resumenAcuerdos: true,
+            latitud: true,
+            longitud: true,
+            fechaProgramada: true,
+            usuario: { select: { nombre: true } },
+          },
           orderBy: { createdAt: "desc" },
         },
         ventas: {
+          select: {
+            id: true,
+            numContrato: true,
+            fechaVenta: true,
+            valorContrato: true,
+            estadoTicket: true,
+          },
           orderBy: { fechaVenta: "desc" },
         },
       },
@@ -59,7 +96,31 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "instituciones:editar")) {
+      return forbiddenResponse();
+    }
+
     const { id } = await params;
+    if (session.rol === "vendedor") {
+      const asignacion = await prisma.institution.findFirst({
+        where: {
+          id,
+          OR: [
+            { vendedorId: session.id },
+            { visitas: { some: { usuarioId: session.id } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!asignacion) {
+        return NextResponse.json(
+          { error: "Institución no encontrada" },
+          { status: 404 },
+        );
+      }
+    }
     const body = await request.json();
     const {
       nombre,
@@ -77,6 +138,29 @@ export async function PUT(
       vendedorId,
     } = body;
 
+    if (
+      !isAdministrator(session) &&
+      vendedorId !== undefined &&
+      vendedorId !== session.id
+    ) {
+      return forbiddenResponse();
+    }
+    const vendedorValido = isAdministrator(session) && vendedorId
+      ? await prisma.usuario.findFirst({
+          where: {
+            id: vendedorId,
+            activo: true,
+            rol: { nombre: "vendedor" },
+          },
+          select: { id: true },
+        })
+      : null;
+    if (isAdministrator(session) && vendedorId && !vendedorValido) {
+      return NextResponse.json(
+        { error: "Vendedor no encontrado" },
+        { status: 400 },
+      );
+    }
     const hombres = parseInt(docentesHombres) || 0;
     const mujeres = parseInt(docentesMujeres) || 0;
     const totalDocentes = hombres + mujeres;
@@ -108,7 +192,9 @@ export async function PUT(
         jurisdiccionId: jurisdiccionId ? parseInt(jurisdiccionId) : null,
         modalidadId: modalidadId ? parseInt(modalidadId) : null,
         accesoEdificioId: accesoEdificioId ? parseInt(accesoEdificioId) : null,
-        vendedorId: vendedorId && vendedorId !== "" ? vendedorId : null,
+        vendedorId: isAdministrator(session)
+          ? vendedorValido?.id ?? null
+          : session.id,
       },
     });
 
@@ -125,14 +211,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.rol !== "super_admin" && payload.rol !== "administrador") {
-      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
-    }
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!isAdministrator(session)) return forbiddenResponse();
     const { id } = await params;
     await prisma.institution.delete({ where: { id } });
     return NextResponse.json({ success: true });

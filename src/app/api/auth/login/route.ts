@@ -1,13 +1,13 @@
+import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import * as argon2 from "argon2";
 import { SignJWT } from "jose";
 import prisma from "@/lib/prisma";
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+
 
 export async function POST(request: Request) {
   try {
+    const jwtSecret = getJwtSecret();
     const body = await request.json();
     const { email, password } = body;
     const forwardedFor = request.headers.get("x-forwarded-for");
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
     })
       .setProtectedHeader({ alg: "HS256" })
       .setExpirationTime("8h")
-      .sign(JWT_SECRET);
+      .sign(jwtSecret);
 
     const response = NextResponse.json({
       success: true,

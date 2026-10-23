@@ -1,20 +1,32 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import * as argon2 from "argon2";
-import { jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import {
+  forbiddenResponse,
+  getApiSession,
+  isAdministrator,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
 export async function GET() {
   try {
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+
     const usuarios = await prisma.usuario.findMany({
-      include: {
-        rol: true,
-        institucionesAsignadas: {
-          select: { id: true, nombre: true },
-        },
+      where: {
+        activo: true,
+        rol: { nombre: "vendedor" },
+      },
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        activo: true,
+        rolId: true,
+        rol: { select: { nombre: true } },
+        institucionesAsignadas: { select: { id: true, nombre: true } },
+        createdAt: true,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -39,23 +51,36 @@ export async function GET() {
 }
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.rol !== "super_admin" && payload.rol !== "administrador") {
-      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
-    }
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!isAdministrator(session)) return forbiddenResponse();
+
     const body = await request.json();
     const { nombre, email, password, rolId } = body;
-    if (!nombre || !email || !password || !rolId) {
+    if (
+      typeof nombre !== "string" ||
+      !nombre.trim() ||
+      typeof email !== "string" ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      typeof password !== "string" ||
+      password.length < 8
+    ) {
       return NextResponse.json(
         { error: "Todos los campos son obligatorios" },
         { status: 400 },
       );
     }
-    const existe = await prisma.usuario.findUnique({ where: { email } });
+    const rol = await prisma.rol.findUnique({
+      where: { nombre: "vendedor" },
+      select: { id: true },
+    });
+    if (!rol || (rolId !== undefined && Number(rolId) !== rol.id)) {
+      return NextResponse.json({ error: "Rol de vendedor inválido" }, { status: 400 });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    const existe = await prisma.usuario.findUnique({
+      where: { email: normalizedEmail },
+    });
     if (existe) {
       return NextResponse.json(
         { error: "Este correo electrónico ya está registrado" },
@@ -65,10 +90,17 @@ export async function POST(request: Request) {
     const passwordHash = await argon2.hash(password);
     const nuevoUsuario = await prisma.usuario.create({
       data: {
-        nombre,
-        email,
+        nombre: nombre.trim(),
+        email: normalizedEmail,
         passwordHash,
-        rolId: parseInt(rolId),
+        rolId: rol.id,
+        activo: true,
+      },
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        rolId: true,
         activo: true,
       },
     });
@@ -84,20 +116,65 @@ export async function POST(request: Request) {
 }
 export async function PUT(request: Request) {
   try {
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!isAdministrator(session)) return forbiddenResponse();
+
     const body = await request.json();
     const { id, activo, nombre, password } = body;
-    if (!id)
+    if (typeof id !== "string" || !id)
       return NextResponse.json(
         { error: "ID de usuario requerido" },
         { status: 400 },
       );
-    const updateData: any = {};
-    if (typeof activo === "boolean") updateData.activo = activo;
-    if (nombre) updateData.nombre = nombre;
-    if (password) updateData.passwordHash = await argon2.hash(password);
+    const vendedor = await prisma.usuario.findFirst({
+      where: { id, rol: { nombre: "vendedor" } },
+      select: { id: true },
+    });
+    if (!vendedor) {
+      return NextResponse.json(
+        { error: "Vendedor no encontrado" },
+        { status: 404 },
+      );
+    }
+
+    const updateData: {
+      activo?: boolean;
+      nombre?: string;
+      passwordHash?: string;
+      tokenSesionActual?: null;
+    } = {};
+    if (activo !== undefined) {
+      if (typeof activo !== "boolean") {
+        return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+      }
+      updateData.activo = activo;
+    }
+    if (nombre !== undefined) {
+      if (typeof nombre !== "string" || !nombre.trim()) {
+        return NextResponse.json({ error: "Nombre inválido" }, { status: 400 });
+      }
+      updateData.nombre = nombre.trim();
+    }
+    if (password !== undefined) {
+      if (typeof password !== "string" || password.length < 8) {
+        return NextResponse.json(
+          { error: "La contraseña debe tener al menos 8 caracteres" },
+          { status: 400 },
+        );
+      }
+      updateData.passwordHash = await argon2.hash(password);
+      updateData.tokenSesionActual = null;
+    }
     const usuarioActualizado = await prisma.usuario.update({
       where: { id },
       data: updateData,
+      select: {
+        id: true,
+        nombre: true,
+        email: true,
+        activo: true,
+      },
     });
     return NextResponse.json(usuarioActualizado);
   } catch (error) {

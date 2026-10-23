@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import * as XLSX from "xlsx";
 import {
   DollarSign,
@@ -18,10 +19,12 @@ import {
   Ticket,
   Database,
   UploadCloud,
+  Clock,X ,User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+
 import {
   Table,
   TableBody,
@@ -112,6 +115,7 @@ export default function VentasPage() {
     mensajeInicial: string;
     institucionNombre: string;
     asignadoNombre: string;
+    fechaLimite: string;
   }>({
     open: false,
     tipo: "",
@@ -122,7 +126,30 @@ export default function VentasPage() {
     mensajeInicial: "",
     institucionNombre: "",
     asignadoNombre: "",
+    fechaLimite: "",
   });
+
+  const [archivoTicketVenta, setArchivoTicketVenta] = useState<File | null>(null);
+  const [isDraggingTicket, setIsDraggingTicket] = useState(false);
+  const [usuariosSeleccionadosTicket, setUsuariosSeleccionadosTicket] = useState<any[]>([]);
+  const [busquedaUserTicket, setBusquedaUserTicket] = useState("");
+  const [resultadosUserTicket, setResultadosUserTicket] = useState<any[]>([]);
+  const [dropdownUserTicket, setDropdownUserTicket] = useState(false);
+  const handleBuscarUsuarioTicket = (termino: string) => {
+    setBusquedaUserTicket(termino);
+    const termLimpio = termino.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    if (termLimpio.length < 1) {
+      setResultadosUserTicket([]);
+      setDropdownUserTicket(false);
+      return;
+    }
+    const filtrados = (catalogos?.usuarios || []).filter((u: any) =>
+      u.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(termLimpio) ||
+      (u.rol?.nombre && u.rol.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(termLimpio))
+    );
+    setResultadosUserTicket(filtrados);
+    setDropdownUserTicket(true);
+  };
   const hoyStr = new Date().toISOString().split("T")[0];
   const initialFormVenta = {
     id: "",
@@ -629,36 +656,64 @@ export default function VentasPage() {
       mensajeInicial: "",
       institucionNombre: v.institucionNombre,
       asignadoNombre: v.vendedorNombre,
+      fechaLimite: "",
+
     });
   };
 
   const handleCrearTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ticketModal.tipo)
-      return showToast("alerta", "Selecciona el Área Responsable");
-    if (!ticketModal.mensajeInicial)
-      return showToast("alerta", "Escribe las instrucciones de la novedad");
+    if (!ticketModal.tipo) return showToast("alerta", "Selecciona el Área Responsable");
+    if (!ticketModal.fechaLimite) return showToast("alerta", "Selecciona la Fecha Límite de resolución");
+    
+    if (!ticketModal.mensajeInicial.trim() && !archivoTicketVenta) {
+      return showToast("alerta", "Escribe las instrucciones o adjunta un archivo");
+    }
+
     setSaving(true);
     try {
-      const payload = { accion: "crearTicket", ...ticketModal };
+      const formData = new FormData();
+      formData.append("accion", "crearTicket");
+      formData.append("tipo", ticketModal.tipo);
+      formData.append("institucionId", ticketModal.institucionId);
+      formData.append("prioridad", ticketModal.prioridad);
+      formData.append("asunto", ticketModal.asunto);
+      formData.append("fechaLimite", ticketModal.fechaLimite);
+      
+      // Unimos el asignado automático con los extra que el usuario elija
+      const todosAsignados = Array.from(new Set([...ticketModal.asignadosIds, ...usuariosSeleccionadosTicket.map(u => u.id)]));
+      formData.append("asignadosIds", JSON.stringify(todosAsignados));
+
+      const textoInicial = ticketModal.mensajeInicial.trim() 
+        ? ticketModal.mensajeInicial 
+        : (archivoTicketVenta?.type.startsWith("audio/") ? "🎵 Nota de voz de solicitud" : "📎 Archivo adjunto enviado");
+      
+      formData.append("mensajeInicial", textoInicial);
+
+      if (archivoTicketVenta) {
+        formData.append("file", archivoTicketVenta);
+      }
+
       const res = await fetch("/api/tickets", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: formData,
       });
+
       if (res.ok) {
-        setTicketModal((prev) => ({ ...prev, open: false }));
-        showToast("exito", "¡Ticket generado y asignado al vendedor!");
+        setTicketModal((prev) => ({ ...prev, open: false, mensajeInicial: "", fechaLimite: "" }));
+        setArchivoTicketVenta(null);
+        setUsuariosSeleccionadosTicket([]);
+        setBusquedaUserTicket("");
+        showToast("exito", "¡Ticket generado y asignado!");
       } else {
-        showToast("error", "Error al crear el ticket");
+        showToast("error", "Error al crear el ticket (Verifica el formato del archivo)");
       }
-    } catch (e) {
+    } catch (error) {
       showToast("error", "Error de conexión");
     } finally {
       setSaving(false);
     }
   };
-
   const puedeValidar =
     userPermisos.includes("ventas:validar") ||
     userRol === "super_admin" ||
@@ -1001,6 +1056,9 @@ export default function VentasPage() {
                     <TableHead className="font-semibold text-gray-700 w-36">
                       Vendedor
                     </TableHead>
+                    <TableHead className="font-semibold text-gray-700 w-40">
+                      Cliente / Cédula
+                    </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-32">
                       Valor / Cuota
                     </TableHead>
@@ -1016,8 +1074,8 @@ export default function VentasPage() {
                     <TableHead className="font-semibold text-gray-700 w-48">
                       Observaciones
                     </TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-center w-24">
-                      Cédula
+                    <TableHead className="font-semibold text-gray-700 text-center w-32">
+                      Prendas/Bordados
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-32">
                       Acción
@@ -1027,13 +1085,13 @@ export default function VentasPage() {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8">
+                      <TableCell colSpan={10} className="text-center py-8">
                         Cargando...
                       </TableCell>
                     </TableRow>
                   ) : ventasPaginadas.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8">
+                      <TableCell colSpan={10} className="text-center py-8">
                         No hay ventas que coincidan con este filtro.
                       </TableCell>
                     </TableRow>
@@ -1054,6 +1112,7 @@ export default function VentasPage() {
                             {v.institucionNombre}
                           </div>
                         </TableCell>
+                        {/* CELDA: VENDEDOR */}
                         <TableCell className="w-36">
                           <div
                             className="text-xs font-bold text-gray-800 truncate"
@@ -1061,15 +1120,30 @@ export default function VentasPage() {
                           >
                             👤 {v.vendedorNombre}
                           </div>
-                          <div className="text-[12px] text-gray-500">
+                          <div className="text-[10px] text-gray-500 font-medium mt-0.5">
                             {v.fechaVenta}
+                          </div>
+                        </TableCell>
+
+                        {/*  NUEVA CELDA: CLIENTE Y CÉDULA  */}
+                        <TableCell className="w-40 align-middle">
+                          <div className="text-xs font-bold text-gray-900 truncate" title={v.nombreCliente}>
+                            {v.nombreCliente || "Sin Cliente"}
+                          </div>
+                          <div className="text-[10px] text-gray-900 font-mono mt-0.5 flex items-center gap-1">
+                            {v.tieneCedula ? (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 bg-emerald-50 text-emerald-700 border-emerald-200">C.I.</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[9px] px-1 py-0 bg-red-50 text-red-700 border-red-200">S/C</Badge>
+                            )}
+                            {v.numeroCedula || "No registrada"}
                           </div>
                         </TableCell>
                         <TableCell className="text-center w-32">
                           <div className="text-sm font-extrabold text-emerald-700">
                             ${v.valorContrato.toFixed(2)}
                           </div>
-                          <div className="text-[12px] text-gray-500">
+                          <div className="text-[11px] text-gray-500 font-medium">
                             {v.meses} m x ${v.cuotaMensual.toFixed(2)}
                           </div>
                         </TableCell>
@@ -1107,30 +1181,48 @@ export default function VentasPage() {
                               : "Pendiente"}
                           </span>
                         </TableCell>
-                        <TableCell className="w-48 max-w-192px align-middle">
+                        <TableCell className="w-48 max-w-192px] align-middle">
                           <div
-                            className={`text-[11px] font-medium italic overflow-wrap: break-word line-clamp-2 max-w-192px overflow-hidden ${v.observacionesFact !== "Sin observaciones" && v.observacionesFact.trim() !== "" ? "text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200" : "text-gray-400"}`}
+                            className={`text-[11px] font-medium italic overflow-wrap: break-word line-clamp-2 max-w-192px] overflow-hidden ${v.observacionesFact !== "Sin observaciones" && v.observacionesFact.trim() !== "" ? "text-amber-700 bg-amber-50 p-1.5 rounded border border-amber-200" : "text-gray-400"}`}
                             title={v.observacionesFact}
                           >
                             {v.observacionesFact}
                           </div>
                         </TableCell>
-                        <TableCell className="text-center w-24 align-middle">
-                          <Badge
-                            variant="outline"
-                            className={
-                              v.tieneCedula
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : "bg-red-50 text-red-700 border-red-200"
-                            }
-                          >
-                            {v.tieneCedula ? "SÍ" : "NO"}
-                          </Badge>
-                          {v.tieneCedula && v.numeroCedula && (
-                            <span className="block text-[13px] font-mono font-bold text-gray-600 mt-1">
-                              {v.numeroCedula}
-                            </span>
-                          )}
+                        <TableCell className="text-center w-32 align-middle">
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Badge variant="outline" className="cursor-pointer bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 text-[10px] font-bold transition-colors">
+                                Ver {v.prendas?.length || 0} prendas
+                              </Badge>
+                            </PopoverTrigger>
+                            <PopoverContent 
+                              side="top" 
+                              align="center" 
+                              className="w-64 bg-gray-900 text-white border-gray-800 p-3 shadow-2xl z-9999"
+                            >
+                              <p className="font-bold text-blue-300 mb-2 border-b border-gray-700 pb-1 text-left text-xs">
+                                Detalle de Prendas y Bordados
+                              </p>
+                              <div className="space-y-2 max-h-48 overflow-y-auto text-left hide-scrollbar pr-1">
+                                {v.prendas?.map((p: any, idx: number) => (
+                                  <div key={idx} className="border-b border-gray-700 pb-2 last:border-0 last:pb-0">
+                                    <p className="font-bold text-gray-200 text-[11px] leading-tight">
+                                      {p.tipoRopa} <span className="font-normal text-gray-400">({p.color} - {p.talla})</span>
+                                    </p>
+                                    {(p.bordado || p.observacion) ? (
+                                      <div className="pl-2 mt-1 border-l-2 border-blue-500 space-y-0.5">
+                                        {p.bordado && <p className="text-[10px] text-blue-200">🧵 <span className="font-semibold text-white">Bordado:</span> {p.bordado}</p>}
+                                        {p.observacion && <p className="text-[10px] text-amber-200">⚠️ <span className="font-semibold text-white">Obs:</span> {p.observacion}</p>}
+                                      </div>
+                                    ) : (
+                                      <p className="text-[9px] text-gray-500 italic pl-2 mt-0.5">Prenda estándar (Sin bordado)</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                         </TableCell>
                         <TableCell className="text-center w-32">
                           <div className="flex justify-center gap-1">
@@ -1172,7 +1264,7 @@ export default function VentasPage() {
                                   setFactModal({ open: true, venta: v });
                                 }}
                               >
-                                <Edit3 size={14} className="mr-1" /> Auditar
+                                <Edit3  /> Auditar
                               </Button>
                             )}
                           </div>
@@ -1608,7 +1700,7 @@ export default function VentasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* 🔥 NUEVO MODAL: RESUMEN DE CAMBIOS ANTES DE GUARDAR 🔥 */}
+      {/*  NUEVO MODAL: RESUMEN DE CAMBIOS ANTES DE GUARDAR  */}
       <Dialog open={baseConfirmModal.open} onOpenChange={(val) => !isImportingBase && setBaseConfirmModal(prev => ({...prev, open: val}))}>
         <DialogContent className="sm:max-w-3xl bg-white p-6 rounded-xl max-h-[90vh] flex flex-col">
           <DialogHeader>
@@ -2194,11 +2286,15 @@ export default function VentasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+
+
+
       <Dialog
         open={ticketModal.open}
         onOpenChange={(val) => setTicketModal({ ...ticketModal, open: val })}
       >
-        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
+        <DialogContent className="sm:max-w-xl bg-white p-6 rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
               <Ticket className="text-amber-600" /> Generar Ticket de Novedad
@@ -2223,39 +2319,64 @@ export default function VentasPage() {
                 </div>
               </div>
             </div>
+
+            {/* ASIGNAR PERSONAS EXTRA */}
+            <div className="space-y-2 relative">
+              <Label className="text-[10px] font-bold text-gray-700 uppercase flex items-center gap-1">
+                <User size={12}/> Añadir más personas al ticket (Opcional)
+              </Label>
+              {usuariosSeleccionadosTicket.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {usuariosSeleccionadosTicket.map((u) => (
+                    <Badge key={u.id} variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1 py-1 pr-2">
+                      {u.nombre}
+                      <button type="button" onClick={() => setUsuariosSeleccionadosTicket(prev => prev.filter(x => x.id !== u.id))} className="ml-1 hover:text-red-500"><X size={12}/></button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-3.5 text-gray-400" />
+                <Input
+                  className="pl-9 h-11 text-sm bg-white border-gray-300"
+                  placeholder="Buscar para añadir personas..."
+                  value={busquedaUserTicket}
+                  onChange={(e) => handleBuscarUsuarioTicket(e.target.value)}
+                  onFocus={() => { if (!busquedaUserTicket) handleBuscarUsuarioTicket(" "); }}
+                />
+              </div>
+              {dropdownUserTicket && (
+                <ul className="absolute z-50 w-full bg-white border border-gray-200 shadow-2xl rounded-lg mt-1 max-h-48 overflow-y-auto">
+                  {resultadosUserTicket.map((user) => (
+                    <li key={user.id} className="px-4 py-2 hover:bg-primary/5 cursor-pointer border-b border-gray-50" 
+                        onClick={() => {
+                          if (!usuariosSeleccionadosTicket.find(u => u.id === user.id)) {
+                            setUsuariosSeleccionadosTicket([...usuariosSeleccionadosTicket, user]);
+                          }
+                          setBusquedaUserTicket("");
+                          setDropdownUserTicket(false);
+                        }}>
+                      <p className="text-sm font-bold text-gray-800">{user.nombre}</p>
+                      <p className="text-[10px] text-primary uppercase font-black">{user.rol?.nombre || "USUARIO"}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs font-bold text-gray-700">
-                  Área Responsable *
-                </Label>
-                <select
-                  className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none"
-                  value={ticketModal.tipo}
-                  onChange={(e) =>
-                    setTicketModal({ ...ticketModal, tipo: e.target.value })
-                  }
-                >
-                  {departamentos.map((d) => (
-                    <option key={d.id} value={d.nombre}>
-                      {d.nombre}
-                    </option>
-                  ))}
+                <Label className="text-xs font-bold text-gray-700">Área Responsable *</Label>
+                <select className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none text-blue-700 font-bold"
+                  value={ticketModal.tipo} onChange={(e) => setTicketModal({ ...ticketModal, tipo: e.target.value })}>
+                  <option value="">- Seleccionar -</option>
+                  {departamentos.map((d) => (<option key={d.id} value={d.nombre}>{d.nombre}</option>))}
                 </select>
               </div>
               <div>
-                <Label className="text-xs font-bold text-gray-700">
-                  Urgencia
-                </Label>
-                <select
-                  className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none"
-                  value={ticketModal.prioridad}
-                  onChange={(e) =>
-                    setTicketModal({
-                      ...ticketModal,
-                      prioridad: e.target.value,
-                    })
-                  }
-                >
+                <Label className="text-xs font-bold text-gray-700">Urgencia</Label>
+                <select className="w-full h-10 border rounded-md px-2 text-xs bg-white mt-1 outline-none font-bold"
+                  value={ticketModal.prioridad} onChange={(e) => setTicketModal({ ...ticketModal, prioridad: e.target.value })}>
                   <option value="Baja">🟢 Baja</option>
                   <option value="Media">🟡 Media</option>
                   <option value="Alta">🟠 Alta</option>
@@ -2263,49 +2384,56 @@ export default function VentasPage() {
                 </select>
               </div>
             </div>
-            <div>
-              <Label className="text-xs font-bold text-gray-700">
-                Asunto del Ticket *
-              </Label>
-              <Input
-                required
-                value={ticketModal.asunto}
-                onChange={(e) =>
-                  setTicketModal({ ...ticketModal, asunto: e.target.value })
-                }
-                className="mt-1 h-10 font-bold bg-gray-50"
-              />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-bold text-gray-700">Asunto del Ticket *</Label>
+                <Input required value={ticketModal.asunto} onChange={(e) => setTicketModal({ ...ticketModal, asunto: e.target.value })} className="mt-1 h-10 font-bold bg-gray-50" />
+              </div>
+              <div>
+                <Label className="text-[11px] font-bold text-gray-700 uppercase flex items-center gap-1">
+                  <Clock size={12} /> Fecha Límite (SLA) *
+                </Label>
+                <Input type="date" required min={new Date().toISOString().split("T")[0]} className="h-10 mt-1 bg-white border-gray-300 text-sm font-bold text-red-600"
+                  value={ticketModal.fechaLimite} onChange={(e) => setTicketModal({ ...ticketModal, fechaLimite: e.target.value })} />
+              </div>
             </div>
-            <div>
-              <Label className="text-xs font-bold text-gray-700">
-                Instrucciones / Novedad *
+
+            {/* DRAG AND DROP ZONE */}
+            <div className="space-y-2">
+              <Label className="text-[11px] font-bold text-gray-700 uppercase">
+                Instrucciones / Novedad y Adjuntos *
               </Label>
-              <textarea
-                required
-                className="w-full h-24 border rounded-md p-2 text-xs bg-white mt-1 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 resize-none"
-                placeholder="Ej: Falta copia de cédula..."
-                value={ticketModal.mensajeInicial}
-                onChange={(e) =>
-                  setTicketModal({
-                    ...ticketModal,
-                    mensajeInicial: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <DialogFooter className="pt-2 flex gap-2 justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setTicketModal({ ...ticketModal, open: false })}
+              <div 
+                className={`relative border-2 border-dashed rounded-lg transition-colors ${isDraggingTicket ? 'border-primary bg-primary/5' : 'border-gray-300 bg-white'}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingTicket(true); }}
+                onDragLeave={() => setIsDraggingTicket(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingTicket(false);
+                  if (e.dataTransfer.files?.[0]) setArchivoTicketVenta(e.dataTransfer.files[0]);
+                }}
               >
+                <textarea
+                  className="w-full h-24 p-3 text-sm resize-none outline-none bg-transparent"
+                  placeholder="Escribe los detalles o arrastra una imagen/PDF aquí..."
+                  value={ticketModal.mensajeInicial}
+                  onChange={(e) => setTicketModal({ ...ticketModal, mensajeInicial: e.target.value })}
+                />
+              </div>
+              {archivoTicketVenta && (
+                <div className="bg-blue-50 border border-blue-200 p-2 rounded-lg flex justify-between items-center text-xs text-blue-800 font-bold">
+                  <span className="truncate max-w-250px">📎 {archivoTicketVenta.name}</span>
+                  <button type="button" onClick={() => setArchivoTicketVenta(null)} className="text-red-500 hover:text-red-700 p-1"><X size={14}/></button>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="pt-2 flex gap-2 justify-end border-t border-gray-100 mt-4">
+              <Button type="button" variant="outline" onClick={() => { setTicketModal({ ...ticketModal, open: false }); setArchivoTicketVenta(null); }}>
                 Cancelar
               </Button>
-              <Button
-                type="submit"
-                disabled={saving}
-                className="bg-amber-500 hover:bg-amber-600 text-white font-bold"
-              >
+              <Button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md">
                 {saving ? "Enviando..." : "Crear y Asignar Ticket"}
               </Button>
             </DialogFooter>

@@ -1,10 +1,9 @@
+import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+
 export async function GET() {
   try {
     const cookieStore = await cookies();
@@ -14,7 +13,7 @@ export async function GET() {
     let userNombre = "";
     if (token) {
       try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
+        const { payload } = await jwtVerify(token, getJwtSecret());
         userRol = (payload.rol as string) || "vendedor";
         userPermisos = (payload.permisos as string[]) || [];
         if (payload.id) {
@@ -219,7 +218,7 @@ export async function POST(request: Request) {
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     if (payload.rol !== "super_admin" && payload.rol !== "administrador") {
       return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
     }
@@ -363,7 +362,7 @@ export async function PUT(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     if (payload.rol !== "super_admin" && payload.rol !== "administrador")
       return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
     const body = await request.json();

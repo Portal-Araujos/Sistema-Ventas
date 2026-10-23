@@ -1,11 +1,10 @@
+import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+
 
 export async function GET(request: Request) {
   try {
@@ -13,7 +12,7 @@ export async function GET(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const userRol = payload.rol as string;
     const userId = payload.id as string;
     const { searchParams } = new URL(request.url);
@@ -118,7 +117,7 @@ export async function POST(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const userId = payload.id as string;
     const userRol = payload.rol as string;
     const body = await request.json();
@@ -132,12 +131,12 @@ export async function POST(request: Request) {
       fechaProgramada,
       horaProgramada,
       fechaProximoContacto,
-      horaProximoContacto, // 🔥 AHORA ATRAPAMOS LA HORA
+      horaProximoContacto, //  AHORA ATRAPAMOS LA HORA
       huboVenta,
       esBorradorVenta,
       ventas,
       institucionIds,
-      vendedorId, // 🔥 NUEVA BANDERA esBorradorVenta
+      vendedorId, //  NUEVA BANDERA esBorradorVenta
     } = body;
 
     // ASIGNACIONES MASIVAS (VISTA GERENCIAL)
@@ -170,7 +169,7 @@ export async function POST(request: Request) {
             fechaProgramada: programadaMasiva,
             horaProgramada: String(horaDefectoMasivo),
             fechaProximoContacto: proximoMasivo,
-            horaProximoContacto: horaProximoContacto || null, // 🔥 GUARDAMOS LA HORA
+            horaProximoContacto: horaProximoContacto || null, //  GUARDAMOS LA HORA
             esVisitaLibre: false,
           },
         });
@@ -244,14 +243,14 @@ export async function POST(request: Request) {
         fechaProgramada: hoy,
         horaProgramada: String(horaDefecto),
         fechaProximoContacto: fechaProximo,
-        horaProximoContacto: horaProximoContacto || null, // 🔥 GUARDAMOS LA HORA EN DB
+        horaProximoContacto: horaProximoContacto || null, //  GUARDAMOS LA HORA EN DB
         esVisitaLibre: true,
       },
     });
 
     // LÓGICA DE VENTAS
     if (huboVenta) {
-      // 🔥 RUTA A: ES UN BORRADOR RÁPIDO 🔥
+      //  RUTA A: ES UN BORRADOR RÁPIDO 
       if (esBorradorVenta) {
         const codigoBorrador = `BORRADOR-${Date.now().toString().slice(-6)}`;
 
@@ -320,6 +319,7 @@ export async function POST(request: Request) {
                 : null,
               tipoClienteId: v.tipoClienteId ? parseInt(v.tipoClienteId) : null,
               tieneCedula: Boolean(v.tieneCedula),
+              numeroCedula: v.numeroCedula ? String(v.numeroCedula).trim() : null,
               estadoTicket: "Pendiente Facturación",
             },
           });

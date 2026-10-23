@@ -1,20 +1,24 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { jwtVerify } from "jose";
-import { cookies } from "next/headers";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import {
+  forbiddenResponse,
+  getApiSession,
+  hasPermission,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
+import {
+  InvalidTicketAttachmentError,
+  storeTicketAttachment,
+} from "@/lib/ticket-uploads";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
 
 export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "cobranzas:ver")) {
+      return forbiddenResponse();
+    }
 
     const { searchParams } = new URL(request.url);
     const vendedorId = searchParams.get("vendedorId");
@@ -34,7 +38,9 @@ export async function GET(request: Request) {
     const visitaWhere: any = {
       fechaProgramada: { gte: start, lte: end },
     };
-    if (vendedorId) {
+    if (session.rol === "vendedor") {
+      visitaWhere.usuarioId = session.id;
+    } else if (vendedorId) {
       visitaWhere.usuarioId = vendedorId;
     }
 
@@ -91,12 +97,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    const userId = payload.id as string;
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "cobranzas:ver")) {
+      return forbiddenResponse();
+    }
+    const userId = session.id;
 
     const data = await request.formData();
     const institucionId = data.get("institucionId") as string;
@@ -104,24 +110,79 @@ export async function POST(request: Request) {
     const deudor = data.get("deudor") as string;
     const monto = data.get("monto") as string;
     const instrucciones = data.get("instrucciones") as string;
-    const file = data.get("file") as File | null;
+    const fileEntry = data.get("file");
+    if (fileEntry !== null && !(fileEntry instanceof File)) {
+      return NextResponse.json({ error: "Archivo adjunto inválido" }, { status: 400 });
+    }
+    const file = fileEntry instanceof File ? fileEntry : null;
+    if (
+      typeof institucionId !== "string" ||
+      !institucionId ||
+      typeof deudor !== "string" ||
+      !deudor.trim() ||
+      typeof monto !== "string" ||
+      !Number.isFinite(Number(monto)) ||
+      Number(monto) < 0 ||
+      (vendedorId && typeof vendedorId !== "string")
+    ) {
+      return NextResponse.json(
+        { error: "Datos de cobranza inválidos" },
+        { status: 400 },
+      );
+    }
+    const institucion = await prisma.institution.findUnique({
+      where: { id: institucionId },
+      select: {
+        id: true,
+        vendedorId: true,
+        visitas: {
+          where: { usuarioId: userId },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    if (!institucion) {
+      return NextResponse.json(
+        { error: "Institución no encontrada" },
+        { status: 404 },
+      );
+    }
+    if (
+      session.rol === "vendedor" &&
+      institucion.vendedorId !== session.id &&
+      institucion.visitas.length === 0
+    ) {
+      return forbiddenResponse();
+    }
+    const assignedSellerId = vendedorId || userId;
+    if (session.rol === "vendedor" && assignedSellerId !== session.id) {
+      return forbiddenResponse();
+    }
+    const assignedSeller = await prisma.usuario.findFirst({
+      where: {
+        id: assignedSellerId,
+        activo: true,
+        rol: { nombre: "vendedor" },
+      },
+      select: { id: true },
+    });
+    if (!assignedSeller) {
+      return NextResponse.json(
+        { error: "Vendedor no encontrado" },
+        { status: 400 },
+      );
+    }
 
     let fileUrl = null;
     let fileTipo = null;
     let fileNombre = null;
 
-    if (file && file.size > 0) {
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      const filename = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
-      const uploadDir = path.join(process.cwd(), "public/uploads");
-      await mkdir(uploadDir, { recursive: true });
-
-      const filepath = path.join(uploadDir, filename);
-      await writeFile(filepath, buffer);
-      fileUrl = `/uploads/${filename}`;
-      fileTipo = file.type;
-      fileNombre = file.name;
+    if (file) {
+      const attachment = await storeTicketAttachment(file);
+      fileUrl = attachment.url;
+      fileTipo = attachment.mimeType;
+      fileNombre = attachment.displayName;
     }
 
     const nuevoTicket = await prisma.ticketGestion.create({
@@ -134,7 +195,7 @@ export async function POST(request: Request) {
         institucionId: institucionId,
         creadorId: userId,
         asignados: {
-          connect: { id: vendedorId || userId },
+          connect: { id: assignedSeller.id },
         },
       },
     });
@@ -153,6 +214,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, ticket: nuevoTicket });
   } catch (error) {
+    if (error instanceof InvalidTicketAttachmentError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error(error);
     return NextResponse.json(
       { error: "Error al generar ticket" },

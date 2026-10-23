@@ -1,3 +1,4 @@
+import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
@@ -5,9 +6,7 @@ import { jwtVerify } from "jose";
 import { unlink } from "fs/promises";
 import path from "path";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+
 
 export async function POST(request: Request) {
   try {
@@ -16,7 +15,7 @@ export async function POST(request: Request) {
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const userRol = payload.rol as string;
 
     // Obtenemos el nombre del usuario directamente de la base de datos para que sea exacto
@@ -61,12 +60,31 @@ export async function POST(request: Request) {
     // Ejecutamos el borrado físico y la actualización uno por uno
     for (const msg of mensajesConAdjuntos) {
       if (msg.adjuntoUrl) {
+        const filename = path.basename(msg.adjuntoUrl);
+        const paths = [
+          path.join(process.cwd(), "storage", "uploads", filename),
+          path.join(process.cwd(), "public", "uploads", filename),
+        ];
+        let fileRemoved = false;
         try {
-          const filepath = path.join(process.cwd(), "public", msg.adjuntoUrl);
-          await unlink(filepath); // Destruye el archivo físico
-        } catch (e) {
+          for (const filepath of paths) {
+            try {
+              await unlink(filepath);
+              fileRemoved = true;
+              break;
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            }
+          }
+        } catch (error) {
           console.log(
-            `El archivo físico de ${msg.adjuntoUrl} ya no estaba en el disco.`,
+            `No se pudo eliminar el archivo físico ${msg.adjuntoUrl}:`,
+            error,
+          );
+        }
+        if (!fileRemoved) {
+          console.info(
+            `El archivo físico de ${msg.adjuntoUrl} no estaba en el disco.`,
           );
         }
 

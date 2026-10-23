@@ -1,9 +1,30 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import {
+  forbiddenResponse,
+  getApiSession,
+  hasPermission,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 
 export async function GET(request: Request) {
   try {
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "base_consultas:ver")) {
+      return forbiddenResponse();
+    }
+
+    const search = new URL(request.url).searchParams.get("search")?.trim();
     const base = await prisma.baseConsulta.findMany({
+      where: search
+        ? {
+            OR: [
+              { identificacion: { contains: search, mode: "insensitive" } },
+              { nombres: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : undefined,
       include: {
         modalidad: true,
         institucion: { select: { nombre: true } },
@@ -23,11 +44,23 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "base_consultas:ver")) {
+      return forbiddenResponse();
+    }
+
     const body = await request.json();
 
     // PROCESAMIENTO MASIVO DESDE EXCEL
     if (body.masivo) {
       const rows = body.masivo;
+      if (!Array.isArray(rows) || rows.length > 5000) {
+        return NextResponse.json(
+          { error: "La importación debe contener hasta 5000 filas" },
+          { status: 400 },
+        );
+      }
       let count = 0;
 
       for (const row of rows) {
@@ -129,6 +162,12 @@ export async function POST(request: Request) {
 }
 export async function PUT(request: Request) {
   try {
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "base_consultas:ver")) {
+      return forbiddenResponse();
+    }
+
     const body = await request.json();
     if (!body.id)
       return NextResponse.json({ error: "ID es requerido" }, { status: 400 });

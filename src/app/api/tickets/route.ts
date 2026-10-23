@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
+import { getJwtSecret } from "@/lib/jwt";
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "secret-fallback",
-);
+import {
+  getApiSession,
+  isAdministrator,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
+import {
+  InvalidTicketAttachmentError,
+  storeTicketAttachment,
+} from "@/lib/ticket-uploads";
 
 export async function GET(request: Request) {
   try {
@@ -15,7 +19,7 @@ export async function GET(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const userId = payload.id as string;
     const userRol = payload.rol as string;
     const userPermisos = (payload.permisos as string[]) || [];
@@ -122,12 +126,24 @@ export async function GET(request: Request) {
           { error: "Ticket no encontrado" },
           { status: 404 },
         );
-      
 
-      // 🔥 1. EL "VISTO" DE WHATSAPP: RESETEAR CONTADOR AL ABRIR 🔥
       const soyCreadorTicket = ticket.creadorId === userId;
       const soyAsignadoTicket = ticket.asignados.some((a: any) => a.id === userId);
+      const puedeVerTicket =
+        userRol === "super_admin" ||
+        userRol === "administrador" ||
+        userPermisos.includes("ver_todos_tickets") ||
+        soyCreadorTicket ||
+        soyAsignadoTicket ||
+        (esJefe && ticket.tipo === miDepartamento);
+      if (!puedeVerTicket) {
+        return NextResponse.json(
+          { error: "Ticket no encontrado" },
+          { status: 404 },
+        );
+      }
 
+      // 🔥 1. EL "VISTO" DE WHATSAPP: RESETEAR CONTADOR AL ABRIR 🔥
       if (soyCreadorTicket && ticket.noLeidosCreador > 0) {
         await prisma.ticketGestion.update({ where: { id: ticket.id }, data: { noLeidosCreador: 0 } });
       } else if (soyAsignadoTicket && ticket.noLeidosAsignados > 0) {
@@ -210,200 +226,246 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    const userId = payload.id as string;
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    const userId = session.id;
     const contentType = request.headers.get("content-type") || "";
 
+    // 🔥 TODO LO QUE TIENE ARCHIVOS ENTRA POR AQUÍ 🔥
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
       const accion = formData.get("accion") as string;
 
+      // ----------------------------------------------------
+      // 1. LÓGICA PARA RESPONDER A UN TICKET (CON O SIN ARCHIVO)
+      // ----------------------------------------------------
       if (accion === 'enviarMensaje') {
-        const ticketId = formData.get('ticketId') as string;
-        const contenido = formData.get('contenido') as string;
-        const file = formData.get('file') as File | null;
+        const ticketIdValue = formData.get('ticketId');
+        const contenidoValue = formData.get('contenido');
+        const ticketId = Number(ticketIdValue);
+        
+        if (
+          typeof ticketIdValue !== "string" ||
+          !Number.isSafeInteger(ticketId) ||
+          ticketId < 1 ||
+          (contenidoValue !== null && typeof contenidoValue !== "string")
+        ) {
+          return NextResponse.json({ error: "Datos del mensaje inválidos" }, { status: 400 });
+        }
+        
+        const contenido = typeof contenidoValue === "string" ? contenidoValue : "";
+        if (contenido.length > 5000) {
+          return NextResponse.json({ error: "El mensaje supera el tamaño permitido" }, { status: 400 });
+        }
 
+        const ticketRelacionado = await prisma.ticketGestion.findUnique({
+          where: { id: ticketId },
+          select: {
+            id: true,
+            codigo: true,
+            creadorId: true,
+            tipo: true,
+            noLeidosAsignados: true,
+            noLeidosCreador: true,
+            asignados: { select: { id: true } },
+          },
+        });
+
+        if (!ticketRelacionado) {
+          return NextResponse.json({ error: "Ticket no encontrado" }, { status: 404 });
+        }
+
+        const currentUser = await prisma.usuario.findUnique({
+          where: { id: userId },
+          select: { esJefe: true, departamento: { select: { nombre: true } } },
+        });
+
+        const canAccessTicket =
+          isAdministrator(session) ||
+          session.permisos.includes("ver_todos_tickets") ||
+          ticketRelacionado.creadorId === userId ||
+          ticketRelacionado.asignados.some((assignedUser) => assignedUser.id === userId) ||
+          (currentUser?.esJefe === true && currentUser.departamento?.nombre === ticketRelacionado.tipo);
+
+        if (!canAccessTicket) {
+          return NextResponse.json({ error: "No tienes permisos para responder este ticket" }, { status: 403 });
+        }
+
+        const fileEntry = formData.get('file');
+        if (fileEntry !== null && !(fileEntry instanceof File)) {
+          return NextResponse.json({ error: "Archivo adjunto inválido" }, { status: 400 });
+        }
+        
+        const file = fileEntry instanceof File ? fileEntry : null;
         let fileUrl = null;
         let fileTipo = null;
         let fileNombre = null;
 
-        if (file && file.size > 0) {
-          const bytes = await file.arrayBuffer();
-          const buffer = Buffer.from(bytes);
-          const cleanFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
-          const filename = `${Date.now()}_${cleanFileName}`;
-          const uploadDir = path.join(process.cwd(), 'storage/uploads');
-          
-          await mkdir(uploadDir, { recursive: true });
-          const filepath = path.join(uploadDir, filename);
-          await writeFile(filepath, buffer);
-
-          fileUrl = `/uploads/${filename}`;
-          fileTipo = file.type;
-          fileNombre = file.name;
+        if (file) {
+          const attachment = await storeTicketAttachment(file);
+          fileUrl = attachment.url;
+          fileTipo = attachment.mimeType;
+          fileNombre = attachment.displayName;
         }
 
         const nuevoMensaje = await prisma.mensajeTicket.create({
           data: { 
-            ticketId: parseInt(ticketId), 
+            ticketId,
             remitenteId: userId, 
-            contenido: contenido || '', 
+            contenido,
             adjuntoUrl: fileUrl, 
             adjuntoTipo: fileTipo, 
             adjuntoNombre: fileNombre 
           }
         });
         
-        const ticketRelacionado = await prisma.ticketGestion.findUnique({
-          where: { id: parseInt(ticketId) },
-          include: { asignados: { select: { id: true } } }
+        const soyCreador = ticketRelacionado.creadorId === userId;
+
+        await prisma.ticketGestion.update({
+          where: { id: ticketId },
+          data: {
+            updatedAt: new Date(),
+            noLeidosAsignados: soyCreador ? { increment: 1 } : ticketRelacionado.noLeidosAsignados,
+            noLeidosCreador: !soyCreador ? { increment: 1 } : ticketRelacionado.noLeidosCreador,
+          },
         });
 
-        if (ticketRelacionado) {
-          const soyCreador = ticketRelacionado.creadorId === userId;
-          
-          await prisma.ticketGestion.update({
-            where: { id: parseInt(ticketId) },
-            data: { 
-              updatedAt: new Date(),
-              // Si yo creé el ticket, le sumo 1 a los asignados. Si no, le sumo 1 al creador.
-              noLeidosAsignados: soyCreador ? { increment: 1 } : ticketRelacionado.noLeidosAsignados,
-              noLeidosCreador: !soyCreador ? { increment: 1 } : ticketRelacionado.noLeidosCreador
-            }
-          });
-          if (soyCreador) {
-            for (const asignado of ticketRelacionado.asignados) {
-              await prisma.notificacion.create({
-                data: {
-                  titulo: `💬 Nueva respuesta en ${ticketRelacionado.codigo}`,
-                  mensaje: `El creador respondió: "${contenido.substring(0, 40)}${contenido.length > 40 ? '...' : ''}"`,
-                  tipoModulo: 'TICKETS',
-                  urlDestino: `/tickets?ticketId=${ticketId}`,
-                  usuarioDestinoId: asignado.id
-                }
-              });
-            }
-          } else {
+        if (soyCreador) {
+          for (const asignado of ticketRelacionado.asignados) {
             await prisma.notificacion.create({
               data: {
-                titulo: `💬 Respondió tu ticket ${ticketRelacionado.codigo}`,
-                mensaje: `Respuesta: "${contenido.substring(0, 40)}${contenido.length > 40 ? '...' : ''}"`,
-                tipoModulo: 'TICKETS',
+                titulo: `💬 Nueva respuesta en ${ticketRelacionado.codigo}`,
+                mensaje: `El creador respondió: "${contenido.substring(0, 40)}${contenido.length > 40 ? "..." : ""}"`,
+                tipoModulo: "TICKETS",
                 urlDestino: `/tickets?ticketId=${ticketId}`,
-                usuarioDestinoId: ticketRelacionado.creadorId
-              }
+                usuarioDestinoId: asignado.id,
+              },
             });
           }
+        } else {
+          await prisma.notificacion.create({
+            data: {
+              titulo: `💬 Respondió tu ticket ${ticketRelacionado.codigo}`,
+              mensaje: `Respuesta: "${contenido.substring(0, 40)}${contenido.length > 40 ? "..." : ""}"`,
+              tipoModulo: "TICKETS",
+              urlDestino: `/tickets?ticketId=${ticketId}`,
+              usuarioDestinoId: ticketRelacionado.creadorId,
+            },
+          });
         }
 
         return NextResponse.json({ success: true, mensaje: nuevoMensaje }, { status: 201 });
       }
       
-      return NextResponse.json(
-        { error: "Acción FormData no válida" },
-        { status: 400 },
-      );
-    }
-    const body = await request.json();
-    const { accion } = body;
-
-    if (accion === "crearTicket") {
-      const {
-        tipo,
-        asunto,
-        prioridad,
-        institucionId,
-        asignadosIds,
-        mensajeInicial,
-        fechaLimite,
-      } = body;
-      let fechaLimiteCalc = null;
-      if (fechaLimite) {
-        // Le sumamos el 23:59:59 para que venza al FINAL de ese día en hora Ecuador
-        fechaLimiteCalc = new Date(`${fechaLimite}T23:59:59.999-05:00`);
-      }
-      let asignadosData = {};
-      if (
-        asignadosIds &&
-        Array.isArray(asignadosIds) &&
-        asignadosIds.length > 0
-      ) {
-        asignadosData = { connect: asignadosIds.map((id: string) => ({ id })) };
-      }
-
-      const ticketsTKT = await prisma.ticketGestion.findMany({
-        where: { codigo: { startsWith: "TKT-" } },
-        select: { codigo: true },
-      });
-
-      let maxNumber = 0;
-      ticketsTKT.forEach((t) => {
-        const numero = parseInt(t.codigo.replace("TKT-", ""));
-        if (!isNaN(numero) && numero > maxNumber) {
-          maxNumber = numero;
+      // ----------------------------------------------------
+      // 2. LÓGICA PARA CREAR UN TICKET NUEVO (CON O SIN ARCHIVO)
+      // ----------------------------------------------------
+      if (accion === 'crearTicket') {
+        const tipo = formData.get('tipo') as string;
+        const asunto = formData.get('asunto') as string;
+        const prioridad = formData.get('prioridad') as string;
+        const institucionId = formData.get('institucionId') as string;
+        const mensajeInicial = formData.get('mensajeInicial') as string;
+        const fechaLimite = formData.get('fechaLimite') as string;
+        const asignadosIdsStr = formData.get('asignadosIds') as string;
+        
+        // Parseamos los IDs que ahora llegan como String en el FormData
+        const asignadosIds = asignadosIdsStr ? JSON.parse(asignadosIdsStr) : [];
+        
+        let fechaLimiteCalc = null;
+        if (fechaLimite) {
+          fechaLimiteCalc = new Date(`${fechaLimite}T23:59:59.999-05:00`);
         }
-      });
 
-      let nextNumber = maxNumber + 1;
-      let ticketCreado = null;
-      let intentos = 0;
+        // Procesar Archivo (Imagen, PDF, Audio)
+        const fileEntry = formData.get('file');
+        const file = fileEntry instanceof File ? fileEntry : null;
+        let fileUrl = null;
+        let fileTipo = null;
+        let fileNombre = null;
 
-      while (!ticketCreado && intentos < 10) {
-        const nuevoCodigo = `TKT-${nextNumber.toString().padStart(3, "0")}`;
-        try {
-          ticketCreado = await prisma.ticketGestion.create({
-            data: {
-              codigo: nuevoCodigo,
-              tipo: tipo || "General",
-              asunto,
-              prioridad: prioridad || "Media",
-              institucionId,
-              creadorId: userId,
-              asignados: asignadosData,
-              fechaLimite: fechaLimiteCalc,
-              estado: "Abierto",
-              mensajes: {
-                create: {
-                  remitenteId: userId,
-                  contenido: mensajeInicial || "Ticket abierto.",
+        if (file) {
+          const attachment = await storeTicketAttachment(file);
+          fileUrl = attachment.url;
+          fileTipo = attachment.mimeType;
+          fileNombre = attachment.displayName;
+        }
+
+        let asignadosData = {};
+        if (Array.isArray(asignadosIds) && asignadosIds.length > 0) {
+          asignadosData = { connect: asignadosIds.map((id: string) => ({ id })) };
+        }
+
+        const ticketsTKT = await prisma.ticketGestion.findMany({
+          where: { codigo: { startsWith: "TKT-" } },
+          select: { codigo: true },
+        });
+
+        let maxNumber = 0;
+        ticketsTKT.forEach((t) => {
+          const numero = parseInt(t.codigo.replace("TKT-", ""));
+          if (!isNaN(numero) && numero > maxNumber) {
+            maxNumber = numero;
+          }
+        });
+
+        let nextNumber = maxNumber + 1;
+        let ticketCreado = null;
+        let intentos = 0;
+
+        while (!ticketCreado && intentos < 10) {
+          const nuevoCodigo = `TKT-${nextNumber.toString().padStart(3, "0")}`;
+          try {
+            ticketCreado = await prisma.ticketGestion.create({
+              data: {
+                codigo: nuevoCodigo,
+                tipo: tipo || "General",
+                asunto,
+                prioridad: prioridad || "Media",
+                institucionId,
+                creadorId: userId,
+                asignados: asignadosData,
+                fechaLimite: fechaLimiteCalc,
+                estado: "Abierto",
+                mensajes: {
+                  create: {
+                    remitenteId: userId,
+                    contenido: mensajeInicial || "Ticket abierto.",
+                    adjuntoUrl: fileUrl, // 🔥 Se guarda en el primer mensaje
+                    adjuntoTipo: fileTipo,
+                    adjuntoNombre: fileNombre
+                  },
                 },
               },
-            },
-          });
-        } catch (error: any) {
-          if (error.code === "P2002") {
-            nextNumber++;
-            intentos++;
-          } else {
-            throw error;
+            });
+          } catch (error: any) {
+            if (error.code === "P2002") {
+              nextNumber++;
+              intentos++;
+            } else {
+              throw error;
+            }
           }
         }
+        
+        if (!ticketCreado) {
+          return NextResponse.json({ error: "Colisión de sistema, intente nuevamente." }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, ticket: ticketCreado }, { status: 201 });
       }
-      if (!ticketCreado)
-        return NextResponse.json(
-          { error: "Colisión de sistema, intente nuevamente." },
-          { status: 500 },
-        );
-      return NextResponse.json(
-        { success: true, ticket: ticketCreado },
-        { status: 201 },
-      );
+      
+      return NextResponse.json({ error: "Acción FormData no válida" }, { status: 400 });
     }
 
-    return NextResponse.json(
-      { error: "Acción JSON no válida" },
-      { status: 400 },
-    );
+    // Si llega un JSON simple por error (ya no debería pasar), lo bloqueamos:
+    return NextResponse.json({ error: "Se esperaba FormData, no JSON" }, { status: 400 });
+
   } catch (error) {
+    if (error instanceof InvalidTicketAttachmentError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("Error POST Tickets:", error);
-    return NextResponse.json(
-      { error: "Error al procesar la solicitud" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Error al procesar la solicitud" }, { status: 500 });
   }
 }
 
@@ -413,7 +475,7 @@ export async function PUT(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const userId = payload.id as string;
     const userRol = payload.rol as string;
     const body = await request.json();
