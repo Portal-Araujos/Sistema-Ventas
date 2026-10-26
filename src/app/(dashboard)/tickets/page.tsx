@@ -161,6 +161,9 @@ export default function TicketsPage() {
       if (dataTickets.tickets) {
         setTickets(dataTickets.tickets);
         setCurrentUser(dataTickets.currentUser);
+        if (Array.isArray(dataTickets.usuarios)) {
+          setUsuarios(dataTickets.usuarios); // 🔥 Carga garantizada para vendedores y todos los roles
+        }
         if (dataTickets.currentUser.esSuperAdmin) setTabActiva("General");
         else if (dataTickets.currentUser.rol === "vendedor")
           setTabActiva("Mios");
@@ -228,17 +231,28 @@ export default function TicketsPage() {
   const handleBuscarUsuario = (termino: string) => {
     setBusquedaUser(termino);
     const termLimpio = normalizarTexto(termino.trim());
-    if (termLimpio.length < 1) {
-      setResultadosUser([]);
-      setDropdownUser(false);
+
+    // Si hace clic en el input vacío, mostramos todos los disponibles
+    if (termino === " " || termLimpio.length === 0) {
+      setResultadosUser(usuarios);
+      setDropdownUser(termino === " ");
       return;
     }
 
-    const filtrados = usuarios.filter(
-      (u) =>
-        normalizarTexto(u.nombre).includes(termLimpio) ||
-        (u.rolNombre && normalizarTexto(u.rolNombre).includes(termLimpio)),
-    );
+    const filtrados = usuarios.filter((u) => {
+      const nombre = normalizarTexto(u.nombre || "");
+      const rol = normalizarTexto(
+        u.rolNombre || u.rol?.nombre || (typeof u.rol === "string" ? u.rol : ""),
+      );
+      const depto = normalizarTexto(u.departamentoNombre || "");
+
+      return (
+        nombre.includes(termLimpio) ||
+        rol.includes(termLimpio) ||
+        depto.includes(termLimpio)
+      );
+    });
+
     setResultadosUser(filtrados);
     setDropdownUser(true);
   };

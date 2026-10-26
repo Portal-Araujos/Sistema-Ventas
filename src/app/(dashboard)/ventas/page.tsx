@@ -768,9 +768,21 @@ export default function VentasPage() {
   });
 
   if (searchTerm) {
-    ventasFiltradas = ventasFiltradas.filter((v) =>
-      String(v.numContrato).includes(searchTerm),
-    );
+    const termino = searchTerm
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+
+    ventasFiltradas = ventasFiltradas.filter((v) => {
+      const contrato = String(v.numContrato || "").toLowerCase();
+      const escuela = String(v.institucionNombre || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+
+      return contrato.includes(termino) || escuela.includes(termino);
+    });
   }
   if (filtros.vendedorNombre)
     ventasFiltradas = ventasFiltradas.filter(
@@ -950,7 +962,7 @@ export default function VentasPage() {
             >
               <div className="relative">
                 <Label className="text-[11px] font-bold text-gray-500">
-                  Buscar Contrato
+                  Buscar Contrato o Escuela
                 </Label>
                 <div className="relative mt-1">
                   <Search
@@ -958,7 +970,7 @@ export default function VentasPage() {
                     className="absolute left-2.5 top-2.5 text-gray-400"
                   />
                   <Input
-                    placeholder="Ej: 100234"
+                    placeholder="Ej: 100234 o Simón Bolívar..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-8 h-9 text-xs focus-visible:ring-blue-500"

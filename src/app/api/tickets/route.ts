@@ -195,24 +195,44 @@ export async function GET(request: Request) {
       if (tipoFiltro) whereClause.tipo = tipoFiltro;
     }
 
-    const tickets = await prisma.ticketGestion.findMany({
-      where: whereClause,
-      include: {
-        institucion: { select: { nombre: true } },
-        asignados: { select: { id: true, nombre: true } },
-        creador: { select: { id: true, nombre: true } },   
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+    const [tickets, usuariosActivos] = await Promise.all([
+      prisma.ticketGestion.findMany({
+        where: whereClause,
+        include: {
+          institucion: { select: { nombre: true } },
+          asignados: { select: { id: true, nombre: true } },
+          creador: { select: { id: true, nombre: true } },
+        },
+        orderBy: { updatedAt: "desc" },
+      }),
+      prisma.usuario.findMany({
+        where: { activo: true },
+        select: {
+          id: true,
+          nombre: true,
+          rol: { select: { nombre: true } },
+          departamento: { select: { nombre: true } },
+        },
+        orderBy: { nombre: "asc" },
+      }),
+    ]);
+
+    const usuariosFormateados = usuariosActivos.map((u) => ({
+      id: u.id,
+      nombre: u.nombre,
+      rolNombre: u.rol?.nombre || "USUARIO",
+      departamentoNombre: u.departamento?.nombre || "",
+    }));
 
     return NextResponse.json({
       tickets,
+      usuarios: usuariosFormateados, 
       currentUser: {
         id: userId,
         rol: userRol,
         departamento: miDepartamento,
         esSuperAdmin,
-        esJefe 
+        esJefe,
       },
     });
   } catch (error) {
