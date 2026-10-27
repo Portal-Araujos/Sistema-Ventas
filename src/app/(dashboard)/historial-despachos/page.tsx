@@ -53,8 +53,10 @@ export default function HistorialDespachosPage() {
     setModalDetalleOpen(true);
   };
 
-  // 🔥 IMPRIMIR GUÍA HORIZONTAL (SOLO ESTE VIAJE Y SUS SALDOS) 🔥
-  const imprimirGuiaPDF = (guia: any) => {
+  const imprimirGuiaPDF = (
+    guia: any,
+    orientacion: "auto" | "landscape" | "portrait" = "auto",
+  ) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
@@ -98,8 +100,8 @@ export default function HistorialDespachosPage() {
             <td>${prendaNombre}</td>
             <td>${color}</td>
             <td>${p.genero || "UNISEX"}</td>
-            <td>${talla}</td>
-            <td style="text-align:center; font-weight:bold; font-size:12px;">${p.cantidad}</td>
+            <td style="text-align:center;">${talla}</td>
+            <td style="text-align:center; font-weight:bold; font-size:11px;">${p.cantidad}</td>
             <td>${p.bordado || "-"}</td>
             <td>${p.observacion || "-"}</td>
           </tr>
@@ -109,7 +111,7 @@ export default function HistorialDespachosPage() {
 
     let htmlFilasTotales = "";
     Object.values(mapaTotales).forEach((item) => {
-      htmlFilasTotales += `<tr><td style="font-weight:bold;">${item.sku}</td><td>${item.prendaColorTalla}</td><td style="text-align:center; font-weight:bold; font-size:14px;">${item.cantidadTotal}</td></tr>`;
+      htmlFilasTotales += `<tr><td style="font-weight:bold;">${item.sku}</td><td>${item.prendaColorTalla}</td><td style="text-align:center; font-weight:bold; font-size:13px;">${item.cantidadTotal}</td></tr>`;
     });
 
     printWindow.document.write(`
@@ -117,21 +119,60 @@ export default function HistorialDespachosPage() {
         <head>
           <title>Guía de Despacho - ${guia.codigoGuia}</title>
           <style>
-            @page { size: landscape; margin: 10mm; }
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11px; color: #222; }
-            h1 { text-align: center; font-size: 20px; text-transform: uppercase; margin-bottom: 2px; }
-            p { text-align: center; margin-top: 0; color: #555; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th, td { border: 1px solid #999; padding: 6px 4px; text-align: left; }
-            th { background-color: #e5e5e5; font-weight: bold; text-transform: uppercase; font-size: 10px; }
+            /* 🔥 size: auto HABILITA el selector Vertical/Horizontal en la impresora 🔥 */
+            @page { size: ${orientacion}; margin: 8mm; }
+            * { box-sizing: border-box; }
+            body { 
+              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+              font-size: 10px; 
+              color: #222; 
+              margin: 0;
+              padding: 0;
+            }
+            h1 { text-align: center; font-size: 17px; text-transform: uppercase; margin: 0 0 4px 0; }
+            p { text-align: center; margin-top: 0; color: #555; font-size: 11px; }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-bottom: 16px; 
+              table-layout: auto;
+            }
+            th, td { 
+              border: 1px solid #999; 
+              padding: 4px 3px; 
+              text-align: left; 
+              word-break: break-word;
+              overflow-wrap: break-word;
+            }
+            th { 
+              background-color: #e5e5e5; 
+              font-weight: bold; 
+              text-transform: uppercase; 
+              font-size: 9px; 
+            }
             .totales th { background-color: #222; color: #fff; }
+            .resumen-grid {
+              display: flex;
+              justify-content: space-between;
+              gap: 12px;
+              page-break-inside: avoid;
+            }
+            .resumen-col { width: 49%; }
+
+            /* Ajuste automático si el usuario elige Vertical (Portrait) en la impresora */
+            @media print and (orientation: portrait) {
+              body { font-size: 9px; }
+              th { font-size: 8px; padding: 3px 2px; }
+              td { padding: 3px 2px; }
+              h1 { font-size: 15px; }
+            }
           </style>
         </head>
         <body>
           <h1>GUÍA DE DESPACHO / REMISIÓN: ${guia.codigoGuia}</h1>
           <p>Institución: <strong>${guia.institucionNombre}</strong> | Responsable Bodega: ${guia.responsable} | Fecha de Salida: ${guia.fechaDespacho}</p>
           
-          <h2 style="font-size:14px; margin-bottom:5px;">1. DETALLE DE PRENDAS EN ESTE VIAJE</h2>
+          <h2 style="font-size:12px; margin-bottom:5px;">1. DETALLE DE PRENDAS EN ESTE VIAJE</h2>
           <table>
             <thead>
               <tr>
@@ -142,16 +183,16 @@ export default function HistorialDespachosPage() {
             <tbody>${htmlFilasDetalle}</tbody>
           </table>
 
-          <div style="display:flex; justify-content: space-between; gap:20px; page-break-inside: avoid;">
-            <div style="width: 48%;">
-              <h2 style="font-size:12px; margin-bottom:5px; text-align:center;">2. RESUMEN DE BULTO (TOTALES)</h2>
+          <div class="resumen-grid">
+            <div class="resumen-col">
+              <h2 style="font-size:11px; margin-bottom:5px; text-align:center;">2. RESUMEN DE BULTO (TOTALES)</h2>
               <table class="totales">
                 <thead><tr><th>SKU</th><th>Prenda (Color y Talla)</th><th style="text-align:center;">Cantidad</th></tr></thead>
                 <tbody>${htmlFilasTotales}</tbody>
               </table>
             </div>
-            <div style="width: 48%;">
-              <h2 style="font-size:12px; margin-bottom:5px; text-align:center;">3. AUDITORÍA Y SALDOS PENDIENTES</h2>
+            <div class="resumen-col">
+              <h2 style="font-size:11px; margin-bottom:5px; text-align:center;">3. AUDITORÍA Y SALDOS PENDIENTES</h2>
               <table class="totales">
                 <thead><tr><th>Contrato</th><th>Cliente</th><th style="text-align:center;">Total</th><th style="text-align:center;">Ya Despachado</th><th style="text-align:center;">SALDO DEBE</th></tr></thead>
                 <tbody>${htmlSaldosContratos}</tbody>
@@ -159,9 +200,9 @@ export default function HistorialDespachosPage() {
             </div>
           </div>
           
-          <div style="margin-top: 50px; display:flex; justify-content: space-around;">
-            <div style="text-align:center; border-top: 1px solid #000; width: 30%; padding-top:5px;">Firma Despachador<br/>${guia.responsable}</div>
-            <div style="text-align:center; border-top: 1px solid #000; width: 30%; padding-top:5px;">Firma Transportista / Recibe</div>
+          <div style="margin-top: 45px; display:flex; justify-content: space-around; page-break-inside: avoid;">
+            <div style="text-align:center; border-top: 1px solid #000; width: 35%; padding-top:5px;">Firma Despachador<br/>${guia.responsable}</div>
+            <div style="text-align:center; border-top: 1px solid #000; width: 35%; padding-top:5px;">Firma Transportista / Recibe</div>
           </div>
           
           <script>window.onload = function() { window.print(); window.close(); }</script>

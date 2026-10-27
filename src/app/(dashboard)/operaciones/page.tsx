@@ -101,6 +101,94 @@ function OperacionesPageContent() {
   const [grupoStock, setGrupoStock] = useState<any>(null);
   const [resumenStock, setResumenStock] = useState<any[]>([]);
   const [stockInputs, setStockInputs] = useState<Record<string, number>>({});
+  const [sortStock, setSortStock] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(null);
+
+  const handleSortStock = (key: string) => {
+    let direction: "asc" | "desc" = "asc";
+
+    if (
+      sortStock &&
+      sortStock.key === key &&
+      sortStock.direction === "asc"
+    ) {
+      direction = "desc";
+    }
+
+    setSortStock({ key, direction });
+  };
+
+  const getSortIconStock = (key: string) => {
+    if (!sortStock || sortStock.key !== key) {
+      return (
+        <ArrowUpDown
+          size={13}
+          className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
+        />
+      );
+    }
+
+    return sortStock.direction === "asc" ? (
+      <ArrowUp size={13} className="text-primary" />
+    ) : (
+      <ArrowDown size={13} className="text-primary" />
+    );
+  };
+
+  // ORDENAMIENTO DINÁMICO, SIN MODIFICAR EL ARRAY ORIGINAL
+  const resumenStockOrdenado = React.useMemo(() => {
+    const lista = [...resumenStock];
+
+    if (!sortStock) return lista;
+
+    return lista.sort((a: any, b: any) => {
+      const { key, direction } = sortStock;
+
+      const obtenerValor = (item: any) => {
+        if (key === "caracteristicas") {
+          return `${item.talla || ""} ${item.color || ""} ${item.genero || ""}`;
+        }
+
+        if (key === "bordadoObservacion") {
+          return `${item.bordado || ""} ${item.observacion || ""}`;
+        }
+
+        if (key === "stock") {
+          return Number(stockInputs[item.key] || 0);
+        }
+
+        if (key === "produccion") {
+          return Math.max(
+            0,
+            Number(item.totalSolicitado) -
+              Number(stockInputs[item.key] || 0)
+          );
+        }
+
+        return item[key] ?? "";
+      };
+
+      const valA = obtenerValor(a);
+      const valB = obtenerValor(b);
+
+      if (typeof valA === "number" && typeof valB === "number") {
+        return direction === "asc" ? valA - valB : valB - valA;
+      }
+
+      const comparacion = String(valA).localeCompare(
+        String(valB),
+        "es",
+        {
+          numeric: true,
+          sensitivity: "base",
+        }
+      );
+
+      return direction === "asc" ? comparacion : -comparacion;
+    });
+  }, [resumenStock, sortStock, stockInputs]);
   const [prendasCustomCount, setPrendasCustomCount] = useState(0);
   const [fechaStockProduccion, setFechaStockProduccion] = useState("");
   const [saving, setSaving] = useState(false);
@@ -593,7 +681,7 @@ function OperacionesPageContent() {
           value={selectedInstFilter}
           onChange={(e) => setSelectedInstFilter(e.target.value)}
         >
-          <option value="">🏫 Todas las Instituciones</option>
+          <option value="">Todas las Instituciones</option>
           {institucionesList.map((inst: any) => (
             <option key={inst.id} value={inst.id}>
               {inst.nombre}
@@ -832,15 +920,13 @@ function OperacionesPageContent() {
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-gray-900 border-b pb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Box className="text-amber-600" /> Consolidación de Bodega /
-                Producción
+                <Box className="text-amber-600" /> Consolidación de Bodega / Producción
               </div>
               <Badge className="bg-primary text-white text-xs">
                 {grupoStock?.codigoPedido}
               </Badge>
             </DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 mt-2">
             <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-2">
               <h3 className="text-sm font-black text-blue-900 uppercase">
@@ -890,26 +976,80 @@ function OperacionesPageContent() {
               <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-gray-100 border-b border-gray-200 text-gray-600 uppercase">
-                      <th className="p-3 font-bold">Código SKU</th>
-                      <th className="p-3 font-bold">Prenda</th>
-                      <th className="p-3 text-center font-bold">
-                        Talla/Color/Genero
+                    <tr className="bg-gray-100 border-b border-gray-200 text-gray-600 uppercase select-none">
+
+                      <th
+                        className="p-3 font-bold cursor-pointer hover:bg-gray-200 transition-colors group"
+                        onClick={() => handleSortStock("sku")}
+                      >
+                        <div className="flex items-center gap-1">
+                          Código SKU {getSortIconStock("sku")}
+                        </div>
                       </th>
-                      <th className="p-3">Bordado/Obs</th>
-                      <th className="p-3 text-center font-black">
-                        Total Solicitado
+
+                      <th
+                        className="p-3 font-bold cursor-pointer hover:bg-gray-200 transition-colors group"
+                        onClick={() => handleSortStock("prenda")}
+                      >
+                        <div className="flex items-center gap-1">
+                          Prenda {getSortIconStock("prenda")}
+                        </div>
                       </th>
-                      <th className="p-3 text-center font-bold bg-amber-50/50 border-l border-amber-100 w-32">
-                        En Stock
+
+                      <th
+                        className="p-3 text-center font-bold cursor-pointer hover:bg-gray-200 transition-colors group"
+                        onClick={() => handleSortStock("caracteristicas")}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Talla/Color/Genero
+                          {getSortIconStock("caracteristicas")}
+                        </div>
                       </th>
-                      <th className="p-3 text-center font-bold text-red-600 bg-red-50/50">
-                        A Producción
+
+                      <th
+                        className="p-3 font-bold cursor-pointer hover:bg-gray-200 transition-colors group"
+                        onClick={() => handleSortStock("bordadoObservacion")}
+                      >
+                        <div className="flex items-center gap-1">
+                          Bordado/Obs
+                          {getSortIconStock("bordadoObservacion")}
+                        </div>
                       </th>
+
+                      <th
+                        className="p-3 text-center font-black cursor-pointer hover:bg-gray-200 transition-colors group"
+                        onClick={() => handleSortStock("totalSolicitado")}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Total Solicitado
+                          {getSortIconStock("totalSolicitado")}
+                        </div>
+                      </th>
+
+                      <th
+                        className="p-3 text-center font-bold bg-amber-50/50 border-l border-amber-100 w-32 cursor-pointer hover:bg-amber-100 transition-colors group"
+                        onClick={() => handleSortStock("stock")}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          En Stock
+                          {getSortIconStock("stock")}
+                        </div>
+                      </th>
+
+                      <th
+                        className="p-3 text-center font-bold text-red-600 bg-red-50/50 cursor-pointer hover:bg-red-100 transition-colors group"
+                        onClick={() => handleSortStock("produccion")}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          A Producción
+                          {getSortIconStock("produccion")}
+                        </div>
+                      </th>
+
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {resumenStock.map((row) => {
+                    {resumenStockOrdenado.map((row) => {
                       const currentStock = stockInputs[row.key] || 0;
                       const diff = row.totalSolicitado - currentStock;
                       return (

@@ -661,7 +661,7 @@ function ProduccionPageContent() {
           value={selectedInstFilter}
           onChange={(e) => setSelectedInstFilter(e.target.value)}
         >
-          <option value="">🏫 Todas las Instituciones</option>
+          <option value=""> Todas las Instituciones</option>
           {institucionesList.map((inst: any) => (
             <option key={inst.id} value={inst.id}>
               {inst.nombre}

@@ -250,15 +250,9 @@ export async function POST(request: Request) {
     if (!session) return unauthorizedResponse();
     const userId = session.id;
     const contentType = request.headers.get("content-type") || "";
-
-    // 🔥 TODO LO QUE TIENE ARCHIVOS ENTRA POR AQUÍ 🔥
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
       const accion = formData.get("accion") as string;
-
-      // ----------------------------------------------------
-      // 1. LÓGICA PARA RESPONDER A UN TICKET (CON O SIN ARCHIVO)
-      // ----------------------------------------------------
       if (accion === 'enviarMensaje') {
         const ticketIdValue = formData.get('ticketId');
         const contenidoValue = formData.get('contenido');
@@ -377,9 +371,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, mensaje: nuevoMensaje }, { status: 201 });
       }
       
-      // ----------------------------------------------------
-      // 2. LÓGICA PARA CREAR UN TICKET NUEVO (CON O SIN ARCHIVO)
-      // ----------------------------------------------------
       if (accion === 'crearTicket') {
         const tipo = formData.get('tipo') as string;
         const asunto = formData.get('asunto') as string;
@@ -451,7 +442,7 @@ export async function POST(request: Request) {
                   create: {
                     remitenteId: userId,
                     contenido: mensajeInicial || "Ticket abierto.",
-                    adjuntoUrl: fileUrl, // 🔥 Se guarda en el primer mensaje
+                    adjuntoUrl: fileUrl,
                     adjuntoTipo: fileTipo,
                     adjuntoNombre: fileNombre
                   },

@@ -69,6 +69,7 @@ function EmpaquePageContent() {
       <ArrowDown size={14} className="text-primary shrink-0" />
     );
   };
+  
 
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
   const [grupoDetalle, setGrupoDetalle] = useState<any>(null);
@@ -301,10 +302,12 @@ function EmpaquePageContent() {
     }
   };
 
-  const imprimirMasterChecklist = (grupo: any) => {
+  const imprimirMasterChecklist = (
+    grupo: any,
+    orientacion: "auto" | "landscape" | "portrait" = "auto",
+  ) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-
     let prendasAImprimir: any[] = [];
     grupo.pedidosAsociados.forEach((ped: any) => {
       const listaPrendas = ped.detallesCompletos || ped.detalles || [];
@@ -343,8 +346,8 @@ function EmpaquePageContent() {
           <td>${prendaNombre}</td>
           <td>${color}</td>
           <td>${p.genero || "UNISEX"}</td>
-          <td>${talla}</td>
-          <td style="text-align:center; font-weight:bold; font-size:14px;">${p.cantidad}</td>
+          <td style="text-align:center;">${talla}</td>
+          <td class="celda-cant" style="text-align:center; font-weight:bold;">${p.cantidad}</td>
           <td>${p.bordado || "-"}</td>
           <td>${p.observacion || "-"}</td>
           <td style="font-weight:bold; color:#d97706;">${p.guiaDespachoId ? "DESPACHADO" : p.estadoOperacion}</td>
@@ -355,7 +358,7 @@ function EmpaquePageContent() {
 
     let htmlFilasTotales = "";
     Object.values(mapaTotales).forEach((item) => {
-      htmlFilasTotales += `<tr><td style="font-weight:bold;">${item.sku}</td><td>${item.prendaColorTalla}</td><td style="text-align:center; font-weight:bold; font-size:16px;">${item.cantidadTotal}</td></tr>`;
+      htmlFilasTotales += `<tr><td style="font-weight:bold;">${item.sku}</td><td>${item.prendaColorTalla}</td><td class="celda-total" style="text-align:center; font-weight:bold;">${item.cantidadTotal}</td></tr>`;
     });
 
     const fechaImpresion = new Date().toLocaleString("es-EC", {
@@ -365,17 +368,54 @@ function EmpaquePageContent() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Master Checklist - ${grupo.institucionNombre}</title>
+          <title>Portal 360 Checklist - ${grupo.institucionNombre}</title>
           <style>
-            @page { size: landscape; margin: 10mm; }
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10px; color: #222; }
-            h1 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 2px; }
+            @page { size: ${orientacion}; margin: 8mm; }
+            * { box-sizing: border-box; }
+            body { 
+              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+              font-size: 10px; 
+              color: #222; 
+              margin: 0;
+              padding: 0;
+            }
+            h1 { text-align: center; font-size: 18px; text-transform: uppercase; margin: 0 0 3px 0; }
             p { text-align: center; margin-top: 0; color: #555; font-size: 11px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
-            th, td { border: 1px solid #999; padding: 5px 3px; text-align: left; }
-            th { background-color: #e5e5e5; font-weight: bold; text-transform: uppercase; font-size: 9px; }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-bottom: 20px; 
+              table-layout: auto;
+            }
+            th, td { 
+              border: 1px solid #999; 
+              padding: 4px 3px; 
+              text-align: left; 
+              word-break: break-word;
+              overflow-wrap: break-word;
+            }
+            th { 
+              background-color: #e5e5e5; 
+              font-weight: bold; 
+              text-transform: uppercase; 
+              font-size: 9px; 
+            }
+            .celda-cant { font-size: 12px; }
+            .celda-total { font-size: 14px; }
             .tabla-totales { width: 55%; margin: 0 auto; }
             .tabla-totales th { background-color: #222; color: #fff; }
+
+            /* Ajuste automático para las 13 columnas cuando se elige Vertical (Portrait) */
+            @media print and (orientation: portrait) {
+              body { font-size: 8px; }
+              th { font-size: 7.5px; padding: 3px 2px; }
+              td { padding: 3px 2px; }
+              h1 { font-size: 15px; }
+              p { font-size: 10px; }
+              .celda-cant { font-size: 10px; }
+              .celda-total { font-size: 12px; }
+              .tabla-totales { width: 85%; }
+            }
           </style>
         </head>
         <body>
@@ -393,8 +433,13 @@ function EmpaquePageContent() {
             <tbody>${htmlFilasDetalle}</tbody>
           </table>
           <div style="page-break-inside: avoid;">
-            <h2 style="text-align:center; font-size:14px; margin-bottom:8px;">TOTALES Y RESUMEN DE CORTE (MASTER)</h2>
-            <table class="tabla-totales"><thead><tr><th>SKU</th><th>Prenda (Color y Talla)</th><th style="text-align:center;">Cantidad Total</th></tr></thead><tbody>${htmlFilasTotales}</tbody></table>
+            <h2 style="text-align:center; font-size:13px; margin-bottom:8px;">TOTALES Y RESUMEN DE CORTE (MASTER)</h2>
+            <table class="tabla-totales">
+              <thead>
+                <tr><th>SKU</th><th>Prenda (Color y Talla)</th><th style="text-align:center;">Cantidad Total</th></tr>
+              </thead>
+              <tbody>${htmlFilasTotales}</tbody>
+            </table>
           </div>
           <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
@@ -562,7 +607,64 @@ function EmpaquePageContent() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
+  // Estado y funciones para ordenar la tabla de Checklist
+  const [sortChecklist, setSortChecklist] = useState<{
+    key: string;
+    direction: "asc" | "desc";
+  } | null>(null);
 
+  const handleSortChecklist = (key: string) => {
+    let direction: "asc" | "desc" = "asc";
+    if (
+      sortChecklist &&
+      sortChecklist.key === key &&
+      sortChecklist.direction === "asc"
+    ) {
+      direction = "desc";
+    }
+    setSortChecklist({ key, direction });
+  };
+
+  const getSortIconChecklist = (key: string) => {
+    if (!sortChecklist || sortChecklist.key !== key) {
+      return (
+        <ArrowUpDown
+          size={13}
+          className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
+        />
+      );
+    }
+    return sortChecklist.direction === "asc" ? (
+      <ArrowUp size={13} className="text-primary" />
+    ) : (
+      <ArrowDown size={13} className="text-primary" />
+    );
+  };
+
+  // Lista ordenada dinámicamente (soporta números de contrato y textos)
+  const pedidosChecklistOrdenados = React.useMemo(() => {
+    const lista = [...(grupoDetalle?.pedidosAsociados || [])];
+    if (!sortChecklist) return lista;
+
+    return lista.sort((a: any, b: any) => {
+      const { key, direction } = sortChecklist;
+      const valA = a[key] ?? "";
+      const valB = b[key] ?? "";
+
+      // Si son números puros (ej. saldoPendienteContrato o totalPrendasContrato)
+      if (typeof valA === "number" && typeof valB === "number") {
+        return direction === "asc" ? valA - valB : valB - valA;
+      }
+
+      // Comparación inteligente para textos y números de contrato (ej. "1002" vs "950")
+      const comparacion = String(valA).localeCompare(String(valB), "es", {
+        numeric: true,
+        sensitivity: "base",
+      });
+
+      return direction === "asc" ? comparacion : -comparacion;
+    });
+  }, [grupoDetalle?.pedidosAsociados, sortChecklist]);
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -575,7 +677,6 @@ function EmpaquePageContent() {
           </p>
         </div>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div
           onClick={() =>
@@ -649,7 +750,6 @@ function EmpaquePageContent() {
           />
         </div>
       </div>
-
       <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-3 items-center">
         <div className="relative w-full md:w-1/3">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
@@ -665,7 +765,7 @@ function EmpaquePageContent() {
           value={selectedInstFilter}
           onChange={(e) => setSelectedInstFilter(e.target.value)}
         >
-          <option value="">🏫 Todas las Instituciones</option>
+          <option value=""> Todas las Instituciones</option>
           {institucionesList.map((inst: any) => (
             <option key={inst.id} value={inst.id}>
               {inst.nombre}
@@ -1024,16 +1124,45 @@ function EmpaquePageContent() {
             <div className="overflow-x-auto border rounded-xl">
               <table className="w-full text-left text-xs border-collapse min-w-800px">
                 <thead>
-                  <tr className="bg-gray-100 text-gray-600 font-bold uppercase border-b">
-                    <th className="p-3">N. Paquete</th>
-                    <th className="p-3">Cliente</th>
-                    <th className="p-3 text-center">Saldos Contrato</th>
-                    <th className="p-3">Responsable</th>
+                  <tr className="bg-gray-100 text-gray-600 font-bold uppercase border-b select-none">
+                    <th
+                      className="p-3 cursor-pointer hover:bg-gray-200 transition-colors group"
+                      onClick={() => handleSortChecklist("numContrato")}
+                    >
+                      <div className="flex items-center gap-1">
+                        N. Paquete {getSortIconChecklist("numContrato")}
+                      </div>
+                    </th>
+                    <th
+                      className="p-3 cursor-pointer hover:bg-gray-200 transition-colors group"
+                      onClick={() => handleSortChecklist("nombreCliente")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Cliente {getSortIconChecklist("nombreCliente")}
+                      </div>
+                    </th>
+                    <th
+                      className="p-3 text-center cursor-pointer hover:bg-gray-200 transition-colors group"
+                      onClick={() => handleSortChecklist("saldoPendienteContrato")}
+                      title="Ordenar por saldo pendiente"
+                    >
+                      <div className="flex items-center justify-center gap-1">
+                        Saldos Contrato {getSortIconChecklist("saldoPendienteContrato")}
+                      </div>
+                    </th>
+                    <th
+                      className="p-3 cursor-pointer hover:bg-gray-200 transition-colors group"
+                      onClick={() => handleSortChecklist("responsableEmpaque")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Responsable {getSortIconChecklist("responsableEmpaque")}
+                      </div>
+                    </th>
                     <th className="p-3 text-center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {grupoDetalle?.pedidosAsociados?.map((ped: any) => {
+                  {pedidosChecklistOrdenados.map((ped: any) => {
                     const finalizado = ped.saldoPendienteContrato === 0;
                     return (
                       <tr
