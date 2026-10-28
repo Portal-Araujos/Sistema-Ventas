@@ -2,9 +2,6 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
-
-
-
 export async function GET(request: Request) {
   try {
     const cookieStore = await cookies();
@@ -14,7 +11,14 @@ export async function GET(request: Request) {
 
     const guias = await prisma.guiaDespacho.findMany({
       include: {
-        institucion: { select: { id: true, nombre: true } },
+        // 🔥 MODIFICACIÓN 1: Le decimos que también traiga el vendedor desde la Institución
+        institucion: { 
+          select: { 
+            id: true, 
+            nombre: true,
+            vendedor: { select: { nombre: true } } 
+          } 
+        },
         vendedor: { select: { id: true, nombre: true } },
         prendasDespachadas: {
           include: {
@@ -49,10 +53,13 @@ export async function GET(request: Request) {
         }
         pedidosInvolucrados.get(ped.id).prendasEnEstaGuia.push(prenda);
       });
+
       return {
         id: guia.id,
         codigoGuia: guia.codigoGuia,
         institucionNombre: guia.institucion?.nombre || "Sin Escuela",
+        // 🔥 MODIFICACIÓN 2: Doble validación. Si no está en la guía, lo saca de la escuela.
+        vendedorNombre: guia.vendedor?.nombre || guia.institucion?.vendedor?.nombre || "Vendedor No Asignado",
         responsable: guia.responsable,
         fechaDespacho: new Date(guia.fechaDespacho).toLocaleString("es-EC", {
           timeZone: "America/Guayaquil",
@@ -64,6 +71,7 @@ export async function GET(request: Request) {
         contratosInvolucrados: Array.from(pedidosInvolucrados.values()),
       };
     });
+    
     return NextResponse.json(resultado);
   } catch (error) {
     return NextResponse.json({ error: "Error" }, { status: 500 });

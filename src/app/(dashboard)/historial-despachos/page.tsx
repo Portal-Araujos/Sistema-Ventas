@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 import {
   Truck,
   Search,
@@ -8,7 +9,8 @@ import {
   Printer,
   ChevronLeft,
   ChevronRight,
-  PackageCheck,
+  PackageCheck,FileSpreadsheet,
+  ChevronUp,ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +33,17 @@ export default function HistorialDespachosPage() {
 
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
   const [guiaDetalle, setGuiaDetalle] = useState<any>(null);
+  const [expandedContratos, setExpandedContratos] = useState<Record<string, boolean>>({});
 
+  const toggleContrato = (id: string) => {
+    setExpandedContratos((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleOpenDetalle = (guia: any) => {
+    setGuiaDetalle(guia);
+    setExpandedContratos({}); 
+    setModalDetalleOpen(true);
+  };
   const cargarDatos = async () => {
     try {
       const res = await fetch("/api/guias");
@@ -48,10 +60,7 @@ export default function HistorialDespachosPage() {
     cargarDatos();
   }, []);
 
-  const handleOpenDetalle = (guia: any) => {
-    setGuiaDetalle(guia);
-    setModalDetalleOpen(true);
-  };
+
 
   const imprimirGuiaPDF = (
     guia: any,
@@ -61,14 +70,10 @@ export default function HistorialDespachosPage() {
     if (!printWindow) return;
 
     let htmlFilasDetalle = "";
-    const mapaTotales: Record<
-      string,
-      { sku: string; prendaColorTalla: string; cantidadTotal: number }
-    > = {};
+    const mapaTotales: Record<string, { sku: string; prendaColorTalla: string; cantidadTotal: number }> = {};
     let htmlSaldosContratos = "";
 
-    guia.contratosInvolucrados.forEach((contrato: any) => {
-      // Saldos
+    guia.contratosInvolucrados?.forEach((contrato: any) => {
       htmlSaldosContratos += `
         <tr>
           <td>${contrato.numContrato}</td>
@@ -79,17 +84,14 @@ export default function HistorialDespachosPage() {
         </tr>
       `;
 
-      // Prendas de la guía
-      contrato.prendasEnEstaGuia.forEach((p: any) => {
+      contrato.prendasEnEstaGuia?.forEach((p: any) => {
         const sku = p.skuCodigo || "S/N";
         const prendaNombre = p.tipoRopa || "Prenda";
         const color = p.color || "-";
         const talla = p.talla || "-";
-
         const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
         const key = `${sku}_${prendaColorTalla}`;
-        if (!mapaTotales[key])
-          mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
+        if (!mapaTotales[key]) mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
         mapaTotales[key].cantidadTotal += p.cantidad || 1;
 
         htmlFilasDetalle += `
@@ -119,47 +121,17 @@ export default function HistorialDespachosPage() {
         <head>
           <title>Guía de Despacho - ${guia.codigoGuia}</title>
           <style>
-            /* 🔥 size: auto HABILITA el selector Vertical/Horizontal en la impresora 🔥 */
             @page { size: ${orientacion}; margin: 8mm; }
             * { box-sizing: border-box; }
-            body { 
-              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
-              font-size: 10px; 
-              color: #222; 
-              margin: 0;
-              padding: 0;
-            }
+            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 10px; color: #222; margin: 0; padding: 0; }
             h1 { text-align: center; font-size: 17px; text-transform: uppercase; margin: 0 0 4px 0; }
             p { text-align: center; margin-top: 0; color: #555; font-size: 11px; }
-            table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-bottom: 16px; 
-              table-layout: auto;
-            }
-            th, td { 
-              border: 1px solid #999; 
-              padding: 4px 3px; 
-              text-align: left; 
-              word-break: break-word;
-              overflow-wrap: break-word;
-            }
-            th { 
-              background-color: #e5e5e5; 
-              font-weight: bold; 
-              text-transform: uppercase; 
-              font-size: 9px; 
-            }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; table-layout: auto; }
+            th, td { border: 1px solid #999; padding: 4px 3px; text-align: left; word-break: break-word; overflow-wrap: break-word; }
+            th { background-color: #e5e5e5; font-weight: bold; text-transform: uppercase; font-size: 9px; }
             .totales th { background-color: #222; color: #fff; }
-            .resumen-grid {
-              display: flex;
-              justify-content: space-between;
-              gap: 12px;
-              page-break-inside: avoid;
-            }
+            .resumen-grid { display: flex; justify-content: space-between; gap: 12px; page-break-inside: avoid; }
             .resumen-col { width: 49%; }
-
-            /* Ajuste automático si el usuario elige Vertical (Portrait) en la impresora */
             @media print and (orientation: portrait) {
               body { font-size: 9px; }
               th { font-size: 8px; padding: 3px 2px; }
@@ -170,15 +142,12 @@ export default function HistorialDespachosPage() {
         </head>
         <body>
           <h1>GUÍA DE DESPACHO / REMISIÓN: ${guia.codigoGuia}</h1>
-          <p>Institución: <strong>${guia.institucionNombre}</strong> | Responsable Bodega: ${guia.responsable} | Fecha de Salida: ${guia.fechaDespacho}</p>
+          <p>Institución: <strong>${guia.institucionNombre}</strong> | Vendedor: <strong>${guia.vendedorNombre || "N/A"}</strong> | Fecha de Salida: ${guia.fechaDespacho} | Bodega: ${guia.responsable}</p>
           
           <h2 style="font-size:12px; margin-bottom:5px;">1. DETALLE DE PRENDAS EN ESTE VIAJE</h2>
           <table>
             <thead>
-              <tr>
-                <th>N° Contrato</th><th>Cliente</th><th>SKU</th><th>Prenda</th><th>Color</th>
-                <th>Sexo</th><th>Talla</th><th>Cant.</th><th>Bordado</th><th>Observación</th>
-              </tr>
+              <tr><th>N° Contrato</th><th>Cliente</th><th>SKU</th><th>Prenda</th><th>Color</th><th>Sexo</th><th>Talla</th><th>Cant.</th><th>Bordado</th><th>Observación</th></tr>
             </thead>
             <tbody>${htmlFilasDetalle}</tbody>
           </table>
@@ -204,19 +173,111 @@ export default function HistorialDespachosPage() {
             <div style="text-align:center; border-top: 1px solid #000; width: 35%; padding-top:5px;">Firma Despachador<br/>${guia.responsable}</div>
             <div style="text-align:center; border-top: 1px solid #000; width: 35%; padding-top:5px;">Firma Transportista / Recibe</div>
           </div>
-          
           <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
       </html>
     `);
     printWindow.document.close();
   };
+  const descargarExcelGuia = (guia: any) => {
+    const rows: any[][] = [];
+
+    // 1. Cabecera
+    rows.push(["GUÍA DE DESPACHO / REMISIÓN:", guia.codigoGuia]);
+    rows.push(["Institución:", guia.institucionNombre]);
+    rows.push(["Vendedor:", guia.vendedorNombre || "N/A"]);
+    rows.push(["Fecha de Salida:", guia.fechaDespacho]);
+    rows.push(["Responsable Bodega:", guia.responsable]);
+    rows.push([]); // Espacio
+
+    // 2. Detalle de prendas
+    rows.push(["1. DETALLE DE PRENDAS EN ESTE VIAJE"]);
+    rows.push([
+      "N° Contrato", "Cliente", "SKU", "Prenda", "Color", 
+      "Sexo", "Talla", "Cant.", "Bordado", "Observación"
+    ]);
+
+    const mapaTotales: Record<string, { sku: string; prendaColorTalla: string; cantidadTotal: number }> = {};
+    const saldosRows: any[][] = [];
+
+    guia.contratosInvolucrados?.forEach((contrato: any) => {
+      saldosRows.push([
+        contrato.numContrato, 
+        contrato.nombreCliente, 
+        contrato.totalPrendasContrato, 
+        contrato.totalDespachadoHistorico, 
+        contrato.saldoPendiente
+      ]);
+
+      contrato.prendasEnEstaGuia?.forEach((p: any) => {
+        const sku = p.skuCodigo || "S/N";
+        const prendaNombre = p.tipoRopa || "Prenda";
+        const color = p.color || "-";
+        const talla = p.talla || "-";
+        const prendaColorTalla = `${prendaNombre} (${color}, ${talla})`;
+        const key = `${sku}_${prendaColorTalla}`;
+        
+        if (!mapaTotales[key]) mapaTotales[key] = { sku, prendaColorTalla, cantidadTotal: 0 };
+        mapaTotales[key].cantidadTotal += p.cantidad || 1;
+
+        rows.push([
+          contrato.numContrato,
+          contrato.nombreCliente,
+          sku,
+          prendaNombre,
+          color,
+          p.genero || "UNISEX",
+          talla,
+          p.cantidad,
+          p.bordado || "-",
+          p.observacion || "-"
+        ]);
+      });
+    });
+
+    rows.push([]);
+
+    // 3. Totales
+    rows.push(["2. RESUMEN DE BULTO (TOTALES)"]);
+    rows.push(["SKU", "Prenda (Color y Talla)", "Cantidad"]);
+    Object.values(mapaTotales).forEach((item) => {
+      rows.push([item.sku, item.prendaColorTalla, item.cantidadTotal]);
+    });
+
+    rows.push([]);
+
+    // 4. Saldos
+    rows.push(["3. AUDITORÍA Y SALDOS PENDIENTES"]);
+    rows.push(["Contrato", "Cliente", "Total", "Ya Despachado", "SALDO DEBE"]);
+    saldosRows.forEach((r) => rows.push(r));
+
+    // Crear y descargar el archivo .xlsx
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Despacho");
+    XLSX.writeFile(wb, `Guia_Despacho_${guia.codigoGuia}.xlsx`);
+  };
+
+  const normalizar = (texto: string) =>
+    (texto || "")
+      .toString()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
 
   const filteredData = data.filter((g) => {
-    return (
-      g.codigoGuia.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      g.institucionNombre.toLowerCase().includes(searchTerm.toLowerCase())
+    const termino = normalizar(searchTerm);
+    if (!termino) return true;
+    const coincideGuia =
+      normalizar(g.codigoGuia).includes(termino) ||
+      normalizar(g.institucionNombre).includes(termino);
+    const coincideContratos = g.contratosInvolucrados?.some((c: any) =>
+      normalizar(c.numContrato).includes(termino) ||
+      normalizar(c.nombreCliente).includes(termino)
     );
+
+    return coincideGuia || coincideContratos;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
@@ -269,6 +330,7 @@ export default function HistorialDespachosPage() {
                 <tr className="text-gray-600 font-black uppercase border-b border-gray-300">
                   <th className="p-3.5">N° de Guía</th>
                   <th className="p-3.5">Institución</th>
+                  <th className="p-3.5">Vendedor</th>
                   <th className="p-3.5">Fecha y Hora de Salida</th>
                   <th className="p-3.5">Responsable Bodega</th>
                   <th className="p-3.5 text-center">Prendas en el Bulto</th>
@@ -287,6 +349,7 @@ export default function HistorialDespachosPage() {
                     <td className="p-3.5 font-bold text-gray-900">
                       {item.institucionNombre}
                     </td>
+                    <td className="p-3.5 text-gray-700 font-medium">{item.vendedorNombre || "N/A"}</td>
                     <td className="p-3.5 text-gray-600 font-semibold">
                       {item.fechaDespacho}
                     </td>
@@ -306,13 +369,21 @@ export default function HistorialDespachosPage() {
                           <Printer size={16} />
                         </Button>
                         <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Descargar en Excel"
+                          className="h-8 w-8 text-green-700 hover:bg-green-100"
+                          onClick={() => descargarExcelGuia(item)}
+                        >
+                          <FileSpreadsheet size={16} />
+                        </Button>
+                        <Button
                           size="sm"
                           variant="outline"
                           className="h-8 text-xs font-bold text-blue-600 border-blue-200"
                           onClick={() => handleOpenDetalle(item)}
                         >
-                          <Eye size={14} className="mr-1" /> Ver Detalle y
-                          Saldos
+                          <Eye size={14} className="mr-1" /> Ver Detalle y Saldos
                         </Button>
                       </div>
                     </td>
@@ -403,12 +474,18 @@ export default function HistorialDespachosPage() {
             <div className="space-y-3">
               {guiaDetalle?.contratosInvolucrados?.map((contrato: any) => {
                 const completado = contrato.saldoPendiente === 0;
+                const isExpanded = expandedContratos[contrato.id];
+
                 return (
                   <div
                     key={contrato.id}
-                    className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs"
+                    className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs transition-all"
                   >
-                    <div className="p-3.5 flex justify-between items-center bg-gray-50/80">
+                    {/* ENCABEZADO CLICABLE */}
+                    <div
+                      className="p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/80 cursor-pointer hover:bg-gray-100 transition-colors gap-2"
+                      onClick={() => toggleContrato(contrato.id)}
+                    >
                       <div className="flex items-center gap-3">
                         <Badge
                           variant="outline"
@@ -421,7 +498,7 @@ export default function HistorialDespachosPage() {
                         </span>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2 items-center">
                         <Badge className="bg-gray-800">
                           Total: {contrato.totalPrendasContrato}
                         </Badge>
@@ -436,21 +513,82 @@ export default function HistorialDespachosPage() {
                             ? "CONTRATO ENTREGADO"
                             : `FALTAN ENTREGAR: ${contrato.saldoPendiente}`}
                         </Badge>
+                        <div className="ml-1 text-gray-400 bg-white p-1 rounded-full border border-gray-200 shadow-sm">
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </div>
                       </div>
                     </div>
+                    {isExpanded && (
+                      <div className="p-0 border-t border-gray-200 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-gray-50 text-gray-500 font-bold uppercase">
+                              <tr>
+                                <th className="p-2.5 pl-4">SKU</th>
+                                <th className="p-2.5">Prenda</th>
+                                <th className="p-2.5">Color / Talla</th>
+                                <th className="p-2.5">Detalles</th>
+                                <th className="p-2.5 text-center pr-4">Cant. Despachada</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {contrato.prendasEnEstaGuia?.map((p: any, idx: number) => (
+                                <tr key={idx} className="hover:bg-gray-50/50">
+                                  <td className="p-2.5 pl-4 text-gray-500 font-mono">
+                                    {p.skuCodigo || "S/N"}
+                                  </td>
+                                  <td className="p-2.5 font-semibold text-gray-800">
+                                    {p.tipoRopa}
+                                  </td>
+                                  <td className="p-2.5 text-gray-600">
+                                    {p.color} <span className="text-gray-300 mx-1">|</span> {p.talla}
+                                  </td>
+                                  <td className="p-2.5 text-[10px] text-gray-500">
+                                    {p.observacion ? `Obs: ${p.observacion}` : p.bordado ? `Bordado: ${p.bordado}` : "-"}
+                                  </td>
+                                  <td className="p-2.5 text-center font-black text-blue-700 pr-4 text-sm bg-blue-50/30">
+                                    {p.cantidad}
+                                  </td>
+                                </tr>
+                              ))}
+                              {(!contrato.prendasEnEstaGuia || contrato.prendasEnEstaGuia.length === 0) && (
+                                <tr>
+                                  <td colSpan={5} className="p-4 text-center text-gray-400 italic">
+                                    No hay prendas registradas en este despacho.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-          <DialogFooter className="mt-4 flex justify-between">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => imprimirGuiaPDF(guiaDetalle)}
-            >
-              <Printer size={14} className="mr-1" /> Imprimir PDF de esta Guía
-            </Button>
+          <DialogFooter className="mt-4 flex flex-col sm:flex-row justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => imprimirGuiaPDF(guiaDetalle)}
+              >
+                <Printer size={14} className="mr-1" /> Imprimir PDF
+              </Button>
+
+              {/* 🔥 NUEVO BOTÓN EXCEL EN EL MODAL */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-green-700 border-green-300 hover:bg-green-50"
+                onClick={() => descargarExcelGuia(guiaDetalle)}
+              >
+                <FileSpreadsheet size={14} className="mr-1" /> Descargar Excel
+              </Button>
+            </div>
+            
             <Button
               variant="outline"
               size="sm"

@@ -288,8 +288,9 @@ function ProduccionPageContent() {
       "Observación",
       "Operario",
       "Estado",
-      "Ingreso Taller",
-      "Fecha Compromiso",
+      "Vendedor", // 🔥 NUEVO: Vendedor después de Estado
+      "Ingreso Taller", // Fecha de ingreso
+      "Fecha Compromiso", // Fecha de entrega
     ]);
 
     const mapaTotales: Record<
@@ -313,6 +314,7 @@ function ProduccionPageContent() {
         p.observacion || p.observacionOperaciones || "Sin observaciones",
         p.operarioAsignado?.nombre || "Sin Asignar",
         p.estadoProduccion || p.estadoOperacion || "Planificacion",
+        p.vendedorNombre || "Sin Asignar", // 🔥 NUEVO: Dato del Vendedor
         p.ingresoTaller || "",
         p.fechaCompromiso || "",
       ]);
@@ -333,7 +335,7 @@ function ProduccionPageContent() {
     wsData.push([]);
     wsData.push(["========================================="]);
     wsData.push(["TOTALES Y RESUMEN DE CORTE DE PRENDAS"]);
-    wsData.push(["SKU", "Prenda (Color, Talla, Género)", "Cantidad Total"]); // 🔥 TÍTULO ACTUALIZADO
+    wsData.push(["SKU", "Prenda (Color, Talla, Género)", "Cantidad Total"]); 
     Object.values(mapaTotales).forEach((item) => {
       wsData.push([item.sku, item.prendaColorTalla, item.cantidadTotal]);
     });
@@ -356,6 +358,7 @@ function ProduccionPageContent() {
             ...item,
             codigoOP: grupo.codigoOP,
             institucionNombre: grupo.institucionNombre,
+            vendedorNombre: grupo.vendedorNombre, // 🔥 NUEVO: Capturamos el Vendedor del grupo
             numContrato: ped.numContrato,
             nombreCliente: ped.nombreCliente,
             ingresoTaller: grupo.fechaInicioTexto,
