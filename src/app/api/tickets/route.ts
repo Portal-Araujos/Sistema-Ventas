@@ -1,28 +1,25 @@
 import { NextResponse } from "next/server";
-import { getJwtSecret } from "@/lib/jwt";
 import prisma from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
+import { CambioError, datosPrenda, validarAccesoPedido, validarPrendaRecibida, puedeConsultarCambio } from "@/lib/cambios-prenda";
 import {
   getApiSession,
   isAdministrator,
+  hasPermission,
+  forbiddenResponse,
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import {
   InvalidTicketAttachmentError,
-  storeTicketAttachment,
+  ticketMessageData,
 } from "@/lib/ticket-uploads";
 
 export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, getJwtSecret());
-    const userId = payload.id as string;
-    const userRol = payload.rol as string;
-    const userPermisos = (payload.permisos as string[]) || [];
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    const userId = session.id;
+    const userRol = session.rol;
+    const userPermisos = session.permisos;
     const { searchParams } = new URL(request.url);
 
     if (searchParams.get("alertas") === "true") {
@@ -131,11 +128,11 @@ export async function GET(request: Request) {
       const soyAsignadoTicket = ticket.asignados.some((a: any) => a.id === userId);
       const puedeVerTicket =
         userRol === "super_admin" ||
-        userRol === "administrador" ||
         userPermisos.includes("ver_todos_tickets") ||
         soyCreadorTicket ||
         soyAsignadoTicket ||
-        (esJefe && ticket.tipo === miDepartamento);
+        (esJefe && ticket.tipo === miDepartamento) ||
+        await puedeConsultarCambio(prisma, session, ticket.pedidoId);
       if (!puedeVerTicket) {
         return NextResponse.json(
           { error: "Ticket no encontrado" },
@@ -177,7 +174,7 @@ export async function GET(request: Request) {
     const esSuperAdmin = 
       userRol === "super_admin" || 
       userRol === "administrador" || 
-      userPermisos.includes("ver_todos_tickets")|| userPermisos.includes("ver_todos_tickets");
+      userPermisos.includes("ver_todos_tickets");
     if (!esSuperAdmin) {
       if (esJefe) {
         whereClause.OR = [
@@ -231,7 +228,8 @@ export async function GET(request: Request) {
         id: userId,
         rol: userRol,
         departamento: miDepartamento,
-        esSuperAdmin,
+        esSuperAdmin: userRol === "super_admin",
+        puedeVerTodos: esSuperAdmin,
         esJefe,
       },
     });
@@ -254,6 +252,7 @@ export async function POST(request: Request) {
       const formData = await request.formData();
       const accion = formData.get("accion") as string;
       if (accion === 'enviarMensaje') {
+        if (!hasPermission(session, "tickets:responder")) return forbiddenResponse();
         const ticketIdValue = formData.get('ticketId');
         const contenidoValue = formData.get('contenido');
         const ticketId = Number(ticketIdValue);
@@ -278,6 +277,7 @@ export async function POST(request: Request) {
             id: true,
             codigo: true,
             creadorId: true,
+            pedidoId: true,
             tipo: true,
             noLeidosAsignados: true,
             noLeidosCreador: true,
@@ -295,44 +295,21 @@ export async function POST(request: Request) {
         });
 
         const canAccessTicket =
-          isAdministrator(session) ||
+          session.rol === "super_admin" ||
           session.permisos.includes("ver_todos_tickets") ||
           ticketRelacionado.creadorId === userId ||
           ticketRelacionado.asignados.some((assignedUser) => assignedUser.id === userId) ||
-          (currentUser?.esJefe === true && currentUser.departamento?.nombre === ticketRelacionado.tipo);
+          (currentUser?.esJefe === true && currentUser.departamento?.nombre === ticketRelacionado.tipo) ||
+          await puedeConsultarCambio(prisma, session, ticketRelacionado.pedidoId);
 
         if (!canAccessTicket) {
           return NextResponse.json({ error: "No tienes permisos para responder este ticket" }, { status: 403 });
         }
 
-        const fileEntry = formData.get('file');
-        if (fileEntry !== null && !(fileEntry instanceof File)) {
-          return NextResponse.json({ error: "Archivo adjunto inválido" }, { status: 400 });
-        }
-        
-        const file = fileEntry instanceof File ? fileEntry : null;
-        let fileUrl = null;
-        let fileTipo = null;
-        let fileNombre = null;
+        const mensajesData = await ticketMessageData(formData, userId, contenido);
+        const mensajesCreados = await prisma.$transaction(mensajesData.map(data => prisma.mensajeTicket.create({ data: { ...data, ticketId } })));
+        const nuevoMensaje = mensajesCreados[0];
 
-        if (file) {
-          const attachment = await storeTicketAttachment(file);
-          fileUrl = attachment.url;
-          fileTipo = attachment.mimeType;
-          fileNombre = attachment.displayName;
-        }
-
-        const nuevoMensaje = await prisma.mensajeTicket.create({
-          data: { 
-            ticketId,
-            remitenteId: userId, 
-            contenido,
-            adjuntoUrl: fileUrl, 
-            adjuntoTipo: fileTipo, 
-            adjuntoNombre: fileNombre 
-          }
-        });
-        
         const soyCreador = ticketRelacionado.creadorId === userId;
 
         await prisma.ticketGestion.update({
@@ -372,6 +349,16 @@ export async function POST(request: Request) {
       }
       
       if (accion === 'crearTicket') {
+        if (!hasPermission(session, "tickets:crear")) return forbiddenResponse();
+        const detallePedidoId = formData.get("detallePedidoId")?.toString() || null;
+        const pedidoId = formData.get("pedidoId")?.toString() || null;
+        const motivoCambio = formData.get("motivoCambio")?.toString().trim() || "";
+        const cambioSolicitado = formData.get("cambioSolicitado")?.toString().trim() || "";
+        const cantidadCambio = Number(formData.get("cantidadCambio"));
+        if (Boolean(detallePedidoId) !== Boolean(pedidoId)) throw new CambioError("El cambio debe indicar pedido y prenda");
+        if (detallePedidoId && (motivoCambio.length < 10 || !cambioSolicitado || !Number.isSafeInteger(cantidadCambio) || cantidadCambio < 1)) {
+          throw new CambioError("Indica el motivo, el cambio solicitado y una cantidad válida");
+        }
         const tipo = formData.get('tipo') as string;
         const asunto = formData.get('asunto') as string;
         const prioridad = formData.get('prioridad') as string;
@@ -382,25 +369,18 @@ export async function POST(request: Request) {
         
         // Parseamos los IDs que ahora llegan como String en el FormData
         const asignadosIds = asignadosIdsStr ? JSON.parse(asignadosIdsStr) : [];
+        if (detallePedidoId && (!Array.isArray(asignadosIds) || !asignadosIds.every(id => typeof id === "string"))) throw new CambioError("Los asignados no son válidos");
+        if (detallePedidoId && asignadosIds.length) {
+          const validos = await prisma.usuario.count({ where: { id: { in: [...new Set<string>(asignadosIds)] }, activo: true, bloqueado: false } });
+          if (validos !== new Set(asignadosIds).size) throw new CambioError("Selecciona usuarios activos para asignar el ticket");
+        }
         
         let fechaLimiteCalc = null;
         if (fechaLimite) {
           fechaLimiteCalc = new Date(`${fechaLimite}T23:59:59.999-05:00`);
         }
 
-        // Procesar Archivo (Imagen, PDF, Audio)
-        const fileEntry = formData.get('file');
-        const file = fileEntry instanceof File ? fileEntry : null;
-        let fileUrl = null;
-        let fileTipo = null;
-        let fileNombre = null;
-
-        if (file) {
-          const attachment = await storeTicketAttachment(file);
-          fileUrl = attachment.url;
-          fileTipo = attachment.mimeType;
-          fileNombre = attachment.displayName;
-        }
+        const mensajesIniciales = await ticketMessageData(formData, userId, mensajeInicial || "Ticket abierto.");
 
         let asignadosData = {};
         if (Array.isArray(asignadosIds) && asignadosIds.length > 0) {
@@ -427,8 +407,23 @@ export async function POST(request: Request) {
         while (!ticketCreado && intentos < 10) {
           const nuevoCodigo = `TKT-${nextNumber.toString().padStart(3, "0")}`;
           try {
-            ticketCreado = await prisma.ticketGestion.create({
+            ticketCreado = await prisma.$transaction(async (tx) => {
+              let prendaOriginal;
+              if (detallePedidoId && pedidoId) {
+                const pedido = await validarAccesoPedido(tx, session, pedidoId);
+                const detalle = await tx.detallePedido.findUnique({ where: { id: detallePedidoId } });
+                if (!detalle || detalle.pedidoId !== pedidoId || pedido.institucionId !== institucionId) throw new CambioError("La prenda no corresponde a este pedido");
+                validarPrendaRecibida(detalle, cantidadCambio);
+                const activo = await tx.ticketGestion.findFirst({ where: { detallePedidoId, estado: { not: "Cerrado" } } });
+                if (activo) throw new CambioError(`Esta prenda ya tiene una solicitud activa: ${activo.codigo}`, 409);
+                if (!tipo || !asunto?.trim() || !mensajeInicial?.trim() || !fechaLimiteCalc || isNaN(fechaLimiteCalc.getTime())) throw new CambioError("Completa área, asunto, descripción y fecha límite");
+                const departamento = await tx.departamentoEmpresa.findFirst({ where: { nombre: tipo, activo: true } });
+                if (!departamento) throw new CambioError("Selecciona un área activa");
+                prendaOriginal = datosPrenda(detalle);
+              }
+              const creado = await tx.ticketGestion.create({
               data: {
+                ...(detallePedidoId ? { detallePedidoId, pedidoId, cantidadCambio, motivoCambio, cambioSolicitado, prendaOriginal } : {}),
                 codigo: nuevoCodigo,
                 tipo: tipo || "General",
                 asunto,
@@ -438,19 +433,20 @@ export async function POST(request: Request) {
                 asignados: asignadosData,
                 fechaLimite: fechaLimiteCalc,
                 estado: "Abierto",
-                mensajes: {
-                  create: {
-                    remitenteId: userId,
-                    contenido: mensajeInicial || "Ticket abierto.",
-                    adjuntoUrl: fileUrl,
-                    adjuntoTipo: fileTipo,
-                    adjuntoNombre: fileNombre
-                  },
-                },
+                mensajes: { create: mensajesIniciales },
               },
-            });
+              });
+              if (detallePedidoId) {
+                await tx.notificacion.createMany({ data: [
+                  { titulo: "Solicitud de cambio de prenda", mensaje: `${creado.codigo}: ${asunto}`, tipoModulo: "TICKETS", rolDestino: tipo.toLowerCase(), urlDestino: `/tickets?ticketId=${creado.id}` },
+                  ...asignadosIds.map((id: string) => ({ titulo: "Cambio de prenda asignado", mensaje: `${creado.codigo}: ${asunto}`, tipoModulo: "TICKETS", usuarioDestinoId: id, urlDestino: `/tickets?ticketId=${creado.id}` })),
+                ] });
+              }
+              return creado;
+            }, { isolationLevel: "Serializable" });
           } catch (error: any) {
             if (error.code === "P2002") {
+              if (detallePedidoId && String(error.meta?.target).includes("detalle_pedido_id")) throw new CambioError("Esta prenda ya tiene un ticket activo", 409);
               nextNumber++;
               intentos++;
             } else {
@@ -472,6 +468,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Se esperaba FormData, no JSON" }, { status: 400 });
 
   } catch (error) {
+    if (error instanceof CambioError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (typeof error === "object" && error && "code" in error && error.code === "P2034") return NextResponse.json({ error: "La prenda cambió durante la solicitud. Actualiza e intenta nuevamente." }, { status: 409 });
     if (error instanceof InvalidTicketAttachmentError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
@@ -482,25 +480,31 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, getJwtSecret());
-    const userId = payload.id as string;
-    const userRol = payload.rol as string;
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    const userId = session.id;
+    const userRol = session.rol;
     const body = await request.json();
     const { ticketId, nuevoEstado, motivoReapertura } = body;
+    if (!hasPermission(session, nuevoEstado === "Cerrado" ? "tickets:cerrar" : nuevoEstado === "Re-Abierto" ? "tickets:reabrir" : "tickets:resolver")) return forbiddenResponse();
     const ticket = await prisma.ticketGestion.findUnique({
       where: { id: parseInt(ticketId) },
+      include: { asignados: { select: { id: true } } },
     });
     if (!ticket)
       return NextResponse.json(
         { error: "Ticket no encontrado" },
         { status: 404 },
       );
+    const lector = await prisma.usuario.findUnique({ where: { id: session.id }, select: { esJefe: true, departamento: { select: { nombre: true } } } });
+    if (session.rol !== "super_admin" && !hasPermission(session, "ver_todos_tickets") && ticket.creadorId !== session.id && !ticket.asignados.some(u => u.id === session.id) && !(lector?.esJefe && lector.departamento?.nombre === ticket.tipo) && !await puedeConsultarCambio(prisma, session, ticket.pedidoId)) return forbiddenResponse();
+    if (ticket.pedidoId) {
+      if (!["Abierto", "En Proceso", "Pendiente", "Resuelto", "Cerrado", "Re-Abierto"].includes(nuevoEstado)) throw new CambioError("Estado de ticket inválido");
+      const asignado = await prisma.ticketGestion.count({ where: { id: ticket.id, asignados: { some: { id: userId } } } });
+      if (session.rol !== "super_admin" && !session.permisos.includes("ver_todos_tickets") && ticket.creadorId !== userId && !asignado && !await puedeConsultarCambio(prisma, session, ticket.pedidoId)) throw new CambioError("No tienes acceso a este ticket", 403);
+    }
     if (nuevoEstado === "Cerrado") {
-      if (ticket.creadorId !== userId) {
+      if (ticket.creadorId !== userId && session.rol !== "super_admin") {
         return NextResponse.json(
           {
             error:
@@ -528,7 +532,7 @@ export async function PUT(request: Request) {
     }
 
     if (nuevoEstado === "Re-Abierto") {
-      if (userRol !== "super_admin")
+      if (!hasPermission(session, "tickets:reabrir"))
         return NextResponse.json(
           { error: "Solo el Super Admin puede forzar reaperturas." },
           { status: 403 },
@@ -562,6 +566,8 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ success: true, ticket: ticketActualizado });
   } catch (error) {
+    if (error instanceof CambioError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (typeof error === "object" && error && "code" in error && error.code === "P2002") return NextResponse.json({ error: "La prenda ya tiene otro ticket activo. Ciérralo antes de reabrir este." }, { status: 409 });
     return NextResponse.json(
       { error: "Error al cambiar estado" },
       { status: 500 },

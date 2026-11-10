@@ -1,5 +1,7 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -52,6 +54,7 @@ type TabType =
   | "correcciones";
 
 export default function AgendaPage() {
+  const { can, session: permissionSession } = usePermissions();
   const router = useRouter();
 
   const [dataAgenda, setDataAgenda] = useState<{
@@ -277,7 +280,7 @@ export default function AgendaPage() {
         (p: any) => p.id === parseInt(selectedProvincia),
       )?.cantones || []
     : [];
-  const esAdmin = userRol === "super_admin" || userRol === "administrador";
+  const esAdmin = can("agenda:asignar") || can("instituciones:gestionar_asignaciones");
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
@@ -305,21 +308,21 @@ export default function AgendaPage() {
               ))}
             </select>
           )}
-          <Button
+          <Allowed permission="agenda:crear"><Button
             onClick={() => setModalOpen(true)}
             variant="outline"
             className="h-10 font-bold shadow-sm rounded-xl"
           >
             <Plus size={16} className="mr-2" /> Agendar Manual
-          </Button>
-          <Button
+          </Button></Allowed>
+          <Allowed permission="agenda:registrar_visita"><Button
             onClick={() =>
               setModalVisita({ open: true, inst: null, isLibre: true })
             }
             className="bg-primary hover:bg-primary/90 text-white font-bold shadow-md rounded-xl h-10"
           >
             <Navigation size={18} className="mr-2" /> Visita Libre
-          </Button>
+          </Button></Allowed>
         </div>
       </div>
 
@@ -713,7 +716,7 @@ export default function AgendaPage() {
                             tabActiva === "vencidas" ||
                             tabActiva === "proximas" ||
                             tabActiva === "sinAsignar") && (
-                            <Button
+                            <Allowed permission="agenda:registrar_visita"><Button
                               size="sm"
                               className={`w-full text-xs font-bold text-white shadow-sm h-8 ${tabActiva === "vencidas" ? "bg-red-600 hover:bg-red-700" : "bg-primary hover:bg-primary/90"}`}
                               onClick={() =>
@@ -726,10 +729,10 @@ export default function AgendaPage() {
                             >
                               <Navigation size={14} className="mr-1" /> Reg.
                               Visita
-                            </Button>
+                            </Button></Allowed>
                           )}
                           {tabActiva === "correcciones" && (
-                            <Button
+                            <Allowed permission="visitas:editar_fecha"><Button
                               size="sm"
                               onClick={() =>
                                 setModalRetro({ open: true, visitaId: item.id })
@@ -737,7 +740,7 @@ export default function AgendaPage() {
                               className="w-full bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black tracking-wide h-8 shadow-sm"
                             >
                               <Edit3 size={14} className="mr-1" /> CORREGIR
-                            </Button>
+                            </Button></Allowed>
                           )}
                         </div>
                       </TableCell>
@@ -900,14 +903,14 @@ export default function AgendaPage() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="agenda:crear"><Button
               size="sm"
               className="bg-primary hover:bg-primary/90 text-white font-bold"
               disabled={saving}
               onClick={handleAgendar}
             >
               {saving ? "Validando..." : "Guardar Agenda"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -945,21 +948,21 @@ export default function AgendaPage() {
             </div>
           </div>
           <DialogFooter className="mt-6 flex gap-2 justify-end">
-            <Button
+            <Allowed permission="visitas:editar_fecha"><Button
               variant="outline"
               size="sm"
               onClick={() => setModalRetro({ open: false, visitaId: "" })}
             >
               Cancelar
-            </Button>
-            <Button
+            </Button></Allowed>
+            <Allowed permission="visitas:editar_fecha"><Button
               size="sm"
               className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4"
               disabled={savingRetro}
               onClick={handleGuardarRetro}
             >
               {savingRetro ? "Guardando..." : "Guardar y Bloquear 🔒"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>

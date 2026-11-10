@@ -28,55 +28,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-const MODULOS_PERMISOS = [
-  {
-    modulo: "Panel Principal",
-    permisos: [{ id: "inicio:ver", label: "Ver Panel de Inicio y Métricas" }],
-  },
-  {
-    modulo: "DIRECCIÓN COMERCIAL",
-    permisos: [
-      { id: "instituciones:ver", label: "Ver Base de Instituciones" },
-      { id: "instituciones:crear", label: "Registrar Nuevas Instituciones" },
-      { id: "instituciones:editar", label: "Editar Instituciones" },
-      { id: "instituciones:gestionar_asignaciones", label: "Asignar Vendedores (Masivo / Individual)" },
-      { id: "agenda:ver", label: "Ver Agenda y Registrar Visitas" },
-      { id: "ventas:ver", label: "Ver Historial de Ventas" },
-      { id: "ventas:crear", label: "Crear Contratos / Ventas" },
-      { id: "ventas:validar", label: "Auditar Campos de Facturación" },
-      { id: "base_consultas:ver", label: "Consulta de base Clientes" },
-      { id: "visitas:ver", label: "Ver Seguimientos y Rutas GPS" },
-      { id: "indicadores:ver", label: "Ver Indicadores y KPIs de Ventas" },
-      { id: "cobranzas:ver", label: "Ver gestión de cobranzas" },
-    ],
-  },
-
-  {
-    modulo: "Cadena de Operaciones",
-    permisos: [
-      { id: "skus:ver", label: "Ver Catálogo SKU" },
-      { id: "skus:gestionar", label: "Subir Excel y Editar SKUs" },
-      { id: "pedidos:ver", label: "Ver Pedidos y Enviar a Operaciones" },
-      { id: "operaciones:ver", label: "Gestionar Operaciones (Aprobar Stock)" },
-      { id: "produccion:ver", label: "Taller de Producción (Corte/Costura)" },
-      { id: "empaque:ver", label: "Bodega, Empaque y Despachos" },
-      { id: "historial-despachos:ver", label: "Guias de Pedidos Enviados" },
-    ],
-  },
-  {
-    modulo: "Mesa de Ayuda (Tickets)",
-    permisos: [{ id: "tickets:ver", label: "Ver los ticket creados" }],
-  },
-  {
-    modulo: "Configuraciones",
-    permisos: [
-      { id: "configuracion:ver", label: "Gestionar Catálogos Generales" },
-      { id: "usuarios:gestionar", label: "Crear y Administrar Usuarios" },
-    ],
-  },
-];
+import { PERMISSION_MODULES as MODULOS_PERMISOS } from "@/lib/permissions";
+import { usePermissions, Allowed } from "@/components/shared/PermissionsProvider";
 
 export default function RolesPage() {
+  const { can } = usePermissions();
+  const [error, setError] = useState("");
+  const [moduloActivo, setModuloActivo] = useState(MODULOS_PERMISOS[0].modulo);
+  const [buscarPermiso, setBuscarPermiso] = useState("");
+  const modulo = MODULOS_PERMISOS.find(m => m.modulo === moduloActivo) || MODULOS_PERMISOS[0];
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -92,8 +52,10 @@ export default function RolesPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/roles");
-      setRoles(await res.json());
-    } catch (e) {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudieron cargar los roles");
+      setRoles(Array.isArray(data) ? data : []);
+    } catch (e) { setError(e instanceof Error ? e.message : "No se pudo completar la operación");
     } finally {
       setLoading(false);
     }
@@ -112,7 +74,9 @@ export default function RolesPage() {
           permisos: prev.permisos.filter((p) => p !== permisoId),
         };
       } else {
-        return { ...prev, permisos: [...prev.permisos, permisoId] };
+        const modulo = MODULOS_PERMISOS.find(m => m.permisos.some(p => p.id === permisoId));
+        const consulta = modulo?.permisos.find(p => p.id.endsWith(":ver"))?.id;
+        return { ...prev, permisos: [...new Set([...prev.permisos, ...(consulta ? [consulta] : []), permisoId])] };
       }
     });
   };
@@ -122,14 +86,16 @@ export default function RolesPage() {
     setSaving(true);
     try {
       const method = formRol.id ? "PUT" : "POST";
-      await fetch("/api/roles", {
+      const res = await fetch("/api/roles", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formRol),
       });
-      setModalOpen(false);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudieron guardar los permisos");
+      setError(""); setModalOpen(false);
       cargarRoles();
-    } catch (e) {
+    } catch (e) { setError(e instanceof Error ? e.message : "No se pudo completar la operación");
     } finally {
       setSaving(false);
     }
@@ -147,7 +113,7 @@ export default function RolesPage() {
             sistema.
           </p>
         </div>
-        <Button
+        <Allowed permission="roles:crear">        <Button
           onClick={() => {
             setFormRol({ id: "", nombre: "", descripcion: "", permisos: [] });
             setModalOpen(true);
@@ -155,9 +121,10 @@ export default function RolesPage() {
           className="bg-primary hover:bg-primary/90 text-white font-bold"
         >
           <Plus size={18} className="mr-1" /> Nuevo Rol
-        </Button>
+        </Button></Allowed>
       </div>
 
+      {error && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <Table>
           <TableHeader className="bg-gray-50/80">
@@ -226,7 +193,7 @@ export default function RolesPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-center">
-                    {r.nombre !== "super_admin" ? (
+                    {r.nombre !== "super_admin" && can("roles:editar") ? (
                       <Button
                         variant="outline"
                         size="sm"
@@ -303,57 +270,21 @@ export default function RolesPage() {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 pt-5">
-              <h3 className="font-black text-gray-900 mb-4 flex items-center gap-2">
-                <LayoutGrid size={18} className="text-emerald-500" /> Matriz de
-                Acceso a Módulos
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {MODULOS_PERMISOS.map((mod) => (
-                  <div
-                    key={mod.modulo}
-                    className="bg-white border border-gray-200 p-4 rounded-xl shadow-sm transition-all hover:border-primary/40 hover:shadow-md"
-                  >
-                    <h4 className="text-[11px] font-black text-primary uppercase mb-3 pb-2 border-b border-gray-100">
-                      {mod.modulo}
-                    </h4>
-                    <div className="space-y-2.5">
-                      {mod.permisos.map((permiso) => {
-                        const isChecked = formRol.permisos.includes(permiso.id);
-                        return (
-                          <label
-                            key={permiso.id}
-                            className="flex items-start gap-2.5 cursor-pointer group"
-                          >
-                            <div
-                              className={`mt-0.5 w-4 h-4 rounded border flex shrink-0 items-center justify-center transition-colors ${isChecked ? "bg-primary border-primary" : "bg-white border-gray-300 group-hover:border-primary/50"}`}
-                            >
-                              {isChecked && (
-                                <Check size={12} className="text-white" />
-                              )}
-                            </div>
-                            <span
-                              className={`text-xs leading-tight ${isChecked ? "font-bold text-gray-900" : "font-medium text-gray-600 group-hover:text-gray-900"}`}
-                            >
-                              {permiso.label}
-                            </span>
-                            <input
-                              type="checkbox"
-                              className="hidden"
-                              checked={isChecked}
-                              onChange={() => handleCheckboxChange(permiso.id)}
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+            <div className="space-y-3 border-t pt-3">
+              <Input value={buscarPermiso} onChange={e => setBuscarPermiso(e.target.value)} placeholder="Buscar permiso o módulo…" aria-label="Buscar permisos" />
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[210px_1fr]">
+                <div className="max-h-36 overflow-y-auto rounded-lg border bg-gray-50 p-2 md:max-h-80">
+                  {MODULOS_PERMISOS.filter(m => !buscarPermiso || `${m.modulo} ${m.permisos.map(p => p.label).join(" ")}`.toLowerCase().includes(buscarPermiso.toLowerCase())).map(m => <button key={m.modulo} type="button" onClick={() => setModuloActivo(m.modulo)} className={`mb-1 flex w-full items-center justify-between rounded p-2 text-left text-xs ${moduloActivo === m.modulo ? "bg-blue-100 font-bold text-blue-800" : "hover:bg-gray-100"}`}><span>{m.modulo}</span><span>{m.permisos.filter(p => formRol.permisos.includes(p.id)).length}/{m.permisos.length}</span></button>)}
+                </div>
+                <div className="min-h-48 max-h-80 overflow-y-auto rounded-lg border p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-semibold">{modulo.modulo}</h3><button type="button" className="text-xs text-blue-700" onClick={() => setFormRol(prev => { const ids = modulo.permisos.map(p => p.id); const todos = ids.every(id => prev.permisos.includes(id)); return { ...prev, permisos: todos ? prev.permisos.filter(p => !ids.includes(p)) : [...new Set([...prev.permisos, ...ids])] }; })}>Seleccionar / quitar todos</button></div>
+                  {modulo.permisos.filter(p => !buscarPermiso || `${modulo.modulo} ${p.label} ${p.id}`.toLowerCase().includes(buscarPermiso.toLowerCase())).map(p => <label key={p.id} className="mb-2 flex cursor-pointer items-start gap-2 rounded p-2 text-sm hover:bg-gray-50"><input type="checkbox" checked={formRol.permisos.includes(p.id)} onChange={() => handleCheckboxChange(p.id)} className="mt-1" /><span>{p.label}</span></label>)}
+                </div>
               </div>
+              <p className="text-xs text-gray-500">{formRol.permisos.length} permisos seleccionados. Para usar un módulo, asigna también su permiso de consulta.</p>
             </div>
 
-            <DialogFooter className="pt-6 mt-4 border-t border-gray-100">
+            <DialogFooter className="sticky bottom-0 bg-white pt-3 mt-3 border-t border-gray-100">
               <Button
                 variant="outline"
                 type="button"

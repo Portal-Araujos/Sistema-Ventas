@@ -1,3 +1,4 @@
+import { getApiSession, hasPermission, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -107,6 +108,7 @@ export async function GET(request: Request) {
       return {
         id: v.id,
         fechaVenta: new Date(v.fechaVenta).toLocaleDateString("es-EC"),
+        fechaVentaISO: v.fechaVenta.toISOString(),
         institucionId: v.institucionId?.toString(),
         institucionNombre: v.institucion.nombre,
         cantonId: v.institucion.parroquia?.canton?.id?.toString() || "",
@@ -235,10 +237,8 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
     const body = await request.json();
     const {
       id,
@@ -273,6 +273,9 @@ export async function PUT(request: Request) {
         { status: 404 },
       );
 
+    if (numContrato !== undefined && !hasPermission(session, "ventas:editar")) return forbiddenResponse();
+    if ((observacionesFact !== undefined || verificacionFact !== undefined) && !hasPermission(session, "ventas:validar")) return forbiddenResponse();
+    if (session.rol === "vendedor" && ventaDb.vendedorId !== session.id) return forbiddenResponse();
     const updateData: any = {};
     let nuevoEstadoTicket = ventaDb.estadoTicket;
 

@@ -72,7 +72,7 @@ export function hasPermission(
   session: ApiSession,
   permission: string,
 ): boolean {
-  return isAdministrator(session) || session.permisos.includes(permission);
+  return session.rol === "super_admin" || session.permisos.includes(permission);
 }
 
 export function unauthorizedResponse() {

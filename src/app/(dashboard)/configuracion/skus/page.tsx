@@ -1,5 +1,7 @@
 "use client";
 
+import { Pencil } from "lucide-react";
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
 import React, { useState, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -36,8 +38,22 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
 export default function CatalogoSKUPage() {
+  const { can, session: permissionSession } = usePermissions();
   const [skus, setSkus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [skuEditar, setSkuEditar] = useState<{ id: number; codigo: string; isElectroDB: boolean } | null>(null);
+  const [codigoEditar, setCodigoEditar] = useState("");
+  const [guardandoCodigo, setGuardandoCodigo] = useState(false);
+  const guardarCodigo = async () => {
+    if (!skuEditar) return;
+    setGuardandoCodigo(true);
+    try {
+      const res = await fetch(skuEditar.isElectroDB ? "/api/pedidos/electro" : "/api/pedidos/sku", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: skuEditar.id, codigo: codigoEditar }) });
+      const result = await res.json(); if (!res.ok) throw new Error(result.error);
+      setSkuEditar(null); await cargarSKUs(); showToast("exito", "Código actualizado. Los pedidos existentes conservan su código original.");
+    } catch (error) { showToast("error", error instanceof Error ? error.message : "No se pudo actualizar"); }
+    finally { setGuardandoCodigo(false); }
+  };
   const [busqueda, setBusqueda] = useState("");
   //  NUEVO: PESTAÑAS DE INVENTARIO 
   const [tabActiva, setTabActiva] = useState<"TEXTIL" | "ELECTRO">("TEXTIL");
@@ -189,7 +205,7 @@ export default function CatalogoSKUPage() {
     }
 
     try {
-      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, importacion: true }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       showToast("exito", `¡Catálogo procesado en bodega ${tabActiva}!`);
@@ -268,7 +284,7 @@ export default function CatalogoSKUPage() {
         </div>
 
         <div className="flex gap-2">
-          <Button
+          <Allowed permission="skus:crear"><Button
             onClick={() => {
               setNuevoSku({
                 codigo: "",
@@ -283,7 +299,7 @@ export default function CatalogoSKUPage() {
             className={`${tabActiva === "TEXTIL" ? "bg-blue-600 hover:bg-blue-700" : "bg-purple-600 hover:bg-purple-700"} text-white shadow-md font-bold transition-colors`}
           >
             <Plus size={16} className="mr-1" /> Nuevo Manual
-          </Button>
+          </Button></Allowed>
 
           <input
             type="file"
@@ -292,12 +308,12 @@ export default function CatalogoSKUPage() {
             ref={fileInputRef}
             onChange={handleFileUpload}
           />
-          <Button
+          <Allowed permission="skus:importar"><Button
             onClick={() => fileInputRef.current?.click()}
             className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold"
           >
             <Upload size={16} className="mr-2" /> Carga Masiva
-          </Button>
+          </Button></Allowed>
         </div>
       </div>
 
@@ -436,7 +452,8 @@ export default function CatalogoSKUPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button
+                      <Allowed permission="skus:editar"><Button size="icon" variant="ghost" title="Editar código" aria-label="Editar código" onClick={() => { setSkuEditar(item); setCodigoEditar(item.codigo); }}><Pencil size={15} /></Button></Allowed>
+                      <Allowed permission="skus:activar"><Button
                         size="icon"
                         variant="ghost"
                         title={item.activo ? "Desactivar SKU" : "Activar SKU"}
@@ -444,7 +461,7 @@ export default function CatalogoSKUPage() {
                         onClick={() => handleToggleActivo(item.id, item.activo, item.isElectroDB)}
                       >
                         <Power size={16} />
-                      </Button>
+                      </Button></Allowed>
                     </TableCell>
                   </TableRow>
                 ))
@@ -486,6 +503,13 @@ export default function CatalogoSKUPage() {
       </div>
 
       {/*MODAL: NUEVO SKU INDIVIDUAL DINÁMICO ➕ */}
+      <Dialog open={!!skuEditar} onOpenChange={open => { if (!open && !guardandoCodigo) setSkuEditar(null); }}>
+        <DialogContent className="bg-white sm:max-w-md"><DialogHeader><DialogTitle>Editar código SKU</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-600">Solo cambia el catálogo para nuevas selecciones. Los pedidos y despachos anteriores conservan su código original.</p>
+          <Label>Nuevo código<Input value={codigoEditar} onChange={e => setCodigoEditar(e.target.value.toUpperCase())} disabled={guardandoCodigo} /></Label>
+          <DialogFooter><Button variant="outline" disabled={guardandoCodigo} onClick={() => setSkuEditar(null)}>Cancelar</Button><Allowed permission="skus:editar"><Button disabled={guardandoCodigo || !codigoEditar.trim()} onClick={guardarCodigo}>{guardandoCodigo ? "Guardando…" : "Guardar código"}</Button></Allowed></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={modalNuevoOpen} onOpenChange={setModalNuevoOpen}>
         <DialogContent
           className={`sm:max-w-md bg-white p-6 rounded-xl border-t-4 ${tabActiva === "TEXTIL" ? "border-t-blue-600" : "border-t-purple-600"}`}
@@ -662,14 +686,14 @@ export default function CatalogoSKUPage() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="skus:crear"><Button
               size="sm"
               className={`${tabActiva === "TEXTIL" ? "bg-blue-600 hover:bg-blue-700" : "bg-purple-600 hover:bg-purple-700"} text-white font-bold`}
               onClick={handleGuardarIndividual}
               disabled={isSaving}
             >
               {isSaving ? "Guardando..." : "Guardar SKU"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -885,14 +909,14 @@ export default function CatalogoSKUPage() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="skus:importar"><Button
               size="sm"
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
               onClick={ejecutarImportacion}
               disabled={isImporting}
             >
               {isImporting ? "Guardando..." : "Subir Códigos"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>

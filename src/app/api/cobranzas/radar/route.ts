@@ -99,7 +99,7 @@ export async function POST(request: Request) {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (!hasPermission(session, "cobranzas:ver")) {
+    if (!hasPermission(session, "cobranzas:crear_ticket")) {
       return forbiddenResponse();
     }
     const userId = session.id;

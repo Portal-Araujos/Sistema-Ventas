@@ -1,5 +1,8 @@
 "use client";
 
+import { usePermissions, Allowed } from "@/components/shared/PermissionsProvider";
+import { ArrowLeft } from "lucide-react";
+import TicketAttachments, { pegarArchivosTicket } from "@/components/shared/TicketAttachments";
 import React, { useState, useEffect, useRef } from "react";
 import {
   X,
@@ -34,15 +37,15 @@ export default function TicketChatDrawer({
   currentUserId,
   currentUserRol,
 }: TicketChatDrawerProps) {
+  const { can } = usePermissions();
   const [ticket, setTicket] = useState<any>(null);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState("");
-  const [archivoAdjunto, setArchivoAdjunto] = useState<File | null>(null);
-  const [isCompressing, setIsCompressing] = useState(false);
+  const [archivoAdjunto, setArchivoAdjunto] = useState<File[]>([]);
   const [motivoReapertura, setMotivoReapertura] = useState("");
   const mensajesEndRef = useRef<HTMLDivElement>(null);
   // Estados existentes...
-  const [isDragging, setIsDragging] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -66,7 +69,7 @@ export default function TicketChatDrawer({
         mediaRecorder.onstop = () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
           const audioFile = new File([audioBlob], "nota_de_voz.webm", { type: "audio/webm" });
-          setArchivoAdjunto(audioFile);
+          setArchivoAdjunto(prev => prev.length < 10 ? [...prev, audioFile] : prev);
           stream.getTracks().forEach(track => track.stop());
         };
 
@@ -79,28 +82,13 @@ export default function TicketChatDrawer({
   };
 
   // Lógica unificada para procesar archivos arrastrados o seleccionados
-  const procesarArchivo = async (file: File) => {
-    if (file.type === "application/pdf") {
-      if (file.size > 2 * 1024 * 1024) return alert("El PDF es muy pesado. Máximo 2MB.");
-      setArchivoAdjunto(file);
-    } else if (file.type.startsWith("image/")) {
-      setIsCompressing(true);
-      const compressedFile = await comprimirImagen(file);
-      setArchivoAdjunto(compressedFile);
-      setIsCompressing(false);
-    } else if (file.type.startsWith("audio/")) {
-      setArchivoAdjunto(file);
-    } else {
-      alert("Formato no soportado. Sube Imágenes, PDFs o Notas de voz.");
-    }
-  };
-
   const cargarTicket = async () => {
     if (!ticketId) return;
     try {
       const res = await fetch(`/api/tickets?id=${ticketId}`);
       const data = await res.json();
-      setTicket(data);
+      if (!res.ok) { setLoadError(data.error || "No se pudo abrir el ticket"); setTicket(null); return; }
+      setLoadError(""); setTicket(data);
       setTimeout(
         () => mensajesEndRef.current?.scrollIntoView({ behavior: "smooth" }),
         200,
@@ -118,70 +106,14 @@ export default function TicketChatDrawer({
     } else {
       setTicket(null);
       setMensaje("");
-      setArchivoAdjunto(null);
+      setArchivoAdjunto([]);
     }
   }, [isOpen, ticketId]);
-  const comprimirImagen = (file: File): Promise<File> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const MAX_WIDTH = 1000;
-          const scaleSize = MAX_WIDTH / img.width;
-          canvas.width = MAX_WIDTH;
-          canvas.height = img.height * scaleSize;
-          const ctx = canvas.getContext("2d");
-          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(
-                  new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
-                    type: "image/jpeg",
-                    lastModified: Date.now(),
-                  }),
-                );
-              } else {
-                resolve(file);
-              }
-            },
-            "image/jpeg",
-            0.7,
-          );
-        };
-      };
-    });
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.type === "application/pdf") {
-      if (file.size > 2 * 1024 * 1024)
-        return alert("El PDF es muy pesado. Máximo 2MB.");
-      setArchivoAdjunto(file);
-      return;
-    }
-
-    if (file.type.startsWith("image/")) {
-      setIsCompressing(true);
-      const compressedFile = await comprimirImagen(file);
-      setArchivoAdjunto(compressedFile);
-      setIsCompressing(false);
-    }
-  };
-
   const enviarMensaje = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     
     // Si no hay texto Y TAMPOCO hay archivo, no hace nada.
-    if (!mensaje.trim() && !archivoAdjunto) return;
+    if (!mensaje.trim() && !archivoAdjunto.length) return;
 
     setLoading(true);
     try {
@@ -192,13 +124,11 @@ export default function TicketChatDrawer({
       // 🔥 ESTO ES LO NUEVO: Generar un texto automático si está vacío 🔥
       const textoFinal = mensaje.trim() 
         ? mensaje 
-        : (archivoAdjunto?.type.startsWith("audio/") ? "🎵 Nota de voz" : "📎 Archivo adjunto");
+        : (archivoAdjunto[0]?.type.startsWith("audio/") ? "🎵 Nota de voz" : "📎 Archivo adjunto");
         
       formData.append("contenido", textoFinal);
       
-      if (archivoAdjunto) {
-        formData.append("file", archivoAdjunto);
-      }
+      archivoAdjunto.forEach(file => formData.append("file", file));
 
       const res = await fetch("/api/tickets", {
         method: "POST",
@@ -207,7 +137,7 @@ export default function TicketChatDrawer({
 
       if (res.ok) {
         setMensaje("");
-        setArchivoAdjunto(null);
+        setArchivoAdjunto([]);
         await cargarTicket();
       } else {
         alert("Error del servidor. Revisa si el formato de archivo está permitido.");
@@ -308,6 +238,7 @@ export default function TicketChatDrawer({
               {ticket?.asunto}
             </p>
           </div>
+          <button type="button" className="mr-2 inline-flex items-center gap-1 text-xs text-blue-700" onClick={() => { if (window.location.pathname === "/tickets") onClose(); else window.location.assign("/tickets"); }}><ArrowLeft size={14} /> Volver al listado</button>
           <button
             onClick={onClose}
             className="p-2 bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600 rounded-full transition-colors"
@@ -316,6 +247,7 @@ export default function TicketChatDrawer({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {loadError && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">{loadError}</p>}
           {!ticket ? (
             <div className="text-center text-gray-400 text-xs mt-10 animate-pulse font-bold">
               Cargando hilo de conversación...
@@ -394,9 +326,7 @@ export default function TicketChatDrawer({
                               >
                                 <Download size={14} />
                               </a>
-                              {(isMe ||
-                                currentUserRol === "super_admin" ||
-                                msg.esSistema) && (
+                              {can("tickets:eliminar_adjunto") && (
                                 <button
                                   onClick={() => borrarArchivo(msg.id)}
                                   className="bg-red-500 text-white p-1.5 rounded-full shadow-md hover:bg-red-600 transition-colors"
@@ -428,9 +358,7 @@ export default function TicketChatDrawer({
                               >
                                 <Download size={12} />
                               </a>
-                              {(isMe ||
-                                currentUserRol === "super_admin" ||
-                                msg.esSistema) && (
+                              {can("tickets:eliminar_adjunto") && (
                                 <button
                                   onClick={() => borrarArchivo(msg.id)}
                                   className="bg-red-500 text-white p-1.5 rounded-full shadow-md hover:bg-red-600 transition-colors"
@@ -465,53 +393,20 @@ export default function TicketChatDrawer({
           )}
           <div ref={mensajesEndRef} />
         </div>
-        {archivoAdjunto && (
-          <div className="bg-blue-50 border-t border-blue-200 p-2 px-4 flex justify-between items-center">
-            <div className="flex items-center gap-2 text-xs font-bold text-blue-800">
-              {archivoAdjunto.type.startsWith("image/") ? (
-                <ImageIcon size={14} />
-              ) : (
-                <FileText size={14} />
-              )}
-              <span className="truncate max-w-200px">
-                {archivoAdjunto.name}
-              </span>
-              <span className="text-[10px] text-blue-500">
-                ({(archivoAdjunto.size / 1024).toFixed(1)} KB)
-              </span>
-            </div>
-            <button
-              onClick={() => setArchivoAdjunto(null)}
-              className="text-red-500 hover:text-red-700"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
         <div className="bg-white border-t border-gray-200 p-3 z-10">
-          {ticket?.estado !== "Cerrado" ? (
+          {ticket?.estado !== "Cerrado" && can("tickets:responder") ? (
             <form 
               onSubmit={enviarMensaje} 
-              className={`flex gap-2 items-end relative border-2 border-dashed rounded-xl p-2 transition-colors ${isDragging ? 'border-primary bg-primary/5' : 'border-transparent'}`}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setIsDragging(false);
-                if (e.dataTransfer.files?.[0]) procesarArchivo(e.dataTransfer.files[0]);
-              }}
+              className="flex flex-wrap gap-2 items-end"
+              onPaste={e => pegarArchivosTicket(e, archivoAdjunto, setArchivoAdjunto)}
             >
-              <label className="cursor-pointer p-2 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full transition-colors shrink-0">
-                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && procesarArchivo(e.target.files[0])} />
-                <Paperclip size={18} />
-              </label>
-
+              <div className="w-full"><TicketAttachments archivos={archivoAdjunto} onChange={setArchivoAdjunto} disabled={loading || isRecording} /></div>
               <textarea
                 className="flex-1 max-h-24 min-h-40px text-sm p-2 bg-gray-50 border border-gray-200 rounded-xl resize-none outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-                placeholder={isCompressing ? "Comprimiendo..." : isRecording ? "Grabando audio... (Clic al cuadrado rojo para detener)" : "Escribe o arrastra una imagen/PDF..."}
+                placeholder={isRecording ? "Grabando audio... (Clic al cuadrado rojo para detener)" : "Escribe o arrastra una imagen/PDF..."}
                 value={mensaje}
                 onChange={(e) => setMensaje(e.target.value)}
-                disabled={isCompressing || loading || isRecording}
+                disabled={loading || isRecording}
               />
 
               {/* Botón Grabadora */}
@@ -525,7 +420,7 @@ export default function TicketChatDrawer({
 
               <Button
                 type="submit"
-                disabled={isCompressing || loading || isRecording || (!mensaje.trim() && !archivoAdjunto)}
+                disabled={loading || isRecording || (!mensaje.trim() && !archivoAdjunto.length)}
                 className="bg-primary hover:bg-primary/90 text-white rounded-full p-2 h-10 w-10 shrink-0 flex items-center justify-center shadow-md"
               >
                 <Send size={18} className="ml-1" />
@@ -537,7 +432,7 @@ export default function TicketChatDrawer({
                 <CheckCircle2 size={16} /> Este ticket fue cerrado y resuelto.
               </div>
 
-              {currentUserRol === "super_admin" && (
+              {can("tickets:reabrir") && (
                 <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
                   <Input
                     placeholder="Motivo de reapertura..."
@@ -545,7 +440,7 @@ export default function TicketChatDrawer({
                     value={motivoReapertura}
                     onChange={(e) => setMotivoReapertura(e.target.value)}
                   />
-                  <Button
+                  <Allowed permission="tickets:reabrir"><Button
                     variant="outline"
                     size="sm"
                     onClick={() => cambiarEstado("Re-Abierto")}
@@ -554,7 +449,7 @@ export default function TicketChatDrawer({
                   >
                     <RefreshCw size={14} className="mr-1" /> Forzar Reapertura
                     de Ticket
-                  </Button>
+                  </Button></Allowed>
                 </div>
               )}
             </div>
@@ -563,7 +458,7 @@ export default function TicketChatDrawer({
           {/* 🔥 1. BOTONES CUANDO EL TICKET ESTÁ ACTIVO 🔥 */}
           {ticket?.estado !== "Cerrado" && ticket?.estado !== "Resuelto" && (
             <div className="mt-3 flex justify-between gap-2 border-t border-gray-100 pt-3">
-              <Button
+              <Allowed permission="tickets:resolver"><Button
                 type="button"
                 variant="outline"
                 size="sm"
@@ -571,8 +466,8 @@ export default function TicketChatDrawer({
                 className="flex-1 text-xs h-8 text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100 font-bold shadow-sm"
               >
                 Pausar a Pendiente
-              </Button>
-              <Button
+              </Button></Allowed>
+              <Allowed permission="tickets:resolver"><Button
                 type="button"
                 variant="outline"
                 size="sm"
@@ -580,7 +475,7 @@ export default function TicketChatDrawer({
                 className="flex-1 text-xs h-8 text-cyan-700 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 font-bold shadow-sm"
               >
                 <CheckCircle2 size={14} className="mr-1" /> Notificar Solución
-              </Button>
+              </Button></Allowed>
             </div>
           )}
 
@@ -602,7 +497,7 @@ export default function TicketChatDrawer({
                       onChange={(e) => setMotivoReapertura(e.target.value)}
                     />
                     <div className="flex gap-2">
-                      <Button
+                      <Allowed permission="tickets:reabrir"><Button
                         type="button"
                         variant="outline"
                         size="sm"
@@ -610,8 +505,8 @@ export default function TicketChatDrawer({
                         className="flex-1 text-xs h-9 text-red-700 bg-red-50 border-red-200 hover:bg-red-100 font-bold shadow-sm"
                       >
                         👎 Faltan cosas (Re-abrir)
-                      </Button>
-                      <Button
+                      </Button></Allowed>
+                      <Allowed permission="tickets:cerrar"><Button
                         type="button"
                         variant="outline"
                         size="sm"
@@ -619,7 +514,7 @@ export default function TicketChatDrawer({
                         className="flex-1 text-xs h-9 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 font-bold shadow-sm"
                       >
                         👍 Conforme (Cerrar)
-                      </Button>
+                      </Button></Allowed>
                     </div>
                   </div>
                 </div>

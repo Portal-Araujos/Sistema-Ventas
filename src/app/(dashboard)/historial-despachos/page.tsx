@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
   Truck,
+  Undo2,
   Search,
   Eye,
   Printer,
@@ -33,6 +34,19 @@ export default function HistorialDespachosPage() {
 
   const [modalDetalleOpen, setModalDetalleOpen] = useState(false);
   const [guiaDetalle, setGuiaDetalle] = useState<any>(null);
+  const [guiaAnular, setGuiaAnular] = useState<any>(null);
+  const [motivoAnulacion, setMotivoAnulacion] = useState("");
+  const [anulando, setAnulando] = useState(false);
+  const [errorAnulacion, setErrorAnulacion] = useState("");
+  const anularDespacho = async () => {
+    setAnulando(true); setErrorAnulacion("");
+    try {
+      const res = await fetch("/api/guias", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: guiaAnular.id, motivo: motivoAnulacion }) });
+      const result = await res.json(); if (!res.ok) throw new Error(result.error);
+      setGuiaAnular(null); setModalDetalleOpen(false); await cargarDatos();
+    } catch (error) { setErrorAnulacion(error instanceof Error ? error.message : "No se pudo anular"); }
+    finally { setAnulando(false); }
+  };
   const [expandedContratos, setExpandedContratos] = useState<Record<string, boolean>>({});
 
   const toggleContrato = (id: string) => {
@@ -368,6 +382,7 @@ export default function HistorialDespachosPage() {
                         >
                           <Printer size={16} />
                         </Button>
+                        {item.puedeAnular && <Button size="icon" variant="ghost" title="Anular despacho y liberar prendas" aria-label="Anular despacho y liberar prendas" className="h-8 w-8 text-red-600" onClick={() => { setGuiaAnular(item); setMotivoAnulacion(""); setErrorAnulacion(""); }}><Undo2 size={16} /></Button>}
                         <Button
                           size="icon"
                           variant="ghost"
@@ -426,6 +441,15 @@ export default function HistorialDespachosPage() {
       )}
 
       {/* 👁️ MODAL: DESGLOSE DE LA GUÍA Y SALDOS PENDIENTES */}
+      <Dialog open={!!guiaAnular} onOpenChange={open => { if (!open && !anulando) setGuiaAnular(null); }}>
+        <DialogContent className="bg-white sm:max-w-md">
+          <DialogHeader><DialogTitle>Anular despacho {guiaAnular?.codigoGuia}</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-600">Se eliminará esta guía y se revertirán el despacho y las confirmaciones de recepción de sus prendas. Volverán a revisión en Operaciones, desde donde podrás enviarlas nuevamente a producción.</p>
+          <label className="text-sm font-semibold">Motivo de anulación<textarea className="mt-1 w-full rounded border border-gray-300 p-2 text-sm" value={motivoAnulacion} onChange={e => setMotivoAnulacion(e.target.value)} disabled={anulando} placeholder="Explica el motivo (mínimo 10 caracteres)" /></label>
+          {errorAnulacion && <p role="alert" className="text-sm text-red-600">{errorAnulacion}</p>}
+          <DialogFooter><Button variant="outline" disabled={anulando} onClick={() => setGuiaAnular(null)}>Cancelar</Button><Button disabled={anulando || motivoAnulacion.trim().length < 10} className="bg-red-600 text-white" onClick={anularDespacho}>{anulando ? "Anulando…" : "Anular despacho"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={modalDetalleOpen} onOpenChange={setModalDetalleOpen}>
         <DialogContent className="sm:max-w-4xl bg-white p-6 rounded-2xl overflow-y-auto max-h-[90vh]">
           <DialogHeader>

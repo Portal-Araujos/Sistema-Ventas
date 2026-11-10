@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import * as XLSX from "xlsx";
 import {
   Scissors,
@@ -35,8 +37,11 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useSearchParams } from "next/navigation";
+import CambiosPedido from "@/components/shared/CambiosPedido";
+import HistorialCambioPrenda from "@/components/shared/HistorialCambioPrenda";
 
 function ProduccionPageContent() {
+  const { can, session: permissionSession } = usePermissions();
   const [data, setData] = useState<any[]>([]);
   const [kpis, setKpis] = useState<any>({});
   const [catalogos, setCatalogos] = useState<any>({
@@ -109,6 +114,8 @@ function ProduccionPageContent() {
     operarioAsignadoId: "",
   });
   const [saving, setSaving] = useState(false);
+  const [asignando, setAsignando] = useState(false);
+  const enlaceAbierto = useRef<string | null>(null);
 
   const [toast, setToast] = useState<{
     tipo: "exito" | "error";
@@ -154,11 +161,12 @@ function ProduccionPageContent() {
   }, [fechaDesde, fechaHasta, selectedEstadoFilter]);
   useEffect(() => {
     const pId = searchParams.get("pedidoId");
-    if (pId && data.length > 0) {
-      setSearchTerm(pId);
-      const grupoEncontrado = data.find((g) => g.codigoOP === pId);
+    if (pId && data.length > 0 && enlaceAbierto.current !== pId) {
+      const grupoEncontrado = data.find((g) => g.codigoOP === pId || g.pedidosAsociados.some((p: any) => p.id === pId));
       if (grupoEncontrado) {
-        handleOpenDetalle(grupoEncontrado);
+        enlaceAbierto.current = pId;
+        setSearchTerm(grupoEncontrado.codigoOP);
+        void handleOpenDetalle(grupoEncontrado);
       }
     }
   }, [searchParams, data]);
@@ -173,11 +181,26 @@ function ProduccionPageContent() {
     }
   }, [data]);
 
-  const handleOpenDetalle = (grupo: any) => {
+  const handleOpenDetalle = async (grupo: any) => {
+    if (asignando) return;
     setGrupoDetalle(grupo);
     setContratoExpandido(null);
     setPrendasSeleccionadas([]);
     setModalDetalleOpen(true);
+    setAsignando(true);
+    try {
+      const res = await fetch("/api/produccion/asignacion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pedidoIds: grupo.pedidosAsociados.map((p: any) => p.id) }) });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "No se pudo asignar el pedido");
+      setGrupoDetalle({ ...grupo, pedidosAsociados: grupo.pedidosAsociados.map((p: any) => {
+        const asignado = result.pedidos.find((a: any) => a.id === p.id);
+        if (!asignado) return p;
+        return { ...p, operarioAsignado: asignado.operarioAsignado, operarioAsignadoId: asignado.operarioAsignadoId, detalles: p.detalles.map((d: any) => ({ ...d, ...asignado.detalles.find((a: any) => a.id === d.id) })) };
+      }) });
+    } catch (error) {
+      showToast("error", error instanceof Error ? error.message : "No se pudo asignar el pedido");
+      setModalDetalleOpen(false);
+    } finally { setAsignando(false); }
   };
 
   const toggleSeleccionPrenda = (id: string) => {
@@ -189,6 +212,7 @@ function ProduccionPageContent() {
   };
 
   const abrirModalEstado = (pIds: string[]) => {
+    if (asignando) return;
     if (pIds.length === 0) {
       showToast(
         "error",
@@ -197,7 +221,8 @@ function ProduccionPageContent() {
       return;
     }
     setPrendasSeleccionadas(pIds);
-    setFormEstado({ estado: "", operarioAsignadoId: "" });
+    const responsables = [...new Set<string>(grupoDetalle.pedidosAsociados.flatMap((p: any) => p.detalles).filter((p: any) => pIds.includes(p.id)).map((p: any) => p.operarioAsignadoId).filter(Boolean))];
+    setFormEstado({ estado: "", operarioAsignadoId: esModoAdmin && responsables.length === 1 ? responsables[0] : "" });
     setModalEstado(true);
   };
 
@@ -211,16 +236,17 @@ function ProduccionPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prendaIds: prendasSeleccionadas,
-          ...formEstado,
+          ...(esModoAdmin ? formEstado : { estado: formEstado.estado }),
         }),
       });
-      if (!res.ok) throw new Error();
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "No se pudieron guardar los cambios");
       showToast("exito", "Producción actualizada con éxito.");
       setModalEstado(false);
       setPrendasSeleccionadas([]);
       await cargarDatos();
     } catch (e) {
-      showToast("error", "Error al guardar los cambios.");
+      showToast("error", e instanceof Error ? e.message : "Error al guardar los cambios.");
     } finally {
       setSaving(false);
     }
@@ -288,9 +314,9 @@ function ProduccionPageContent() {
       "Observación",
       "Operario",
       "Estado",
-      "Vendedor", // 🔥 NUEVO: Vendedor después de Estado
-      "Ingreso Taller", // Fecha de ingreso
-      "Fecha Compromiso", // Fecha de entrega
+      "Vendedor", 
+      "Ingreso Taller", 
+      "Fecha Requerida", 
     ]);
 
     const mapaTotales: Record<
@@ -358,7 +384,7 @@ function ProduccionPageContent() {
             ...item,
             codigoOP: grupo.codigoOP,
             institucionNombre: grupo.institucionNombre,
-            vendedorNombre: grupo.vendedorNombre, // 🔥 NUEVO: Capturamos el Vendedor del grupo
+            vendedorNombre: grupo.vendedorNombre, 
             numContrato: ped.numContrato,
             nombreCliente: ped.nombreCliente,
             ingresoTaller: grupo.fechaInicioTexto,
@@ -567,7 +593,8 @@ function ProduccionPageContent() {
     currentPage * itemsPerPage,
   );
 
-  const esModoAdmin = currentUser?.rol?.toLowerCase().includes("admin");
+  const esModoAdmin = can("produccion:asignar");
+  const responsablesSeleccionados = [...new Set<string>((grupoDetalle?.pedidosAsociados || []).flatMap((p: any) => p.detalles).filter((p: any) => prendasSeleccionadas.includes(p.id)).map((p: any) => p.operarioAsignado?.nombre).filter(Boolean))].join(", ") || "Sin asignar";
 
   return (
     <div className="p-4 md:p-8 flex flex-col gap-6 min-h-screen bg-gray-50/30">
@@ -863,7 +890,7 @@ function ProduccionPageContent() {
                             <Printer size={16} />
                           </Button>
                           {!todosCompletos && (
-                            <Button
+                            <Allowed permission="produccion:despachar"><Button
                               size="icon"
                               variant="ghost"
                               title="Enviar este pedido a Empaque"
@@ -873,7 +900,7 @@ function ProduccionPageContent() {
                               }
                             >
                               <Package size={16} />
-                            </Button>
+                            </Button></Allowed>
                           )}
                           <Button
                             size="icon"
@@ -1005,6 +1032,7 @@ function ProduccionPageContent() {
 
             <div className="space-y-3 pt-2">
               {(() => {
+                if (asignando) return <p role="status" className="p-4 text-sm text-blue-700">Asignando operario responsable…</p>;
                 // Lógica del filtro en tiempo real
                 const pedidosFiltrados = grupoDetalle?.pedidosAsociados?.filter((ped: any) => {
                   if (!busquedaContrato) return true;
@@ -1044,6 +1072,9 @@ function ProduccionPageContent() {
                           </Badge>
                           <span className="text-xs font-bold text-gray-800">
                             {ped.nombreCliente}
+                          </span>
+                          <span className="text-xs font-semibold text-blue-700">
+                            Operario responsable: {[...new Set<string>(ped.detalles.map((d: any) => d.operarioAsignado?.nombre).filter(Boolean))].join(", ") || ped.operarioAsignado?.nombre || "Sin asignar"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1114,6 +1145,9 @@ function ProduccionPageContent() {
                                     </td>
                                     <td className="p-2 font-bold text-gray-800">
                                       {p.tipoRopa}
+                                      <span className={`mt-1 block text-[10px] font-semibold ${p.cambiosProduccion?.length ? "text-amber-700" : "text-gray-400"}`}>
+                                        {p.cambiosProduccion?.length ? `Modificada (${p.cambiosProduccion.length})` : "Sin cambios"}
+                                      </span>
                                     </td>
                                     <td className="p-2 text-gray-600">
                                       {p.talla} ({p.color || "-"}) ({p.genero})
@@ -1160,15 +1194,21 @@ function ProduccionPageContent() {
                                       </Badge>
                                     </td>
                                     <td className="p-2 text-center">
-                                      <Button
-                                        size="sm"
-                                        className="h-7 text-[10px] bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                                      <div className="flex items-center justify-center gap-1">
+                                      {currentUser && p.estadoProduccion !== "Terminado" && !p.guiaDespachoId && !p.recibidoPorVendedor && <CambiosPedido pedidos={[ped]} institucionId={grupoDetalle.institucionId} currentUser={currentUser} detalleInicial={p.id} etiqueta="Cambiar prenda" soloProduccion onRefresh={cargarDatos} />}
+                                      {p.cambiosProduccion?.length > 0 && <HistorialCambioPrenda cambios={p.cambiosProduccion} />}
+                                      <Allowed permission="produccion:despachar"><Button
+                                        size="icon"
+                                        title="Enviar a despacho"
+                                        aria-label="Enviar a despacho"
+                                        className="h-7 w-7 bg-purple-600 hover:bg-purple-700 text-white"
                                         onClick={() =>
                                           handleMandarEmpaqueIndividual(p.id)
                                         }
                                       >
-                                        A Despacho
-                                      </Button>
+                                        <Package size={14} />
+                                      </Button></Allowed>
+                                      </div>
                                     </td>
                                   </tr>
                                 ))}
@@ -1176,7 +1216,7 @@ function ProduccionPageContent() {
                           </table>
 
                           <div className="flex justify-end pt-3">
-                            <Button
+                            <Allowed permission="produccion:editar"><Button
                               size="sm"
                               onClick={() =>
                                 abrirModalEstado(
@@ -1188,7 +1228,7 @@ function ProduccionPageContent() {
                               className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-8"
                             >
                               ⚙️ Cambiar Estado Taller (Seleccionadas)
-                            </Button>
+                            </Button></Allowed>
                           </div>
                         </div>
                       )}
@@ -1239,7 +1279,7 @@ function ProduccionPageContent() {
                     })
                   }
                 >
-                  <option value="">-- Dejar igual / Sin Asignar --</option>
+                  <option value="">-- Conservar responsables actuales --</option>
                   {catalogos.operarios.map((c: any) => (
                     <option key={c.id} value={c.id}>
                       {c.nombre} ({c.rol})
@@ -1255,7 +1295,7 @@ function ProduccionPageContent() {
                     Operario Responsable
                   </p>
                   <p className="text-xs font-black text-blue-900">
-                    {currentUser?.nombre}
+                    {responsablesSeleccionados}
                   </p>
                 </div>
               </div>
@@ -1289,14 +1329,14 @@ function ProduccionPageContent() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="produccion:editar"><Button
               size="sm"
               className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
               disabled={saving}
               onClick={handleGuardarEstado}
             >
               {saving ? "Guardando..." : "Aplicar Cambios"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>

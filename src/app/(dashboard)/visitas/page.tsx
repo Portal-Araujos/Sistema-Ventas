@@ -1,5 +1,7 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -29,6 +31,7 @@ import {
 import { Label } from "@/components/ui/label";
 
 export default function VisitasPage() {
+  const { can, session: permissionSession } = usePermissions();
   const [visitas, setVisitas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -234,12 +237,12 @@ export default function VisitasPage() {
             de ventas generados.
           </p>
         </div>
-        <Button
+        <Allowed permission="visitas:exportar"><Button
           onClick={handleExportExcel}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md"
         >
           <Download size={18} className="mr-2" /> Descargar Todo a Excel
-        </Button>
+        </Button></Allowed>
       </div>
 
       <div className="bg-card p-4 rounded-xl border border-border shadow-sm flex flex-wrap items-end gap-3">
@@ -317,7 +320,7 @@ export default function VisitasPage() {
               ))}
           </select>
         </div>
-        {catalogos?.userRol !== "vendedor" && (
+        {can("visitas:autorizar_fecha") && (
           <div>
             <Label className="text-[11px] font-bold text-muted-foreground uppercase">
               Vendedor
@@ -390,7 +393,7 @@ export default function VisitasPage() {
         <Table className={isRefreshing ? "opacity-80" : ""}>
           <TableHeader className="bg-muted/50">
             <TableRow>
-              {catalogos?.userRol !== "vendedor" && (
+              {can("visitas:autorizar_fecha") && (
                 <TableHead className="font-semibold text-center w-80px">
                   Edición
                 </TableHead>
@@ -429,9 +432,9 @@ export default function VisitasPage() {
               visitas.map((v, i) => (
                 <TableRow key={i} className="hover:bg-muted/30">
                   {/* 🔥 BOTÓN CANDADO PARA ADMINISTRADORES 🔥 */}
-                  {catalogos?.userRol !== "vendedor" && (
+                  {can("visitas:autorizar_fecha") && (
                     <TableCell className="text-center align-middle">
-                      <Button
+                      <Allowed permission="visitas:autorizar_fecha"><Button
                         variant="ghost"
                         size="icon"
                         onClick={() =>
@@ -449,7 +452,7 @@ export default function VisitasPage() {
                         ) : (
                           <Lock size={18} />
                         )}
-                      </Button>
+                      </Button></Allowed>
                     </TableCell>
                   )}
 

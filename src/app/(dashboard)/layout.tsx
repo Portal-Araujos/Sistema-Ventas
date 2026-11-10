@@ -1,11 +1,15 @@
 import React from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
-export default function DashboardLayout({
+import { PermissionsProvider } from "@/components/shared/PermissionsProvider";
+import { getApiSession } from "@/lib/api-auth";
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await getApiSession();
   return (
+    <PermissionsProvider session={session ? { rol: session.rol, permisos: session.permisos } : null}>
     <div className="flex min-h-screen bg-gray-50 pb-16 md:pb-0">
       {/* Menú Lateral */}
       <Sidebar />
@@ -14,5 +18,6 @@ export default function DashboardLayout({
         {children}
       </main>
     </div>
+    </PermissionsProvider>
   );
 }

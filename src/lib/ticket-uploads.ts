@@ -111,3 +111,21 @@ export async function storeTicketAttachment(file: File) {
 export function detectStoredAttachmentType(buffer: Buffer) {
   return detectAttachmentType(buffer);
 }
+
+export async function ticketMessageData(form: FormData, remitenteId: string, contenido: string) {
+  const entries = [...form.getAll("file"), ...form.getAll("files")];
+  if (entries.some(file => !(file instanceof File))) throw new InvalidTicketAttachmentError("Archivo adjunto inválido");
+  const files = entries as File[];
+  if (files.length > 10 || files.reduce((total, file) => total + file.size, 0) > 50 * 1024 * 1024) throw new InvalidTicketAttachmentError("Máximo 10 archivos y 50 MB por envío.");
+  // Validate the whole batch before writing any file to disk.
+  for (const file of files) {
+    if (!file.size || file.size > MAX_ATTACHMENT_SIZE || !detectAttachmentType(Buffer.from(await file.arrayBuffer()))) throw new InvalidTicketAttachmentError("Adjunto inválido: usa imágenes PNG/JPG/GIF/WebP, PDF o audio de hasta 10 MB.");
+  }
+  if (!files.length) return [{ remitenteId, contenido, adjuntoUrl: null, adjuntoTipo: null, adjuntoNombre: null }];
+  const mensajes = [];
+  for (const [index, file] of files.entries()) {
+    const adjunto = await storeTicketAttachment(file);
+    mensajes.push({ remitenteId, contenido: index === 0 ? contenido : `Adjunto ${index + 1} de ${files.length}`, adjuntoUrl: adjunto.url, adjuntoTipo: adjunto.mimeType, adjuntoNombre: adjunto.displayName });
+  }
+  return mensajes;
+}

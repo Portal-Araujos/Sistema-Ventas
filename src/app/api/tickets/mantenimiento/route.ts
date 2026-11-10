@@ -1,3 +1,4 @@
+import { getApiSession, hasPermission } from "@/lib/api-auth";
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -25,7 +26,8 @@ export async function POST(request: Request) {
     const userName = dbUser?.nombre || "Administrador";
 
     // 🔥 SEGURIDAD EXTREMA: Solo el super admin puede activar esto
-    if (userRol !== "super_admin") {
+    const session = await getApiSession();
+    if (!session || !hasPermission(session, "tickets:mantenimiento")) {
       return NextResponse.json(
         { error: "Solo el Super Administrador puede hacer limpieza masiva" },
         { status: 403 },

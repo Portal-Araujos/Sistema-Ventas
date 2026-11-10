@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {/* config options here */};
+const nextConfig: NextConfig = { experimental: { proxyClientMaxBodySize: "55mb" } };
 
 export default nextConfig;

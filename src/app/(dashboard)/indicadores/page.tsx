@@ -1,5 +1,7 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -32,6 +34,7 @@ import {
 import { Label } from "@/components/ui/label";
 
 export default function IndicadoresPage() {
+  const { can, session: permissionSession } = usePermissions();
   const [reporte, setReporte] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRol, setUserRol] = useState("vendedor");
@@ -176,20 +179,20 @@ export default function IndicadoresPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
+          <Allowed permission="indicadores:exportar"><Button
             variant="outline"
             onClick={exportarExcel}
             className="text-blue-700 border-blue-200 hover:bg-blue-50"
           >
             <Download size={16} className="mr-2" /> Descargar Excel
-          </Button>
-          {esAdmin && (
-            <Button
+          </Button></Allowed>
+          {can("indicadores:editar_metas") && (
+            <Allowed permission="indicadores:editar_metas"><Button
               onClick={handleOpenModalMetas}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex gap-2"
             >
               <Target size={18} /> Definir Metas
-            </Button>
+            </Button></Allowed>
           )}
         </div>
       </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
 import React, { useState, useEffect } from "react";
 import {
   User,
@@ -39,6 +41,7 @@ import { Label } from "@/components/ui/label";
 type TabType = "personal" | "seguridad";
 
 export default function UsuariosPage() {
+  const { can, session: permissionSession } = usePermissions();
   const [activeTab, setActiveTab] = useState<TabType>("personal");
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [rolesDinamicos, setRolesDinamicos] = useState<any[]>([]);
@@ -80,9 +83,10 @@ export default function UsuariosPage() {
         fetch("/api/roles"),
         fetch("/api/departamentos"),
       ]);
-      setUsuarios(await resUsers.json());
-      setRolesDinamicos(await resRoles.json());
-      setDepartamentos(await resDeptos.json());
+      const [users, roles, deptos] = await Promise.all([resUsers.json(), resRoles.json(), resDeptos.json()]);
+      setUsuarios(Array.isArray(users) ? users : []);
+      setRolesDinamicos(Array.isArray(roles) ? roles : []);
+      setDepartamentos(Array.isArray(deptos) ? deptos : []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -249,15 +253,15 @@ export default function UsuariosPage() {
       {activeTab === "personal" && (
         <div className="animate-in fade-in duration-300">
           <div className="flex gap-3 justify-end mb-4">
-            <Button
+            <Allowed permission="configuracion:crear"><Button
               variant="outline"
               onClick={() => setModalDeptoOpen(true)}
               className="font-bold border-gray-300 text-gray-700 shadow-sm"
             >
               <Briefcase size={16} className="mr-2" /> Áreas / Departamentos
-            </Button>
+            </Button></Allowed>
 
-            <Button
+            <Allowed permission="usuarios:crear"><Button
               onClick={() => {
                 setFormUser(initialForm);
                 setModalOpen(true);
@@ -265,7 +269,7 @@ export default function UsuariosPage() {
               className="bg-primary hover:bg-primary/90 text-white font-bold shadow-sm"
             >
               <Plus size={16} className="mr-1" /> Nuevo Usuario
-            </Button>
+            </Button></Allowed>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -345,10 +349,9 @@ export default function UsuariosPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {u.rolNombre !== "super admin" &&
-                        u.rolNombre !== "super_admin" ? (
+                        {(u.rolNombre !== "super_admin" || permissionSession?.rol === "super_admin") ? (
                           <div className="flex justify-center gap-2">
-                            <Button
+                            <Allowed permission="usuarios:editar"><Button
                               variant="outline"
                               size="sm"
                               onClick={() => {
@@ -365,8 +368,8 @@ export default function UsuariosPage() {
                               className="h-8 w-8 p-0 text-gray-600"
                             >
                               <Edit3 size={16} />
-                            </Button>
-                            <Button
+                            </Button></Allowed>
+                            <Allowed permission="usuarios:seguridad"><Button
                               variant="outline"
                               size="sm"
                               onClick={() =>
@@ -384,7 +387,7 @@ export default function UsuariosPage() {
                               ) : (
                                 <Lock size={16} />
                               )}
-                            </Button>
+                            </Button></Allowed>
                           </div>
                         ) : (
                           <div
@@ -464,14 +467,14 @@ export default function UsuariosPage() {
                 </div>
               </div>
 
-              <Button
+              <Allowed permission="configuracion:seguridad"><Button
                 onClick={handleGuardarConfigSeguridad}
                 disabled={savingSeguridad}
                 className="w-full bg-gray-900 hover:bg-black text-white font-bold h-11"
               >
                 <Save size={16} className="mr-2" />{" "}
                 {savingSeguridad ? "Guardando..." : "Aplicar Seguridad"}
-              </Button>
+              </Button></Allowed>
             </div>
           </div>
 
@@ -748,7 +751,7 @@ export default function UsuariosPage() {
                   <option value="">Rol...</option>
                   {rolesDinamicos.map(
                     (r) =>
-                      r.nombre !== "super_admin" && (
+                      (r.nombre !== "super_admin" || permissionSession?.rol === "super_admin") && (
                         <option key={r.id} value={r.id} className="uppercase">
                           {r.nombre.replace("_", " ")}
                         </option>

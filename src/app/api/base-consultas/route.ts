@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (!hasPermission(session, "base_consultas:ver")) {
+    if (!hasPermission(session, "base_consultas:crear")) {
       return forbiddenResponse();
     }
 
@@ -164,7 +164,7 @@ export async function PUT(request: Request) {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (!hasPermission(session, "base_consultas:ver")) {
+    if (!hasPermission(session, "base_consultas:editar")) {
       return forbiddenResponse();
     }
 

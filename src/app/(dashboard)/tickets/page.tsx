@@ -1,5 +1,8 @@
 "use client";
 
+import { usePermissions, Allowed } from "@/components/shared/PermissionsProvider";
+import TicketAttachments, { pegarArchivosTicket } from "@/components/shared/TicketAttachments";
+
 import React, { useState, useEffect } from "react";
 import {
   Ticket,
@@ -32,8 +35,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import TicketChatDrawer from "@/components/shared/TicketChatDrawer";
+import TicketAssignees from "@/components/shared/TicketAssignees";
 
 export default function TicketsPage() {
+  const { can } = usePermissions();
   const [tickets, setTickets] = useState<any[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [instituciones, setInstituciones] = useState<any[]>([]);
@@ -44,6 +49,7 @@ export default function TicketsPage() {
     rol: "",
     departamento: "General",
     esSuperAdmin: false,
+    puedeVerTodos: false,
   });
   const [tabActiva, setTabActiva] = useState("General");
   const [searchTerm, setSearchTerm] = useState("");
@@ -139,15 +145,10 @@ export default function TicketsPage() {
     mensajeInicial: "",
     fechaLimite: "",
   });
-  const [archivoNuevoTicket, setArchivoNuevoTicket] = useState<File | null>(null);
-  const [isDraggingNuevo, setIsDraggingNuevo] = useState(false);
-  const [usuariosSeleccionados, setUsuariosSeleccionados] = useState<any[]>([]);
+  const [archivoNuevoTicket, setArchivoNuevoTicket] = useState<File[]>([]);
   const [busquedaInst, setBusquedaInst] = useState("");
   const [resultadosInst, setResultadosInst] = useState<any[]>([]);
   const [dropdownInst, setDropdownInst] = useState(false);
-  const [busquedaUser, setBusquedaUser] = useState("");
-  const [resultadosUser, setResultadosUser] = useState<any[]>([]);
-  const [dropdownUser, setDropdownUser] = useState(false);
 
   const cargarDatos = async () => {
     setLoading(true);
@@ -164,10 +165,10 @@ export default function TicketsPage() {
         if (Array.isArray(dataTickets.usuarios)) {
           setUsuarios(dataTickets.usuarios); // 🔥 Carga garantizada para vendedores y todos los roles
         }
-        if (dataTickets.currentUser.esSuperAdmin) setTabActiva("General");
-        else if (dataTickets.currentUser.rol === "vendedor")
+        if (!currentUser.id && dataTickets.currentUser.puedeVerTodos) setTabActiva("General");
+        else if (!currentUser.id && dataTickets.currentUser.rol === "vendedor")
           setTabActiva("Mios");
-        else setTabActiva("MiArea");
+        else if (!currentUser.id) setTabActiva("MiArea");
       }
       try {
         const resUsu = await fetch("/api/usuarios");
@@ -187,13 +188,21 @@ export default function TicketsPage() {
     cargarDatos();
   }, []);
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tId = params.get("ticketId");
-    if (tId) {
-      abrirChat(parseInt(tId));
-      // Limpiamos la URL para que no se vuelva a abrir si recarga la página
-      window.history.replaceState({}, "", "/tickets");
+    const sincronizar = () => {
+      const id = Number(new URL(window.location.href).searchParams.get("ticketId"));
+      setSelectedTicketId(Number.isSafeInteger(id) && id > 0 ? id : null);
+      setChatOpen(Number.isSafeInteger(id) && id > 0);
+    };
+    const url = new URL(window.location.href);
+    const id = Number(url.searchParams.get("ticketId"));
+    if (Number.isSafeInteger(id) && id > 0 && !window.history.state?.ticketEntry) {
+      const listado = new URL(url); listado.searchParams.delete("ticketId");
+      window.history.replaceState({ ...window.history.state, ticketEntry: false }, "", listado);
+      window.history.pushState({ ...window.history.state, ticketEntry: true }, "", url);
     }
+    sincronizar();
+    window.addEventListener("popstate", sincronizar);
+    return () => window.removeEventListener("popstate", sincronizar);
   }, []);
 
   useEffect(() => {
@@ -223,62 +232,6 @@ export default function TicketsPage() {
     setDropdownInst(false);
   };
 
-  const normalizarTexto = (texto: string) =>
-    texto
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
-  const handleBuscarUsuario = (termino: string) => {
-    setBusquedaUser(termino);
-    const termLimpio = normalizarTexto(termino.trim());
-
-    // Si hace clic en el input vacío, mostramos todos los disponibles
-    if (termino === " " || termLimpio.length === 0) {
-      setResultadosUser(usuarios);
-      setDropdownUser(termino === " ");
-      return;
-    }
-
-    const filtrados = usuarios.filter((u) => {
-      const nombre = normalizarTexto(u.nombre || "");
-      const rol = normalizarTexto(
-        u.rolNombre || u.rol?.nombre || (typeof u.rol === "string" ? u.rol : ""),
-      );
-      const depto = normalizarTexto(u.departamentoNombre || "");
-
-      return (
-        nombre.includes(termLimpio) ||
-        rol.includes(termLimpio) ||
-        depto.includes(termLimpio)
-      );
-    });
-
-    setResultadosUser(filtrados);
-    setDropdownUser(true);
-  };
-
-  const seleccionarUsuario = (user: any) => {
-    if (!nuevoTicket.asignadosIds.includes(user.id)) {
-      setNuevoTicket((prev) => ({
-        ...prev,
-        asignadosIds: [...prev.asignadosIds, user.id],
-      }));
-      setUsuariosSeleccionados((prev) => [...prev, user]);
-    }
-    setBusquedaUser("");
-    setDropdownUser(false);
-  };
-
-  const removerUsuario = (e: React.MouseEvent, userId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setNuevoTicket((prev) => ({
-      ...prev,
-      asignadosIds: prev.asignadosIds.filter((id) => id !== userId),
-    }));
-    setUsuariosSeleccionados((prev) => prev.filter((u) => u.id !== userId));
-  };
-
   const handleCrearTicket = async () => {
     if (!nuevoTicket.tipo) return alert("Por favor, selecciona el ÁREA RESPONSABLE.");
     
@@ -286,7 +239,7 @@ export default function TicketsPage() {
     if (!nuevoTicket.institucionId || !nuevoTicket.asunto) {
       return alert("Completa Institución y Asunto.");
     }
-    if (!nuevoTicket.mensajeInicial.trim() && !archivoNuevoTicket) {
+    if (!nuevoTicket.mensajeInicial.trim() && !archivoNuevoTicket.length) {
       return alert("Debes escribir un mensaje o adjuntar un archivo/audio.");
     }
     
@@ -307,11 +260,11 @@ export default function TicketsPage() {
       // 🔥 Texto automático si el vendedor solo grabó un audio 🔥
       const textoInicial = nuevoTicket.mensajeInicial.trim() 
         ? nuevoTicket.mensajeInicial 
-        : (archivoNuevoTicket?.type.startsWith("audio/") ? "🎵 Nota de voz de solicitud" : "📎 Archivo adjunto enviado");
+        : (archivoNuevoTicket[0]?.type.startsWith("audio/") ? "🎵 Nota de voz de solicitud" : "📎 Archivo adjunto enviado");
       
       formData.append("mensajeInicial", textoInicial);
 
-      if (archivoNuevoTicket) formData.append("file", archivoNuevoTicket);
+      archivoNuevoTicket.forEach(file => formData.append("file", file));
 
       const res = await fetch("/api/tickets", { method: "POST", body: formData });
       
@@ -326,10 +279,8 @@ export default function TicketsPage() {
           mensajeInicial: "",
           fechaLimite: "",
         });
-        setUsuariosSeleccionados([]);
         setBusquedaInst("");
-        setBusquedaUser("");
-        setArchivoNuevoTicket(null); // Limpiamos el archivo
+        setArchivoNuevoTicket([]); // Limpiamos el archivo
         await cargarDatos();
       } else {
         alert("Error al crear el ticket (Posible archivo no permitido).");
@@ -342,8 +293,14 @@ export default function TicketsPage() {
   };
 
   const abrirChat = (ticketId: number) => {
-    setSelectedTicketId(ticketId);
-    setChatOpen(true);
+    const url = new URL(window.location.href); url.searchParams.set("ticketId", String(ticketId));
+    window.history.pushState({ ...window.history.state, ticketEntry: true }, "", url);
+    setSelectedTicketId(ticketId); setChatOpen(true);
+  };
+  const cerrarChat = () => {
+    if (window.history.state?.ticketEntry) window.history.back();
+    else { const url = new URL(window.location.href); url.searchParams.delete("ticketId"); window.history.replaceState(window.history.state, "", url); setChatOpen(false); setSelectedTicketId(null); }
+    void cargarDatos();
   };
 
   const getColorEstado = (est: string) => {
@@ -400,7 +357,7 @@ export default function TicketsPage() {
     } else {
       if (t.estado === "Cerrado" || t.estado === "Resuelto") return false;
     }
-    if (currentUser.esSuperAdmin) {
+    if (currentUser.puedeVerTodos) {
       return tabActiva === "General" || t.tipo === tabActiva;
     } else if (currentUser.rol === "vendedor") {
       return true;
@@ -475,7 +432,7 @@ export default function TicketsPage() {
           </p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          {currentUser.esSuperAdmin && (
+          {can("tickets:mantenimiento") && (
             <Button
               variant="outline"
               className="border-red-200 text-red-600 hover:bg-red-50 font-bold h-10 shadow-sm"
@@ -484,12 +441,12 @@ export default function TicketsPage() {
               <HardDrive size={18} className="mr-2" /> Mantenimiento
             </Button>
           )}
-          <Button
+          <Allowed permission="tickets:crear"><Button
             className="bg-primary hover:bg-primary/90 text-white shadow-md font-bold h-10 px-5 flex-1 sm:flex-none"
             onClick={() => setNuevoModalOpen(true)}
           >
             <Plus size={18} className="mr-2" /> Nuevo Ticket
-          </Button>
+          </Button></Allowed>
         </div>
       </div>
 
@@ -623,7 +580,7 @@ export default function TicketsPage() {
           </div>
         </div>
         <div className="flex gap-2 w-full overflow-x-auto hide-scrollbar pt-1">
-          {currentUser.esSuperAdmin ? (
+          {currentUser.puedeVerTodos ? (
             <>
               <button
                 onClick={() => setTabActiva("General")}
@@ -919,11 +876,7 @@ export default function TicketsPage() {
 
       <TicketChatDrawer
         isOpen={chatOpen}
-        onClose={() => {
-          setChatOpen(false);
-          setSelectedTicketId(null);
-          cargarDatos();
-        }}
+        onClose={cerrarChat}
         ticketId={selectedTicketId}
         currentUserId={currentUser.id}
         currentUserRol={currentUser.rol}
@@ -1020,60 +973,7 @@ export default function TicketsPage() {
                 Asignar a (Múltiple) *
               </Label>
 
-              {usuariosSeleccionados.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {usuariosSeleccionados.map((u) => (
-                    <Badge
-                      key={u.id}
-                      variant="secondary"
-                      className="bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1 py-1 pr-2"
-                    >
-                      {u.nombre}
-                      <button
-                        type="button"
-                        onClick={(e) => removerUsuario(e, u.id)}
-                        className="ml-1 hover:text-red-500 focus:outline-none"
-                      >
-                        <X size={12} />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-
-              <div className="relative">
-                <User
-                  size={16}
-                  className="absolute left-3 top-3.5 text-gray-400"
-                />
-                <Input
-                  className="pl-9 h-11 text-sm bg-white border-gray-300"
-                  placeholder="Buscar para añadir personas..."
-                  value={busquedaUser}
-                  onChange={(e) => handleBuscarUsuario(e.target.value)}
-                  onFocus={() => {
-                    if (!busquedaUser) handleBuscarUsuario(" ");
-                  }}
-                />
-              </div>
-              {dropdownUser && (
-                <ul className="absolute z-9999 w-full bg-white border border-gray-200 shadow-2xl rounded-lg mt-1 max-h-48 overflow-y-auto">
-                  {resultadosUser.map((user) => (
-                    <li
-                      key={user.id}
-                      className="px-4 py-2 hover:bg-primary/5 cursor-pointer border-b border-gray-50"
-                      onClick={() => seleccionarUsuario(user)}
-                    >
-                      <p className="text-sm font-bold text-gray-800">
-                        {user.nombre}
-                      </p>
-                      <p className="text-[10px] text-primary uppercase font-black">
-                        {user.rolNombre || "USUARIO"}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <TicketAssignees usuarios={usuarios} value={nuevoTicket.asignadosIds} onChange={asignadosIds => setNuevoTicket(prev => ({ ...prev, asignadosIds }))} disabled={saving} />
             </div>
             <div className="space-y-2 border-t border-gray-100 pt-3">
               <Label className="text-[11px] font-bold text-gray-700 uppercase flex items-center gap-1">
@@ -1110,29 +1010,8 @@ export default function TicketsPage() {
               <Label className="text-[11px] font-bold text-gray-700 uppercase">
                 Mensaje Inicial (Instrucciones) y Adjuntos *
               </Label>
-              <div 
-                className={`relative border-2 border-dashed rounded-lg transition-colors ${isDraggingNuevo ? 'border-primary bg-primary/5' : 'border-gray-300 bg-white'}`}
-                onDragOver={(e) => { e.preventDefault(); setIsDraggingNuevo(true); }}
-                onDragLeave={() => setIsDraggingNuevo(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDraggingNuevo(false);
-                  if (e.dataTransfer.files?.[0]) setArchivoNuevoTicket(e.dataTransfer.files[0]);
-                }}
-              >
-                <textarea
-                  className="w-full h-24 p-3 text-sm resize-none outline-none bg-transparent"
-                  placeholder="Escribe los detalles o arrastra una imagen/PDF aquí..."
-                  value={nuevoTicket.mensajeInicial}
-                  onChange={(e) => setNuevoTicket({ ...nuevoTicket, mensajeInicial: e.target.value })}
-                />
-              </div>
-              {archivoNuevoTicket && (
-                <div className="bg-blue-50 border border-blue-200 p-2 rounded-lg flex justify-between items-center text-xs text-blue-800 font-bold">
-                  <span>📎 {archivoNuevoTicket.name}</span>
-                  <button type="button" onClick={() => setArchivoNuevoTicket(null)} className="text-red-500"><X size={14}/></button>
-                </div>
-              )}
+              <textarea className="w-full h-24 rounded border border-gray-300 p-3 text-sm" placeholder="Escribe los detalles o pega una captura (Ctrl+V)..." value={nuevoTicket.mensajeInicial} onChange={e => setNuevoTicket({ ...nuevoTicket, mensajeInicial: e.target.value })} onPaste={e => pegarArchivosTicket(e, archivoNuevoTicket, setArchivoNuevoTicket)} />
+              <TicketAttachments archivos={archivoNuevoTicket} onChange={setArchivoNuevoTicket} disabled={saving} />
             </div>
           </div>
           <DialogFooter className="mt-4 border-t border-gray-100 pt-4 flex flex-col sm:flex-row gap-2">

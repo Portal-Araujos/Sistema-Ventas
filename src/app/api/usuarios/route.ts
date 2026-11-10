@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (!hasPermission(session, "usuarios:gestionar")) {
+    if (!hasPermission(session, "usuarios:ver")) {
       return forbiddenResponse();
     }
 
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (!hasPermission(session, "usuarios:gestionar")) {
+    if (!hasPermission(session, "usuarios:crear")) {
       return forbiddenResponse();
     }
 
@@ -153,7 +153,7 @@ export async function PUT(request: Request) {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (!hasPermission(session, "usuarios:gestionar")) {
+    if (!hasPermission(session, "usuarios:editar")) {
       return forbiddenResponse();
     }
 

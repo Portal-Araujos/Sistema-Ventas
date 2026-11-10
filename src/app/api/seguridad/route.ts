@@ -1,3 +1,4 @@
+import { getApiSession, hasPermission } from "@/lib/api-auth";
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -5,15 +6,8 @@ import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
 async function isSuperAdmin() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("session_token")?.value;
-  if (!token) return false;
-  try {
-    const { payload } = await jwtVerify(token, getJwtSecret());
-    return payload.rol === "super_admin";
-  } catch {
-    return false;
-  }
+  const session = await getApiSession();
+  return !!session && hasPermission(session, "configuracion:seguridad");
 }
 
 export async function GET() {

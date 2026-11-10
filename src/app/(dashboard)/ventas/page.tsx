@@ -1,5 +1,13 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
+import TicketAttachments, { pegarArchivosTicket } from "@/components/shared/TicketAttachments";
+
+import { tarjetaVenta, compararVentas } from "@/lib/ventas-tabla";
+import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import TicketAssignees from "@/components/shared/TicketAssignees";
+
 import React, { useState, useEffect, useRef } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import * as XLSX from "xlsx";
@@ -59,6 +67,7 @@ const MESES_LISTA = [
 ];
 
 export default function VentasPage() {
+  const { can, session: permissionSession } = usePermissions();
   const [ventas, setVentas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [catalogos, setCatalogos] = useState<any>(null);
@@ -88,6 +97,11 @@ export default function VentasPage() {
       }
     }
   }, []);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const ordenarPor = (key: string) => { setSortConfig(prev => ({ key, direction: prev?.key === key && prev.direction === "asc" ? "desc" : "asc" })); setCurrentPage(1); };
+  const encabezadoOrden = (key: string, label: string) => <button type="button" className="inline-flex items-center gap-1 text-left hover:text-blue-700" onClick={() => ordenarPor(key)} title={`Ordenar por ${label}`} aria-label={`Ordenar por ${label}`}>
+    {label}{sortConfig?.key !== key ? <ArrowUpDown size={12} /> : sortConfig.direction === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+  </button>;
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   const [toastMsg, setToastMsg] = useState<{
@@ -129,27 +143,8 @@ export default function VentasPage() {
     fechaLimite: "",
   });
 
-  const [archivoTicketVenta, setArchivoTicketVenta] = useState<File | null>(null);
-  const [isDraggingTicket, setIsDraggingTicket] = useState(false);
+  const [archivoTicketVenta, setArchivoTicketVenta] = useState<File[]>([]);
   const [usuariosSeleccionadosTicket, setUsuariosSeleccionadosTicket] = useState<any[]>([]);
-  const [busquedaUserTicket, setBusquedaUserTicket] = useState("");
-  const [resultadosUserTicket, setResultadosUserTicket] = useState<any[]>([]);
-  const [dropdownUserTicket, setDropdownUserTicket] = useState(false);
-  const handleBuscarUsuarioTicket = (termino: string) => {
-    setBusquedaUserTicket(termino);
-    const termLimpio = termino.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-    if (termLimpio.length < 1) {
-      setResultadosUserTicket([]);
-      setDropdownUserTicket(false);
-      return;
-    }
-    const filtrados = (catalogos?.usuarios || []).filter((u: any) =>
-      u.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(termLimpio) ||
-      (u.rol?.nombre && u.rol.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(termLimpio))
-    );
-    setResultadosUserTicket(filtrados);
-    setDropdownUserTicket(true);
-  };
   const hoyStr = new Date().toISOString().split("T")[0];
   const initialFormVenta = {
     id: "",
@@ -346,7 +341,7 @@ export default function VentasPage() {
 
       setVentas(Array.isArray(dataVentas) ? dataVentas : []);
       setCatalogos(dataCat);
-      setInstitucionesDisponibles(dataInst.data ? dataInst.data : dataInst);
+      setInstitucionesDisponibles(Array.isArray(dataInst) ? dataInst : Array.isArray(dataInst.data) ? dataInst.data : []);
       setDepartamentos(Array.isArray(dataDeptos) ? dataDeptos : []);
 
       if (dataCat.userRol) setUserRol(dataCat.userRol);
@@ -595,11 +590,12 @@ export default function VentasPage() {
     setSaving(true);
     try {
       const method = formVenta.id ? "PUT" : "POST";
-      await fetch("/api/ventas", {
+      const res = await fetch("/api/ventas", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formVenta),
+        body: JSON.stringify({ ...formVenta, ...(!puedeValidar ? { observacionesFact: undefined, verificacionFact: undefined } : {}) }),
       });
+      const result = await res.json(); if (!res.ok) throw new Error(result.error || "No se pudo guardar");
       setOpenCreate(false);
       setFormVenta(initialFormVenta);
       showToast(
@@ -610,7 +606,7 @@ export default function VentasPage() {
       );
       cargarDatos();
     } catch (e: any) {
-      showToast("error", "Hubo un problema al guardar.");
+      showToast("error", e instanceof Error ? e.message : "Hubo un problema al guardar.");
     } finally {
       setSaving(false);
     }
@@ -628,7 +624,7 @@ export default function VentasPage() {
       return;
     }
     try {
-      await fetch("/api/ventas", {
+      const res = await fetch("/api/ventas", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -637,6 +633,7 @@ export default function VentasPage() {
           verificacionFact: factData.verificacionFact,
         }),
       });
+      const result = await res.json(); if (!res.ok) throw new Error(result.error || "No se pudo guardar la auditoría");
       setFactModal({ open: false, venta: null });
       showToast("exito", "Auditoría guardada con éxito.");
       cargarDatos();
@@ -666,7 +663,7 @@ export default function VentasPage() {
     if (!ticketModal.tipo) return showToast("alerta", "Selecciona el Área Responsable");
     if (!ticketModal.fechaLimite) return showToast("alerta", "Selecciona la Fecha Límite de resolución");
     
-    if (!ticketModal.mensajeInicial.trim() && !archivoTicketVenta) {
+    if (!ticketModal.mensajeInicial.trim() && !archivoTicketVenta.length) {
       return showToast("alerta", "Escribe las instrucciones o adjunta un archivo");
     }
 
@@ -686,13 +683,11 @@ export default function VentasPage() {
 
       const textoInicial = ticketModal.mensajeInicial.trim() 
         ? ticketModal.mensajeInicial 
-        : (archivoTicketVenta?.type.startsWith("audio/") ? "🎵 Nota de voz de solicitud" : "📎 Archivo adjunto enviado");
+        : (archivoTicketVenta[0]?.type.startsWith("audio/") ? "🎵 Nota de voz de solicitud" : "📎 Archivo adjunto enviado");
       
       formData.append("mensajeInicial", textoInicial);
 
-      if (archivoTicketVenta) {
-        formData.append("file", archivoTicketVenta);
-      }
+      archivoTicketVenta.forEach(file => formData.append("file", file));
 
       const res = await fetch("/api/tickets", {
         method: "POST",
@@ -701,9 +696,8 @@ export default function VentasPage() {
 
       if (res.ok) {
         setTicketModal((prev) => ({ ...prev, open: false, mensajeInicial: "", fechaLimite: "" }));
-        setArchivoTicketVenta(null);
+        setArchivoTicketVenta([]);
         setUsuariosSeleccionadosTicket([]);
-        setBusquedaUserTicket("");
         showToast("exito", "¡Ticket generado y asignado!");
       } else {
         showToast("error", "Error al crear el ticket (Verifica el formato del archivo)");
@@ -714,10 +708,7 @@ export default function VentasPage() {
       setSaving(false);
     }
   };
-  const puedeValidar =
-    userPermisos.includes("ventas:validar") ||
-    userRol === "super_admin" ||
-    userRol === "administrador";
+  const puedeValidar = can("ventas:validar");
   const esAdmin = userRol === "super_admin" || userRol === "administrador";
   const puedeVerBase =
     userRol === "super_admin" || userPermisos.includes("base_consultas:ver");
@@ -731,41 +722,10 @@ export default function VentasPage() {
       )
     : [];
 
-  const kpiPendientes = ventas.filter(
-    (v) =>
-      (!v.verificacionFact || v.verificacionFact === "Sin validar") &&
-      (!v.observacionesFact ||
-        v.observacionesFact === "Sin observaciones" ||
-        v.observacionesFact.trim() === ""),
-  ).length;
-  const kpiNovedades = ventas.filter(
-    (v) =>
-      v.observacionesFact &&
-      v.observacionesFact !== "Sin observaciones" &&
-      v.observacionesFact.trim() !== "",
-  ).length;
-  const kpiAprobadas = ventas.filter(
-    (v) => v.verificacionFact && v.verificacionFact !== "Sin validar",
-  ).length;
-
-  let ventasFiltradas = ventas.filter((v) => {
-    if (filtroTarjeta === "Pendientes")
-      return (
-        (!v.verificacionFact || v.verificacionFact === "Sin validar") &&
-        (!v.observacionesFact ||
-          v.observacionesFact === "Sin observaciones" ||
-          v.observacionesFact.trim() === "")
-      );
-    if (filtroTarjeta === "Novedades")
-      return (
-        v.observacionesFact &&
-        v.observacionesFact !== "Sin observaciones" &&
-        v.observacionesFact.trim() !== ""
-      );
-    if (filtroTarjeta === "Aprobadas")
-      return v.verificacionFact && v.verificacionFact !== "Sin validar";
-    return true;
-  });
+  const kpiPendientes = ventas.filter(v => tarjetaVenta(v) === "Pendientes").length;
+  const kpiNovedades = ventas.filter(v => tarjetaVenta(v) === "Novedades").length;
+  const kpiAprobadas = ventas.filter(v => tarjetaVenta(v) === "Aprobadas").length;
+  let ventasFiltradas = ventas.filter(v => filtroTarjeta === "Todas" || tarjetaVenta(v) === filtroTarjeta);
 
   if (searchTerm) {
     const termino = searchTerm
@@ -800,6 +760,7 @@ export default function VentasPage() {
     ventasFiltradas = ventasFiltradas.filter(
       (v) => v.mesCobro === filtros.mesCobro,
     );
+  if (sortConfig) ventasFiltradas = [...ventasFiltradas].sort((a, b) => compararVentas(a, b, sortConfig.key, sortConfig.direction));
   const totalPages = Math.max(
     1,
     Math.ceil(ventasFiltradas.length / itemsPerPage),
@@ -867,14 +828,14 @@ export default function VentasPage() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
+                <Allowed permission="ventas:exportar"><Button
                   variant="outline"
                   onClick={exportarExcel}
                   className="text-blue-700 border-blue-200 hover:bg-blue-50"
                 >
                   <Download size={16} className="mr-2" /> Exportar a Excel
-                </Button>
-                {puedeValidar && (
+                </Button></Allowed>
+                {can("ventas:validar_masivo") && (
                   <>
                     <input
                       type="file"
@@ -883,16 +844,16 @@ export default function VentasPage() {
                       ref={fileInputRef}
                       onChange={handleFileUpload}
                     />
-                    <Button
+                    <Allowed permission="ventas:validar_masivo"><Button
                       variant="outline"
                       onClick={() => fileInputRef.current?.click()}
                       className="text-emerald-700 border-emerald-200 hover:bg-emerald-50"
                     >
                       <Upload size={16} className="mr-2" /> Validar Masivo
-                    </Button>
+                    </Button></Allowed>
                   </>
                 )}
-                <Button
+                <Allowed permission="ventas:crear"><Button
                   onClick={() => {
                     setFormVenta(initialFormVenta);
                     setOpenCreate(true);
@@ -900,7 +861,7 @@ export default function VentasPage() {
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                 >
                   <Plus size={18} className="mr-1" /> Registrar Venta
-                </Button>
+                </Button></Allowed>
               </div>
             </div>
 
@@ -977,7 +938,6 @@ export default function VentasPage() {
                   />
                 </div>
               </div>
-              {esAdmin && (
                 <div>
                   <Label className="text-[11px] font-bold text-gray-500">
                     Vendedor
@@ -997,7 +957,6 @@ export default function VentasPage() {
                     ))}
                   </select>
                 </div>
-              )}
               <div>
                 <Label className="text-[11px] font-bold text-gray-500">
                   Estado Contrato
@@ -1063,31 +1022,31 @@ export default function VentasPage() {
                 <TableHeader className="bg-gray-50/80">
                   <TableRow>
                     <TableHead className="font-semibold text-gray-700 w-44">
-                      Contrato / Escuela
+                      {encabezadoOrden("numContrato", "Contrato")}<br />{encabezadoOrden("institucionNombre", "Escuela")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 w-36">
-                      Vendedor
+                      {encabezadoOrden("vendedorNombre", "Vendedor")}<br />{encabezadoOrden("fechaVentaISO", "Fecha")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 w-40">
-                      Cliente / Cédula
+                      {encabezadoOrden("nombreCliente", "Cliente / Cédula")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-32">
-                      Valor / Cuota
+                      {encabezadoOrden("valorContrato", "Valor")}<br />{encabezadoOrden("cuotaMensual", "Cuota")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-28">
-                      Cobro / Mes
+                      {encabezadoOrden("mesCobro", "Cobro / Mes")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-32">
-                      Estados
+                      {encabezadoOrden("estadoContratoNombre", "Estados")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-28">
-                      Verificación
+                      {encabezadoOrden("verificacionFact", "Verificación")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 w-48">
-                      Observaciones
+                      {encabezadoOrden("observacionesFact", "Observaciones")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-32">
-                      Prendas/Bordados
+                      {encabezadoOrden("prendas", "Prendas/Bordados")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-32">
                       Acción
@@ -1238,7 +1197,7 @@ export default function VentasPage() {
                         </TableCell>
                         <TableCell className="text-center w-32">
                           <div className="flex justify-center gap-1">
-                            <Button
+                            <Allowed permission="tickets:crear"><Button
                               variant="outline"
                               size="sm"
                               className="h-8 w-8 text-amber-600 border-amber-200 hover:bg-amber-50 p-0"
@@ -1246,8 +1205,8 @@ export default function VentasPage() {
                               title="Crear Ticket de Novedad"
                             >
                               <Ticket size={14} />
-                            </Button>
-                            <Button
+                            </Button></Allowed>
+                            <Allowed permission="ventas:editar"><Button
                               variant="ghost"
                               size="sm"
                               className="h-8 w-8 text-blue-600 hover:bg-blue-50 p-0"
@@ -1255,9 +1214,9 @@ export default function VentasPage() {
                               title="Editar Contrato"
                             >
                               <Pencil size={14} />
-                            </Button>
+                            </Button></Allowed>
                             {puedeValidar && (
-                              <Button
+                              <Allowed permission="ventas:validar"><Button
                                 variant="outline"
                                 size="sm"
                                 className="h-8 text-xs text-primary border-primary/30 px-2"
@@ -1277,7 +1236,7 @@ export default function VentasPage() {
                                 }}
                               >
                                 <Edit3  /> Auditar
-                              </Button>
+                              </Button></Allowed>
                             )}
                           </div>
                         </TableCell>
@@ -1337,15 +1296,15 @@ export default function VentasPage() {
                 </p>
               </div>
 
-              {esAdmin && (
+              {can("base_consultas:crear") && (
                 <div className="flex gap-2">
-                  <Button
+                  <Allowed permission="ventas:crear"><Allowed permission="base_consultas:crear"><Button
                     variant="outline"
                     onClick={handleOpenCreateBase}
                     className="bg-primary hover:bg-primary/90 text-white font-bold shadow-sm"
                   >
                     <Plus className="mr-1" size={16} /> Nuevo Manual
-                  </Button>
+                  </Button></Allowed></Allowed>
                   <input
                     type="file"
                     accept=".xlsx, .xls"
@@ -1353,14 +1312,14 @@ export default function VentasPage() {
                     ref={fileBaseRef}
                     onChange={handleUploadBaseExcel}
                   />
-                  <Button
+                  <Allowed permission="base_consultas:crear"><Button
                     onClick={() => fileBaseRef.current?.click()}
                     disabled={uploadingBase}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md"
                   >
                     <UploadCloud className="mr-2" size={18} />{" "}
                     {uploadingBase ? "Procesando..." : "Subir Base (Excel)"}
-                  </Button>
+                  </Button></Allowed>
                 </div>
               )}
             </div>
@@ -1452,7 +1411,7 @@ export default function VentasPage() {
                           ${cliente.liquidoPagar.toFixed(2)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button
+                          <Allowed permission="base_consultas:editar"><Button
                             variant="ghost"
                             size="sm"
                             className="h-8 w-8 text-red-600 hover:bg-red-50 p-0"
@@ -1460,7 +1419,7 @@ export default function VentasPage() {
                             title="Editar Cliente / Vincular Escuela"
                           >
                             <Pencil size={14} />
-                          </Button>
+                          </Button></Allowed>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1697,7 +1656,7 @@ export default function VentasPage() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="base_consultas:crear"><Button
               size="sm"
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
               onClick={analizarCambiosExcel}
@@ -1708,7 +1667,7 @@ export default function VentasPage() {
               }
             >
               {isImportingBase ? "Importando..." : "Subir Base de Datos"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1799,9 +1758,9 @@ export default function VentasPage() {
             <Button variant="outline" onClick={() => setBaseConfirmModal(prev => ({...prev, open: false}))} disabled={isImportingBase}>
               Cancelar
             </Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" onClick={confirmarImportacionBase} disabled={isImportingBase}>
+            <Allowed permission="base_consultas:crear"><Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" onClick={confirmarImportacionBase} disabled={isImportingBase}>
               {isImportingBase ? "Guardando en Base de Datos..." : "Confirmar y Procesar Cambios"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2200,7 +2159,7 @@ export default function VentasPage() {
                       <span className="text-xs font-mono text-gray-900">
                         Contrato: {n.contratoExcel}
                       </span>
-                      <Button
+                      <Allowed permission="ventas:crear"><Button
                         size="sm"
                         variant="outline"
                         className="h-7 text-xs border-primary text-primary"
@@ -2209,7 +2168,7 @@ export default function VentasPage() {
                         }
                       >
                         <Plus size={12} className="mr-1" /> Registrar
-                      </Button>
+                      </Button></Allowed>
                     </div>
                   ))}
                 </div>
@@ -2229,13 +2188,13 @@ export default function VentasPage() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="ventas:validar_masivo"><Button
               className="bg-emerald-600 text-white font-bold"
               disabled={saving || masivoModal.encontrados.length === 0}
               onClick={confirmarValidacionMasiva}
             >
               Aplicar Validaciones
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2283,18 +2242,18 @@ export default function VentasPage() {
             </div>
           </div>
           <DialogFooter className="mt-4">
-            <Button
+            <Allowed permission="ventas:validar"><Button
               variant="outline"
               onClick={() => setFactModal({ open: false, venta: null })}
             >
               Cancelar
-            </Button>
-            <Button
+            </Button></Allowed>
+            <Allowed permission="ventas:validar"><Button
               className="bg-primary text-white font-bold"
               onClick={handleGuardarFacturacion}
             >
               Guardar
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2337,43 +2296,7 @@ export default function VentasPage() {
               <Label className="text-[10px] font-bold text-gray-700 uppercase flex items-center gap-1">
                 <User size={12}/> Añadir más personas al ticket (Opcional)
               </Label>
-              {usuariosSeleccionadosTicket.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {usuariosSeleccionadosTicket.map((u) => (
-                    <Badge key={u.id} variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1 py-1 pr-2">
-                      {u.nombre}
-                      <button type="button" onClick={() => setUsuariosSeleccionadosTicket(prev => prev.filter(x => x.id !== u.id))} className="ml-1 hover:text-red-500"><X size={12}/></button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              <div className="relative">
-                <Search size={16} className="absolute left-3 top-3.5 text-gray-400" />
-                <Input
-                  className="pl-9 h-11 text-sm bg-white border-gray-300"
-                  placeholder="Buscar para añadir personas..."
-                  value={busquedaUserTicket}
-                  onChange={(e) => handleBuscarUsuarioTicket(e.target.value)}
-                  onFocus={() => { if (!busquedaUserTicket) handleBuscarUsuarioTicket(" "); }}
-                />
-              </div>
-              {dropdownUserTicket && (
-                <ul className="absolute z-50 w-full bg-white border border-gray-200 shadow-2xl rounded-lg mt-1 max-h-48 overflow-y-auto">
-                  {resultadosUserTicket.map((user) => (
-                    <li key={user.id} className="px-4 py-2 hover:bg-primary/5 cursor-pointer border-b border-gray-50" 
-                        onClick={() => {
-                          if (!usuariosSeleccionadosTicket.find(u => u.id === user.id)) {
-                            setUsuariosSeleccionadosTicket([...usuariosSeleccionadosTicket, user]);
-                          }
-                          setBusquedaUserTicket("");
-                          setDropdownUserTicket(false);
-                        }}>
-                      <p className="text-sm font-bold text-gray-800">{user.nombre}</p>
-                      <p className="text-[10px] text-primary uppercase font-black">{user.rol?.nombre || "USUARIO"}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <TicketAssignees usuarios={catalogos?.usuarios || []} value={usuariosSeleccionadosTicket.map(u => u.id)} onChange={ids => setUsuariosSeleccionadosTicket((catalogos?.usuarios || []).filter((u: any) => ids.includes(u.id)))} disabled={saving} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -2416,33 +2339,12 @@ export default function VentasPage() {
               <Label className="text-[11px] font-bold text-gray-700 uppercase">
                 Instrucciones / Novedad y Adjuntos *
               </Label>
-              <div 
-                className={`relative border-2 border-dashed rounded-lg transition-colors ${isDraggingTicket ? 'border-primary bg-primary/5' : 'border-gray-300 bg-white'}`}
-                onDragOver={(e) => { e.preventDefault(); setIsDraggingTicket(true); }}
-                onDragLeave={() => setIsDraggingTicket(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDraggingTicket(false);
-                  if (e.dataTransfer.files?.[0]) setArchivoTicketVenta(e.dataTransfer.files[0]);
-                }}
-              >
-                <textarea
-                  className="w-full h-24 p-3 text-sm resize-none outline-none bg-transparent"
-                  placeholder="Escribe los detalles o arrastra una imagen/PDF aquí..."
-                  value={ticketModal.mensajeInicial}
-                  onChange={(e) => setTicketModal({ ...ticketModal, mensajeInicial: e.target.value })}
-                />
-              </div>
-              {archivoTicketVenta && (
-                <div className="bg-blue-50 border border-blue-200 p-2 rounded-lg flex justify-between items-center text-xs text-blue-800 font-bold">
-                  <span className="truncate max-w-250px">📎 {archivoTicketVenta.name}</span>
-                  <button type="button" onClick={() => setArchivoTicketVenta(null)} className="text-red-500 hover:text-red-700 p-1"><X size={14}/></button>
-                </div>
-              )}
+              <textarea className="w-full h-24 rounded border border-gray-300 p-3 text-sm" placeholder="Escribe los detalles o pega una captura (Ctrl+V)..." value={ticketModal.mensajeInicial} onChange={e => setTicketModal({ ...ticketModal, mensajeInicial: e.target.value })} onPaste={e => pegarArchivosTicket(e, archivoTicketVenta, setArchivoTicketVenta)} />
+              <TicketAttachments archivos={archivoTicketVenta} onChange={setArchivoTicketVenta} disabled={saving} />
             </div>
 
             <DialogFooter className="pt-2 flex gap-2 justify-end border-t border-gray-100 mt-4">
-              <Button type="button" variant="outline" onClick={() => { setTicketModal({ ...ticketModal, open: false }); setArchivoTicketVenta(null); }}>
+              <Button type="button" variant="outline" onClick={() => { setTicketModal({ ...ticketModal, open: false }); setArchivoTicketVenta([]); }}>
                 Cancelar
               </Button>
               <Button type="submit" disabled={saving} className="bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md">

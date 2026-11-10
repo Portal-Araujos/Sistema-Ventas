@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     const vendedorId = searchParams.get("vendedorId");
     const fechaDesde = searchParams.get("fechaDesde");
     const fechaHasta = searchParams.get("fechaHasta");
-    const esAdmin = userRol === "super_admin" || userRol === "administrador" || userPermisos.includes("instituciones:gestionar_asignaciones");
+    const esAdmin = userRol === "super_admin" || userPermisos.includes("agenda:asignar") || userPermisos.includes("instituciones:gestionar_asignaciones");
     const targetUserId =
       esAdmin && vendedorId ? vendedorId : !esAdmin ? userIdSession : null;
 

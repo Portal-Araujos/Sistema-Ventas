@@ -1,3 +1,4 @@
+import { getApiSession, hasPermission, forbiddenResponse } from "@/lib/api-auth";
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -139,6 +140,10 @@ export async function POST(request: Request) {
       vendedorId, //  NUEVA BANDERA esBorradorVenta
     } = body;
 
+    const session = await getApiSession();
+    if (!session) return forbiddenResponse();
+    if (huboVenta && !hasPermission(session, esBorradorVenta ? "pedidos:crear" : "ventas:crear")) return forbiddenResponse();
+    if (Array.isArray(institucionIds) && institucionIds.length && !hasPermission(session, "agenda:asignar")) return forbiddenResponse();
     // ASIGNACIONES MASIVAS (VISTA GERENCIAL)
     if (
       institucionIds &&

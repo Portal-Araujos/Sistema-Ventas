@@ -1,3 +1,4 @@
+import { getApiSession, hasPermission } from "@/lib/api-auth";
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -219,7 +220,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
     const { payload } = await jwtVerify(token, getJwtSecret());
-    if (payload.rol !== "super_admin" && payload.rol !== "administrador") {
+    if (!hasPermission((await getApiSession())!, "configuracion:crear")) {
       return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
     }
     const { tipo, nombre, provinciaId, cantonId } = await request.json();
@@ -363,7 +364,7 @@ export async function PUT(request: Request) {
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     const { payload } = await jwtVerify(token, getJwtSecret());
-    if (payload.rol !== "super_admin" && payload.rol !== "administrador")
+    if (!hasPermission((await getApiSession())!, "configuracion:editar"))
       return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
     const body = await request.json();
     const {

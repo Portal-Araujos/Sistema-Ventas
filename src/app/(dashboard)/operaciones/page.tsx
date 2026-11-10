@@ -1,5 +1,7 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
 import React, { useState, useEffect, Suspense } from "react";
 import {
   Factory,
@@ -33,6 +35,7 @@ import { Label } from "@/components/ui/label";
 import { useSearchParams } from "next/navigation";
 
 function OperacionesPageContent() {
+  const { can, session: permissionSession } = usePermissions();
   const [data, setData] = useState<any[]>([]);
   const [kpis, setKpis] = useState<any>({});
   const [estadosCatalogo, setEstadosCatalogo] = useState<any[]>([]);
@@ -855,7 +858,7 @@ function OperacionesPageContent() {
                       </td>
                       <td className="p-3.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <Button
+                          <Allowed permission="operaciones:asignar_stock"><Button
                             size="icon"
                             variant="ghost"
                             title="Balance de Stock / Producción"
@@ -863,7 +866,7 @@ function OperacionesPageContent() {
                             onClick={() => handleOpenStock(item)}
                           >
                             <Calculator size={16} />
-                          </Button>
+                          </Button></Allowed>
                           <Button
                             size="icon"
                             variant="ghost"
@@ -1118,7 +1121,7 @@ function OperacionesPageContent() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="operaciones:asignar_stock"><Button
               size="sm"
               className="bg-slate-900 hover:bg-slate-800 text-white font-bold h-10 px-6 shadow-md"
               disabled={saving}
@@ -1127,7 +1130,7 @@ function OperacionesPageContent() {
               {saving
                 ? "Calculando y Procesando..."
                 : "⚙️ Procesar y Asignar (Desatascar)"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1375,7 +1378,7 @@ function OperacionesPageContent() {
                             </tbody>
                           </table>
                           <div className="flex justify-end pt-2">
-                            <Button
+                            <Allowed permission="operaciones:editar"><Button
                               size="sm"
                               onClick={() => {
                                 const seleccionadasDeEsteContrato =
@@ -1392,7 +1395,7 @@ function OperacionesPageContent() {
                               className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs h-8"
                             >
                               Actualizar Seleccionadas
-                            </Button>
+                            </Button></Allowed>
                           </div>
                         </div>
                       )}
@@ -1474,14 +1477,14 @@ function OperacionesPageContent() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="operaciones:editar"><Button
               size="sm"
               className="bg-primary text-white font-bold"
               disabled={saving}
               onClick={handleGuardarGestion}
             >
               {saving ? "Guardando..." : "Guardar Cambios"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1538,14 +1541,14 @@ function OperacionesPageContent() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="operaciones:cambiar_fecha"><Button
               size="sm"
               className="bg-red-600 hover:bg-red-700 text-white font-bold"
               disabled={saving || motivoFechaReq.trim().length < 10}
               onClick={handleGuardarFechaReq}
             >
               {saving ? "Guardando..." : "Confirmar Cambio"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>

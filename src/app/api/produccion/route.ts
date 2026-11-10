@@ -1,22 +1,19 @@
-import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { getApiSession, hasPermission, isAdministrator, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 
 
 
 export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    if (!token)
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    const { payload } = await jwtVerify(token, getJwtSecret());
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "produccion:ver")) return forbiddenResponse();
+    const usuario = await prisma.usuario.findUniqueOrThrow({ where: { id: session.id }, select: { nombre: true } });
     const currentUser = {
-      id: payload.id,
-      nombre: payload.nombre,
-      rol: payload.rol,
+      id: session.id,
+      nombre: usuario.nombre,
+      rol: session.rol,
     };
     const { searchParams } = new URL(request.url);
     const fechaInicio = searchParams.get("fechaInicio");
@@ -28,6 +25,7 @@ export async function GET(request: Request) {
     const finHoy = new Date(hoy);
     finHoy.setHours(23, 59, 59, 999);
     const whereBase: any = {
+      guiaDespachoId: null,
       estadoOperacion: { contains: "producci", mode: "insensitive" },
       pedido: { estado: { not: "Borrador" } },
     };
@@ -52,6 +50,7 @@ export async function GET(request: Request) {
     let usuariosBrutos: any[] = [];
     try {
       usuariosBrutos = await prisma.usuario.findMany({
+        where: { activo: true, bloqueado: false },
         include: { rol: true },
       });
     } catch (e) {
@@ -67,9 +66,11 @@ export async function GET(request: Request) {
             include: {
               institucion: { select: { id: true, nombre: true } },
               usuario: { select: { id: true, nombre: true } },
+              operarioAsignado: { select: { id: true, nombre: true } },
             },
           },
           operarioAsignado: { select: { id: true, nombre: true } },
+          cambiosProduccion: { orderBy: { createdAt: "desc" } },
         },
         orderBy: { createdAt: "desc" },
       });
@@ -165,6 +166,8 @@ export async function GET(request: Request) {
           numContrato: ped.numContrato || "S/N",
           nombreCliente: ped.nombreCliente || "Sin Cliente",
           fechaRequerida: ped.fechaRequerida,
+          operarioAsignado: ped.operarioAsignado,
+          operarioAsignadoId: ped.operarioAsignadoId,
           detalles: [],
         });
         escuela.paquetesCantidad += 1;
@@ -197,16 +200,9 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get("session_token")?.value;
-    let userId = "";
-    let userRol = "";
-
-    if (token) {
-      const { payload } = await jwtVerify(token, getJwtSecret());
-      userId = payload.id as string;
-      userRol = (payload.rol as string).toLowerCase();
-    }
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "produccion:ver")) return forbiddenResponse();
     const body = await request.json();
     const { modo, id, institucionId, prendaIds, estado, operarioAsignadoId } =
       body;
@@ -216,6 +212,7 @@ export async function PUT(request: Request) {
         ? institucionId.split("_")[1]
         : null;
       const whereClause: any = {
+        guiaDespachoId: null,
         pedido: { institucionId: realInstId },
         estadoOperacion: { contains: "producci", mode: "insensitive" },
       };
@@ -237,28 +234,32 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: true });
     }
     if (modo === "individual_empaque") {
-      await prisma.detallePedido.update({
-        where: { id },
+      const resultado = await prisma.detallePedido.updateMany({
+        where: { id, guiaDespachoId: null, recibidoPorVendedor: false },
         data: { estadoOperacion: "en empaque", estadoProduccion: "Terminado" },
       });
+      if (!resultado.count) return NextResponse.json({ error: "La prenda tiene un despacho activo. Anula primero su guía." }, { status: 409 });
       return NextResponse.json({ success: true });
     }
     if (prendaIds && prendaIds.length > 0) {
+      if (await prisma.detallePedido.count({ where: { id: { in: prendaIds }, guiaDespachoId: { not: null } } })) return NextResponse.json({ error: "Hay prendas con guía activa. Anula primero su despacho." }, { status: 409 });
       const updateData: any = {};
       if (estado) updateData.estadoProduccion = estado;
 
-      const esAdmin = userRol.includes("admin");
+      const esAdmin = hasPermission(session, "produccion:asignar");
 
       if (esAdmin) {
         if (operarioAsignadoId) {
+          const operario = await prisma.usuario.findFirst({ where: { id: operarioAsignadoId, activo: true, bloqueado: false }, select: { id: true } });
+          if (!operario) return NextResponse.json({ error: "Selecciona un operario activo" }, { status: 400 });
           updateData.operarioAsignadoId = operarioAsignadoId;
         }
-      } else {
-        updateData.operarioAsignadoId = userId;
+      } else if (operarioAsignadoId) {
+        return NextResponse.json({ error: "Solo Administración puede cambiar el operario responsable" }, { status: 403 });
       }
 
       await prisma.detallePedido.updateMany({
-        where: { id: { in: prendaIds } },
+        where: { id: { in: prendaIds }, estadoOperacion: { contains: "producci", mode: "insensitive" }, guiaDespachoId: null, recibidoPorVendedor: false },
         data: updateData,
       });
       return NextResponse.json({ success: true });

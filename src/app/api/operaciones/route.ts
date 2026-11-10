@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { getApiSession, hasPermission, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 
 
 
@@ -242,6 +243,9 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!hasPermission(session, "operaciones:ver")) return forbiddenResponse();
     const body = await request.json();
     const { modo } = body;
     if (modo === "cambiar_fecha_requerida") {
@@ -289,6 +293,7 @@ export async function PUT(request: Request) {
       const whereClause: any = {
         pedido: { institucionId: realInstId },
         estadoOperacion: "Pendiente en revision",
+        guiaDespachoId: null,
       };
       if (frStr && frStr !== "sin-fecha") {
         const startOfDay = new Date(`${frStr}T00:00:00.000Z`);
@@ -457,10 +462,15 @@ export async function PUT(request: Request) {
     if (observacionOperaciones !== undefined)
       updateData.observacionOperaciones = observacionOperaciones;
 
-    await prisma.detallePedido.updateMany({
-      where: { id: { in: prendaIds } },
-      data: updateData,
-    });
+    const actualizado = await prisma.$transaction(async tx => {
+      if (nuevoEstado && !["Despacho", "Entregado"].includes(nuevoEstado)) {
+        const conGuia = await tx.detallePedido.count({ where: { id: { in: prendaIds }, guiaDespachoId: { not: null } } });
+        if (conGuia) return false;
+      }
+      await tx.detallePedido.updateMany({ where: { id: { in: prendaIds } }, data: updateData });
+      return true;
+    }, { isolationLevel: "Serializable" });
+    if (!actualizado) return NextResponse.json({ error: "Hay prendas con guía de despacho activa. Anula primero el despacho desde Historial de Despachos." }, { status: 409 });
 
     return NextResponse.json({
       success: true,

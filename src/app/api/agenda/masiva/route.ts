@@ -15,10 +15,7 @@ export async function POST(request: Request) {
     const { payload } = await jwtVerify(token, getJwtSecret());
     const userRol = payload.rol as string;
     const userPermisos = (payload.permisos as string[]) || [];
-    const tienePermiso = 
-      userRol === "super_admin" || 
-      userRol === "administrador" || 
-      userPermisos.includes("instituciones:gestionar_asignaciones");
+    const tienePermiso = userRol === "super_admin" || userPermisos.includes("agenda:asignar");
 
     if (!tienePermiso) {
       return NextResponse.json(

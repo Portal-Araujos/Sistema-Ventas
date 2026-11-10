@@ -90,7 +90,10 @@ export async function GET(request: Request) {
           usuario: { select: { id: true, nombre: true } },
           operarioAsignado: { select: { id: true, nombre: true } },
           detalles: {
-            include: { usuarioReceptor: { select: { nombre: true } } },
+            include: {
+              usuarioReceptor: { select: { nombre: true } },
+              ticketsCambio: { select: { id: true, codigo: true, estado: true, cantidadCambio: true }, orderBy: { createdAt: "desc" } },
+            },
           },
         },
         orderBy: { createdAt: "desc" },
@@ -432,6 +435,7 @@ export async function PUT(request: Request) {
       if (dueñoEscuela) vendedorFinalId = dueñoEscuela.id;
 
       if (detalles) {
+        if (await prisma.detallePedido.count({ where: { pedidoId: id, guiaDespachoId: { not: null } } })) return NextResponse.json({ error: "El pedido tiene prendas con guía activa. Primero anula el despacho para modificar sus prendas." }, { status: 409 });
         await prisma.detallePedido.deleteMany({ where: { pedidoId: id } });
         const updateData: any = {};
         if (numContrato !== undefined)

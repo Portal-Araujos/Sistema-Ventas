@@ -1,3 +1,4 @@
+import { getApiSession, hasPermission, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -64,6 +65,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Datos inválidos o vacíos." }, { status: 400 });
     }
 
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    if (!body.importacion && dataLimpia.length === 1 && !hasPermission(session, "skus:editar") && await prisma.catalogoElectro.findUnique({ where: { codigo: dataLimpia[0].codigo } })) return NextResponse.json({ error: "El código ya existe. Usa la acción de edición." }, { status: 409 });
     const operaciones = dataLimpia.map((equipo) =>
       prisma.catalogoElectro.upsert({
         where: { codigo: equipo.codigo },
@@ -100,17 +104,17 @@ export async function POST(request: Request) {
 // 3. ACTIVAR / DESACTIVAR UN EQUIPO 
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
-    const { id, activo } = body;
-    if (!id) return NextResponse.json({ error: "ID es requerido" }, { status: 400 });
-
-    const equipoActualizado = await prisma.catalogoElectro.update({
-      where: { id },
-      data: { activo },
-    });
-
-    return NextResponse.json({ success: true, data: equipoActualizado });
+    const session = await getApiSession();
+    if (!session) return unauthorizedResponse();
+    const { id, activo, codigo } = await request.json();
+    const editar = codigo !== undefined;
+    if (!hasPermission(session, editar ? "skus:editar" : "skus:activar")) return forbiddenResponse();
+    if (!Number.isSafeInteger(Number(id)) || Number(id) < 1 || (editar ? typeof codigo !== "string" || !codigo.trim() : typeof activo !== "boolean")) return NextResponse.json({ error: "Datos del código inválidos" }, { status: 400 });
+    const item = await prisma.catalogoElectro.update({ where: { id: Number(id) }, data: editar ? { codigo: codigo.trim().toUpperCase() } : { activo } });
+    // Orders contain their original SKU as a snapshot; never rewrite those rows.
+    return NextResponse.json({ success: true, data: item });
   } catch (error) {
-    return NextResponse.json({ error: "Error al actualizar el estado" }, { status: 500 });
+    if (typeof error === "object" && error && "code" in error && error.code === "P2002") return NextResponse.json({ error: "Ese código ya existe" }, { status: 409 });
+    return NextResponse.json({ error: "No se pudo actualizar el código" }, { status: 500 });
   }
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
 import React, { useState, useEffect } from "react";
 import {
   ShieldAlert,
@@ -36,6 +38,7 @@ import {
 } from "@/components/ui/dialog";
 
 export default function RadarCobranzasPage() {
+  const { can, session: permissionSession } = usePermissions();
   const hoyStr = new Date(
     new Date().toLocaleString("en-US", { timeZone: "America/Guayaquil" }),
   )
@@ -352,7 +355,7 @@ export default function RadarCobranzasPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Button
+                      <Allowed permission="cobranzas:crear_ticket"><Button
                         size="sm"
                         onClick={() => {
                           setInstSeleccionada(inst);
@@ -361,7 +364,7 @@ export default function RadarCobranzasPage() {
                         className="bg-slate-800 hover:bg-slate-900 text-white font-bold h-8"
                       >
                         <Plus size={14} className="mr-1" /> Asignar Cobro
-                      </Button>
+                      </Button></Allowed>
                     </TableCell>
                   </TableRow>
                 ))

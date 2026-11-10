@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { PERMISSION_IDS } from "@/lib/permissions";
 import {
   getApiSession,
   hasPermission,
@@ -10,7 +11,7 @@ export async function GET() {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (!hasPermission(session, "usuarios:gestionar")) {
+    if (!["roles:ver", "usuarios:ver", "usuarios:crear", "usuarios:editar", "usuarios:gestionar"].some(p => hasPermission(session, p))) {
       return NextResponse.json({ error: "No tienes permisos" }, { status: 403 });
     }
 
@@ -42,12 +43,13 @@ export async function POST(request: Request) {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (session.rol !== "super_admin")
+    if (!hasPermission(session, "roles:crear"))
       return NextResponse.json(
         { error: "Solo el Super Admin puede crear roles" },
         { status: 403 },
       );
     const { nombre, descripcion, permisos } = await request.json();
+    if (String(nombre).toLowerCase().replace(/\s+/g, "_") === "super_admin" || !Array.isArray(permisos) || permisos.some(p => typeof p !== "string" || !PERMISSION_IDS.has(p))) return NextResponse.json({ error: "Rol o permisos inválidos" }, { status: 400 });
     const nuevoRol = await prisma.rol.create({
       data: {
         nombre: String(nombre).toLowerCase().replace(/\s+/g, "_"),
@@ -64,12 +66,14 @@ export async function PUT(request: Request) {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    if (session.rol !== "super_admin")
+    if (!hasPermission(session, "roles:editar"))
       return NextResponse.json(
         { error: "Solo el Super Admin puede editar roles" },
         { status: 403 },
       );
     const { id, descripcion, permisos } = await request.json();
+    const actual = await prisma.rol.findUnique({ where: { id: Number(id) } });
+    if (!actual || actual.nombre === "super_admin" || !Array.isArray(permisos) || permisos.some(p => typeof p !== "string" || (!PERMISSION_IDS.has(p) && !JSON.parse(actual.permisos || "[]").includes(p)))) return NextResponse.json({ error: "Rol protegido o permisos inválidos" }, { status: 400 });
     const rolActualizado = await prisma.rol.update({
       where: { id: parseInt(id) },
       data: {

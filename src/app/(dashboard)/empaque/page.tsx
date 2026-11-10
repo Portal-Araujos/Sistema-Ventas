@@ -1,5 +1,7 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
 import React, { useState, useEffect, Suspense } from "react";
 import {
   Package,
@@ -37,6 +39,7 @@ import * as XLSX from "xlsx";
 import { useSearchParams } from "next/navigation";
 
 function EmpaquePageContent() {
+  const { can, session: permissionSession } = usePermissions();
   const [data, setData] = useState<any[]>([]);
   const [kpis, setKpis] = useState<any>({});
   const [institucionesList, setInstitucionesList] = useState<any[]>([]);
@@ -1107,7 +1110,7 @@ function EmpaquePageContent() {
             </div>
 
             {grupoDetalle?.preparadasSinDespacharEscuela > 0 && (
-              <Button
+              <Allowed permission="empaque:despachar"><Button
                 size="lg"
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg font-black text-sm h-12"
                 onClick={iniciarGeneracionGuiaGlobal}
@@ -1115,7 +1118,7 @@ function EmpaquePageContent() {
                 <Send size={18} className="mr-2" /> GENERAR GUÍA DE DESPACHO
                 GLOBAL ({grupoDetalle?.preparadasSinDespacharEscuela} prendas
                 listas)
-              </Button>
+              </Button></Allowed>
             )}
 
             <p className="text-xs font-black uppercase text-gray-500 border-b pb-1 mt-4">
@@ -1201,7 +1204,7 @@ function EmpaquePageContent() {
                           {ped.responsableEmpaque}
                         </td>
                         <td className="p-3 text-center">
-                          <Button
+                          <Allowed permission="empaque:editar"><Button
                             size="sm"
                             variant={finalizado ? "outline" : "secondary"}
                             className={`text-xs font-bold h-8 ${finalizado ? "border-emerald-300 text-emerald-700" : "bg-primary text-white hover:bg-primary/90"}`}
@@ -1210,7 +1213,7 @@ function EmpaquePageContent() {
                             {finalizado
                               ? "Ver Cerrado"
                               : "📦 Empacar (Checklist)"}
-                          </Button>
+                          </Button></Allowed>
                         </td>
                       </tr>
                     );
@@ -1415,7 +1418,7 @@ function EmpaquePageContent() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="empaque:editar"><Button
               size="sm"
               className="bg-primary hover:bg-primary/90 text-white font-bold"
               disabled={saving}
@@ -1423,7 +1426,7 @@ function EmpaquePageContent() {
             >
               <Save size={14} className="mr-1" />{" "}
               {saving ? "Guardando..." : "Guardar Checklist"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1472,7 +1475,7 @@ function EmpaquePageContent() {
             >
               Cancelar
             </Button>
-            <Button
+            <Allowed permission="empaque:despachar"><Button
               size="sm"
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
               disabled={saving}
@@ -1480,7 +1483,7 @@ function EmpaquePageContent() {
             >
               <Send size={14} className="mr-1" />{" "}
               {saving ? "Despachando..." : "Confirmar Salida"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>

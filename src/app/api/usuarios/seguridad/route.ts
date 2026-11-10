@@ -1,3 +1,4 @@
+import { getApiSession, hasPermission } from "@/lib/api-auth";
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -13,13 +14,16 @@ export async function POST(request: Request) {
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     const { payload } = await jwtVerify(token, getJwtSecret());
-    if (payload.rol !== "super_admin" && payload.rol !== "administrador") {
+    const session = await getApiSession();
+    if (!session || !hasPermission(session, "usuarios:seguridad")) {
       return NextResponse.json(
         { error: "Permisos insuficientes" },
         { status: 403 },
       );
     }
     const { action, usuarioId } = await request.json();
+    const target = await prisma.usuario.findUnique({ where: { id: usuarioId }, select: { rol: { select: { nombre: true } } } });
+    if (target?.rol.nombre === "super_admin" && session.rol !== "super_admin") return NextResponse.json({ error: "Solo un superadministrador puede modificar la seguridad de otro superadministrador" }, { status: 403 });
     if (action === "reset_password") {
       const tempPassword = "Sistemas2026*";
       const hash = await argon2.hash(tempPassword);

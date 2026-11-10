@@ -25,6 +25,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { usePermissions } from "@/components/shared/PermissionsProvider";
+import DictationTextarea from "@/components/shared/DictationTextarea";
 import ContratoVentaForm from "@/components/shared/ContratoVentaForm";
 
 interface Props {
@@ -46,6 +48,7 @@ export default function VisitaGPSForm({
   isLibre = true,
   institucionPreseleccionada = null,
 }: Props) {
+  const { can } = usePermissions();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isOpen !== undefined ? isOpen : internalOpen;
   const setOpen = onOpenChange !== undefined ? onOpenChange : setInternalOpen;
@@ -583,14 +586,7 @@ export default function VisitaGPSForm({
               <Label className="text-xs font-bold">
                 Resumen de Acuerdos / Novedades
               </Label>
-              <textarea
-                className="w-full min-h-80px border border-gray-300 rounded-md p-3 text-sm focus:ring-primary focus:border-primary outline-none"
-                placeholder="Ej: Se presentó el catálogo..."
-                value={formData.resumenAcuerdos}
-                onChange={(e) =>
-                  setFormData({ ...formData, resumenAcuerdos: e.target.value })
-                }
-              />
+              {open && <DictationTextarea value={formData.resumenAcuerdos} onChange={resumenAcuerdos => setFormData(prev => ({ ...prev, resumenAcuerdos }))} active={open} voice={isLibre} />}
             </div>
             <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl">
               <Label className="text-xs font-bold text-amber-800 flex items-center gap-1">
@@ -629,6 +625,7 @@ export default function VisitaGPSForm({
               <label className="flex items-center gap-2 cursor-pointer mb-2 bg-emerald-50 p-3 rounded-xl border border-emerald-200 hover:bg-emerald-100 transition-colors shadow-sm">
                 <input
                   type="checkbox"
+                  disabled={!can("ventas:crear") && !can("pedidos:crear")}
                   checked={huboVenta}
                   onChange={(e) => {
                     setHuboVenta(e.target.checked);

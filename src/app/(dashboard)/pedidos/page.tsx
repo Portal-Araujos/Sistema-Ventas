@@ -1,8 +1,10 @@
 "use client";
 
+import { Allowed, usePermissions } from "@/components/shared/PermissionsProvider";
+
 import React, { useState, useEffect, Suspense } from "react";
 import {
-  ShoppingBag,Edit,Send,PlusCircle,Trash2, CheckCircle2,AlertCircle,TicketPlus, User, LifeBuoy,Search,X ,
+  ShoppingBag,Edit,Send,PlusCircle,Trash2, CheckCircle2,AlertCircle,Search,X ,
   Eye,PackageCheck, Calendar,ClipboardCheck,LockOpen, Printer, ChevronLeft,ChevronRight} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +18,10 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import ContratoVentaForm from "@/components/shared/ContratoVentaForm";
+import CambiosPedido from "@/components/shared/CambiosPedido";
 
 function PedidosPageContent() {
+  const { can, session: permissionSession } = usePermissions();
   const [grupos, setGrupos] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [institucionesList, setInstitucionesList] = useState<any[]>([]);
@@ -58,104 +62,14 @@ function PedidosPageContent() {
     [],
   );
 
-  //  ESTADOS PARA TICKET CONTEXTUAL
-  const [modalTicketOpen, setModalTicketOpen] = useState(false);
-  const [prendaParaTicket, setPrendaParaTicket] = useState<any>(null);
-  const [departamentosLista, setDepartamentosLista] = useState<any[]>([]);
-  const [ticketData, setTicketData] = useState({
-    motivo: "Cambio de Talla",
-    nuevaTalla: "",
-    tipoModulo: "",
-    prioridad: "Alta",
-    mensaje: "",
-  });
-  // ESTADOS PARA BÚSQUEDA DE USUARIOS 
-  const [usuariosLista, setUsuariosLista] = useState<any[]>([]);
-  const [usuariosSeleccionados, setUsuariosSeleccionados] = useState<any[]>([]);
-  const [busquedaUser, setBusquedaUser] = useState('');
-  const [resultadosUser, setResultadosUser] = useState<any[]>([]);
-  const [dropdownUser, setDropdownUser] = useState(false);
   const [busquedaDetalle, setBusquedaDetalle] = useState("");
   const [busquedaRecepcion, setBusquedaRecepcion] = useState("");
   const [busquedaEdit, setBusquedaEdit] = useState("");
 
-  //  LÓGICA DE BÚSQUEDA DE USUARIOS 
-  const normalizarTexto = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const [modalEnviarOpen, setModalEnviarOpen] = useState(false);
   const [grupoAEnviar, setGrupoAEnviar] = useState<any>(null);
   const [clientesContactados, setClientesContactados] = useState("");
   
-  const handleBuscarUsuario = (termino: string) => {
-    setBusquedaUser(termino);
-    const termLimpio = normalizarTexto(termino.trim());
-    if (termLimpio.length < 1) { setResultadosUser([]); setDropdownUser(false); return; }
-    
-    const filtrados = usuariosLista.filter(u => 
-      normalizarTexto(u.nombre).includes(termLimpio) || 
-      (u.rolNombre && normalizarTexto(u.rolNombre).includes(termLimpio))
-    );
-    setResultadosUser(filtrados);
-    setDropdownUser(true);
-  };
-
-  const seleccionarUsuario = (user: any) => {
-    if (!usuariosSeleccionados.find(u => u.id === user.id)) {
-      setUsuariosSeleccionados(prev => [...prev, user]);
-    }
-    setBusquedaUser('');
-    setDropdownUser(false);
-  };
-
-  const removerUsuario = (e: React.MouseEvent, userId: string) => {
-    e.preventDefault(); e.stopPropagation();
-    setUsuariosSeleccionados(prev => prev.filter(u => u.id !== userId));
-  };
-
-  //ACTUALIZAMOS LA FUNCIÓN DE ABRIR PARA QUE LIMPIE LA SELECCIÓN 
-  const handleAbrirTicketContextual = (prenda: any, contrato: any, grupo: any) => {
-    setPrendaParaTicket({
-      institucionId: grupo.institucionId, institucionNombre: grupo.institucionNombre, contrato: contrato.numContrato,
-      sku: prenda.skuCodigo, tipoRopa: prenda.tipoRopa, color: prenda.color, tallaAnterior: prenda.talla
-    });
-    setUsuariosSeleccionados([]); // Limpiamos a los asignados
-    setModalTicketOpen(true);
-  };
-
-  // ACTUALIZAMOS LA FUNCIÓN DE CREAR PARA QUE ENVÍE LOS IDs SELECCIONADOS 
-  const handleCrearTicketContextual = async () => {
-    if (!ticketData.tipoModulo) return showToast('error', 'Seleccione el Área Responsable (ej. Operaciones).');
-    if (ticketData.motivo === 'Cambio de Talla' && !ticketData.nuevaTalla) return showToast('error', 'Especifique la nueva talla requerida.');
-    if (!ticketData.mensaje) return showToast('error', 'Escriba un detalle o instrucción para el equipo.');
-
-    setSaving(true);
-    try {
-      const asunto = `[${ticketData.motivo}] ${prendaParaTicket.sku} - Contrato #${prendaParaTicket.contrato}`;
-      const mensajeCompleto = `⚠️ REPORTE DESDE RECEPCIÓN DE PEDIDOS ⚠️\n\n📌 Prenda: ${prendaParaTicket.tipoRopa} (${prendaParaTicket.color})\n📏 Talla Entregada: ${prendaParaTicket.tallaAnterior}\n🔄 Nueva Talla Solicitada: ${ticketData.nuevaTalla || 'N/A'}\n\n📝 Instrucciones del Vendedor:\n${ticketData.mensaje}`;
-
-      const payload = {
-        accion: 'crearTicket',
-        tipo: ticketData.tipoModulo,
-        asunto: asunto,
-        prioridad: ticketData.prioridad,
-        institucionId: prendaParaTicket.institucionId,
-        asignadosIds: usuariosSeleccionados.map(u => u.id), // 🔥 AQUÍ VIAJAN LOS USUARIOS ASIGNADOS
-        mensajeInicial: mensajeCompleto,
-        fechaLimite: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0]
-      };
-
-      const res = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error('Error al generar el ticket');
-
-      showToast('exito', '¡Ticket generado exitosamente! El área/persona será notificada.');
-      setModalTicketOpen(false);
-      setTicketData({ motivo: 'Cambio de Talla', nuevaTalla: '', tipoModulo: '', prioridad: 'Alta', mensaje: '' });
-      setUsuariosSeleccionados([]);
-    } catch (e: any) { showToast('error', e.message); } finally { setSaving(false); }
-  };
-  
-
   const [saving, setSaving] = useState(false);
   const [globalFechaRequerida, setGlobalFechaRequerida] = useState("");
   const [contratoData, setContratoData] = useState<any>({});
@@ -171,28 +85,14 @@ function PedidosPageContent() {
 
   const cargarInstituciones = async () => {
     try {
-      const [resInst, resCat, resDept, resUsu] = await Promise.all([
+      const [resInst, resCat] = await Promise.all([
         fetch("/api/instituciones"),
         fetch("/api/catalogos"),
-        fetch("/api/departamentos"), 
-        fetch('/api/usuarios')
       ]);
       const data = await resInst.json();
       setInstitucionesList(Array.isArray(data) ? data : data.data || []);
       setCatalogos(await resCat.json());
 
-      const dataDept = await resDept.json();
-      setDepartamentosLista(Array.isArray(dataDept) ? dataDept : []);
-      const dataUsu = await resUsu.json();
-      const arrayUsuarios = Array.isArray(dataUsu) ? dataUsu : (dataUsu.data || []);
-      
-      // Normalizamos los datos para que el buscador encuentre el "rolNombre"
-      const usuariosFormateados = arrayUsuarios.map((u: any) => ({
-        ...u,
-        rolNombre: u.rolNombre || u.rol?.nombre || 'Usuario'
-      }));
-      
-      setUsuariosLista(usuariosFormateados);
     } catch (e) {
       console.error(e);
     }
@@ -696,6 +596,7 @@ function PedidosPageContent() {
                   <th className="p-3.5 text-center bg-gray-100">Paquetes</th>
                   <th className="p-3.5 text-center bg-gray-100">Prendas</th>
                   <th className="p-3.5 text-center bg-gray-100">Estado y Resumen</th>
+                  {tabActiva === "Operaciones" && <th className="p-3.5 text-center bg-gray-100">Cambios</th>}
                   <th className="p-3.5 bg-gray-100">Última Actualización</th>
                   <th className="p-3.5 text-center bg-gray-100">Entrega Pautada</th>
                   <th className="p-3.5 text-center bg-gray-100">Acciones</th>
@@ -713,7 +614,9 @@ function PedidosPageContent() {
                       className="hover:bg-gray-50/80 transition-colors"
                     >
                       <td className="p-3.5 font-mono font-black text-blue-600">
-                        {item.codigoPedido}
+                        {tabActiva === "Operaciones" && currentUser && item.pedidosAsociados.some((p: any) => p.detalles.some((d: any) => d.ticketsCambio?.some((t: any) => t.estado !== "Cerrado")))
+                          ? <CambiosPedido etiqueta={item.codigoPedido} pedidos={item.pedidosAsociados} institucionId={item.institucionId} currentUser={currentUser} onRefresh={() => cargarDatos(true)} />
+                          : item.codigoPedido}
                       </td>
                       <td className="p-3.5">
                         <div className="font-bold text-gray-900 text-sm">
@@ -757,6 +660,9 @@ function PedidosPageContent() {
                         )}
                       </td>
 
+                      {tabActiva === "Operaciones" && <td className="p-3.5 text-center">
+                        {currentUser && <CambiosPedido pedidos={item.pedidosAsociados} institucionId={item.institucionId} currentUser={currentUser} onRefresh={() => cargarDatos(true)} />}
+                      </td>}
                       <td className="p-3.5 text-gray-500 whitespace-nowrap">
                         {item.updatedAt}
                       </td>
@@ -804,7 +710,7 @@ function PedidosPageContent() {
                       <td className="p-3.5">
                         <div className="flex items-center justify-center gap-1.5">
                           {tabActiva === "Operaciones" && stats.desp > 0 && (
-                            <Button
+                            <Allowed permission="pedidos:recibir"><Button
                               size="icon"
                               variant="ghost"
                               title={
@@ -816,11 +722,11 @@ function PedidosPageContent() {
                               onClick={() => handleOpenRecepcion(item)}
                             >
                               <ClipboardCheck size={15} />
-                            </Button>
+                            </Button></Allowed>
                           )}
 
                           {item.estado === "Borrador" && (
-                            <Button
+                            <Allowed permission="pedidos:enviar"><Button
                               size="icon"
                               variant="ghost"
                               title="Enviar Todo a Operaciones"
@@ -828,7 +734,7 @@ function PedidosPageContent() {
                               onClick={() => handleEnviarOperaciones(item)}
                             >
                               <Send size={15} />
-                            </Button>
+                            </Button></Allowed>
                           )}
                           <Button
                             size="icon"
@@ -840,7 +746,7 @@ function PedidosPageContent() {
                             <Eye size={15} />
                           </Button>
                           {item.estado === "Borrador" && (
-                            <Button
+                            <Allowed permission="pedidos:editar"><Button
                               size="icon"
                               variant="ghost"
                               title="Completar Pedido"
@@ -848,10 +754,10 @@ function PedidosPageContent() {
                               onClick={() => handleOpenEdit(item)}
                             >
                               <Edit size={15} />
-                            </Button>
+                            </Button></Allowed>
                           )}
                           {item.estado === "Borrador" && (
-                            <Button
+                            <Allowed permission="pedidos:eliminar"><Button
                               size="icon"
                               variant="ghost"
                               title="Eliminar Registro"
@@ -859,7 +765,7 @@ function PedidosPageContent() {
                               onClick={() => handleEliminarPedido(item.id)}
                             >
                               <Trash2 size={15} />
-                            </Button>
+                            </Button></Allowed>
                           )}
                         </div>
                       </td>
@@ -1075,6 +981,9 @@ function PedidosPageContent() {
                                         {p.estadoOperacion ||
                                           "Pendiente en revision"}
                                       </Badge>
+                                      {p.ticketsCambio?.filter((t: any) => t.estado !== "Cerrado").map((t: any) => (
+                                        <div key={t.id} className="mt-1 text-[10px] font-bold text-amber-700">Cambio solicitado · {t.codigo} · {t.cantidadCambio} unidad(es)</div>
+                                      ))}
                                     </td>
                                   </tr>
                                 ))
@@ -1231,7 +1140,7 @@ function PedidosPageContent() {
                                 <th className="pb-2">Color/Talla</th>
                                 <th className="pb-2 text-center">Cant.</th>
                                 <th className="pb-2">Estado de Recepción</th>
-                                <th className="pb-2 text-center text-rose-600 w-16">Soporte</th>
+                                <th className="pb-2 text-center text-rose-600 w-16">Cambios</th>
                                 {esModoAdmin && (
                                   <th className="pb-2 text-center text-red-600">
                                     Admin
@@ -1308,26 +1217,14 @@ function PedidosPageContent() {
                                       )}
                                     </td>
                                     <td className="py-3 text-center border-l border-gray-100">
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        title="Reportar Problema con esta Prenda"
-                                        className="h-8 w-8 text-rose-500 hover:bg-rose-50 border border-rose-200 shadow-sm"
-                                        onClick={() =>
-                                          handleAbrirTicketContextual(
-                                            p,
-                                            ped,
-                                            grupoRecepcion,
-                                          )
-                                        }
-                                      >
-                                        <LifeBuoy size={14} />
-                                      </Button>
+                                      {p.ticketsCambio?.some((t: any) => t.estado !== "Cerrado")
+                                        ? <Badge className="bg-amber-100 text-amber-800">Cambio solicitado</Badge>
+                                        : <span className="text-gray-400">Sin solicitud</span>}
                                     </td>
                                     {esModoAdmin && (
                                       <td className="py-3 text-center">
                                         {recibido && (
-                                          <Button
+                                          <Allowed permission="pedidos:desbloquear_recepcion"><Button
                                             size="icon"
                                             variant="ghost"
                                             title="Desbloquear Recepción"
@@ -1337,7 +1234,7 @@ function PedidosPageContent() {
                                             }
                                           >
                                             <LockOpen size={12} />
-                                          </Button>
+                                          </Button></Allowed>
                                         )}
                                       </td>
                                     )}
@@ -1363,7 +1260,7 @@ function PedidosPageContent() {
               Cerrar
             </Button>
             {prendasSeleccionadas.length > 0 && (
-              <Button
+              <Allowed permission="pedidos:recibir"><Button
                 size="sm"
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 shadow-md"
                 disabled={saving}
@@ -1373,7 +1270,7 @@ function PedidosPageContent() {
                 {saving
                   ? "Firmando..."
                   : `Confirmar Recepción de ${prendasSeleccionadas.length} prenda(s)`}
-              </Button>
+              </Button></Allowed>
             )}
           </DialogFooter>
         </DialogContent>
@@ -1411,13 +1308,13 @@ function PedidosPageContent() {
                 <Label className="text-xs font-bold text-gray-500 uppercase">
                   1. Selecciona un Contrato
                 </Label>
-                <Button
+                <Allowed permission="pedidos:crear"><Button
                   size="sm"
                   onClick={prepararNuevoContrato}
                   className="h-7 text-[10px] bg-blue-100 text-blue-700 hover:bg-blue-200 font-bold px-2 rounded-lg shrink-0"
                 >
                   <PlusCircle size={12} className="mr-1" /> Nuevo
-                </Button>
+                </Button></Allowed>
               </div>
               <div className="relative w-full mb-3">
                 <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
@@ -1510,133 +1407,6 @@ function PedidosPageContent() {
           </div>
         </DialogContent>
       </Dialog>
-      {/*  MODAL DE TICKET CONTEXTUAL  */}
-      <Dialog open={modalTicketOpen} onOpenChange={setModalTicketOpen}>
-        <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black text-rose-600 border-b pb-3 flex items-center gap-2">
-              <TicketPlus size={20} /> Reportar Problema de Prenda
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl text-xs">
-              <span className="font-bold text-gray-500 block uppercase mb-1">
-                Prenda Seleccionada:
-              </span>
-              <p className="font-black text-rose-900">
-                {prendaParaTicket?.sku} - {prendaParaTicket?.tipoRopa} (
-                {prendaParaTicket?.color})
-              </p>
-              <p className="text-rose-700">
-                Contrato #{prendaParaTicket?.contrato} | Talla Actual:{" "}
-                <b>{prendaParaTicket?.tallaAnterior}</b>
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold text-gray-500 uppercase">Motivo</Label>
-                <select className="w-full h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold bg-white" value={ticketData.motivo} onChange={e => setTicketData({...ticketData, motivo: e.target.value})}>
-                  <option value="Cambio de Talla">Cambio de Talla</option>
-                  <option value="Prenda Defectuosa">Prenda Defectuosa</option>
-                  <option value="Error de Bodega">Error de Bodega</option>
-                  <option value="Faltante de Paquete">Faltante</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold text-gray-500 uppercase">Área a Notificar *</Label>
-                <select className="w-full h-9 border border-gray-300 rounded-lg px-2 text-xs font-bold bg-white text-blue-700" value={ticketData.tipoModulo} onChange={e => setTicketData({...ticketData, tipoModulo: e.target.value})}>
-                  <option value="">- Seleccionar -</option>
-                  {departamentosLista.map(d => <option key={d.id} value={d.nombre}>{d.nombre}</option>)}
-                </select>
-              </div>
-
-              {/*NUEVO BUSCADOR DE USUARIOS  */}
-              <div className="space-y-1.5 relative sm:col-span-2">
-                <Label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
-                  <User size={12}/> Asignar Específicamente a... (Opcional)
-                </Label>
-                
-                {usuariosSeleccionados.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {usuariosSeleccionados.map(u => (
-                      <Badge key={u.id} variant="secondary" className="bg-rose-50 text-rose-700 border-rose-200 flex items-center gap-1 py-1 pr-2 text-[10px]">
-                        {u.nombre} 
-                        <button type="button" onClick={(e) => removerUsuario(e, u.id)} className="ml-1 hover:text-red-500 focus:outline-none"><X size={10}/></button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                <div className="relative">
-                  <Input className="h-9 text-xs bg-white border-gray-300" placeholder="Buscar por nombre o rol (Ej: Bodega)..." value={busquedaUser} onChange={(e) => handleBuscarUsuario(e.target.value)} onFocus={() => { if(!busquedaUser) handleBuscarUsuario(' '); }} />
-                </div>
-                
-                {dropdownUser && (
-                  <ul className="absolute z-9999 w-full bg-white border border-gray-200 shadow-xl rounded-lg mt-1 max-h-32 overflow-y-auto">
-                    {resultadosUser.map(user => (
-                      <li key={user.id} className="px-3 py-2 hover:bg-rose-50 cursor-pointer border-b border-gray-50 flex justify-between items-center" onClick={() => seleccionarUsuario(user)}>
-                        <span className="text-xs font-bold text-gray-800">{user.nombre}</span>
-                        <span className="text-[9px] text-rose-600 uppercase font-black">{user.rolNombre || 'USUARIO'}</span>
-                      </li>
-                    ))}
-                    {resultadosUser.length === 0 && <li className="px-3 py-2 text-xs text-gray-500 italic">No se encontraron usuarios.</li>}
-                  </ul>
-                )}
-              </div>
-            </div>
-
-            {ticketData.motivo === "Cambio de Talla" && (
-              <div className="space-y-1.5 animate-in fade-in zoom-in">
-                <Label className="text-[10px] font-bold text-gray-500 uppercase">
-                  Nueva Talla Requerida *
-                </Label>
-                <Input
-                  className="h-9 text-xs font-black border-rose-300 focus:border-rose-500 bg-rose-50/50"
-                  placeholder="Ej: L, XL, 34..."
-                  value={ticketData.nuevaTalla}
-                  onChange={(e) =>
-                    setTicketData({ ...ticketData, nuevaTalla: e.target.value })
-                  }
-                />
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-bold text-gray-500 uppercase">
-                Detalle Adicional / Explicación *
-              </Label>
-              <textarea
-                className="w-full h-20 border border-gray-300 rounded-lg p-2 text-xs resize-none outline-none focus:border-primary"
-                placeholder="Explica brevemente por qué devuelves la prenda..."
-                value={ticketData.mensaje}
-                onChange={(e) =>
-                  setTicketData({ ...ticketData, mensaje: e.target.value })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter className="mt-2 border-t pt-4 flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setModalTicketOpen(false)}
-              className="h-9"
-            >
-              Cancelar
-            </Button>
-            <Button
-              size="sm"
-              className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9 shadow-md"
-              disabled={saving}
-              onClick={handleCrearTicketContextual}
-            >
-              {saving ? "Enviando..." : "Generar Ticket"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* 🔥 MODAL DE CONFIRMACIÓN Y ATRIBUCIÓN DE CONVERSIÓN 🔥 */}
       <Dialog open={modalEnviarOpen} onOpenChange={setModalEnviarOpen}>
         <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl">
           <DialogHeader>
@@ -1679,13 +1449,13 @@ function PedidosPageContent() {
             >
               Cancelar
             </Button>
-            <Button 
+            <Allowed permission="pedidos:enviar"><Button
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 shadow-md" 
               disabled={saving} 
               onClick={confirmarEnvioOperaciones}
             >
               {saving ? "Enviando..." : "Cerrar y Enviar a Operaciones"}
-            </Button>
+            </Button></Allowed>
           </DialogFooter>
         </DialogContent>
       </Dialog>

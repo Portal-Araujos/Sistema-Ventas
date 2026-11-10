@@ -375,6 +375,7 @@ model Pedido {
   fechaInicioEmpaque DateTime?       @map("fecha_inicio_empaque")
   fechaFinEmpaque    DateTime?       @map("fecha_fin_empaque")
   fechaEnvioOperaciones DateTime?   @map("fecha_envio_operaciones")
+  ticketsCambio      TicketGestion[]
 
   @@map("pedidos")
 }
@@ -406,6 +407,8 @@ model DetallePedido {
   usuarioReceptor         Usuario?      @relation("UsuarioReceptorDetalle", fields: [usuarioReceptorId], references: [id], onDelete: SetNull)
   createdAt               DateTime      @default(now()) @map("created_at")
   updated_at              DateTime      @default(now()) @updatedAt
+  ticketsCambio           TicketGestion[]
+  cambiosProduccion       CambioPrendaProduccion[]
 
   @@map("detalles_pedido")
 }
@@ -479,6 +482,14 @@ model TipoCliente {
 model TicketGestion {
   id                Int             @id @default(autoincrement())
   codigo            String          @unique // Ej: TKT-001, TKT-002
+  pedidoId          String?         @map("pedido_id")
+  detallePedidoId   String?         @map("detalle_pedido_id")
+  cantidadCambio    Int?            @map("cantidad_cambio")
+  motivoCambio      String?         @map("motivo_cambio")
+  prendaOriginal    Json?           @map("prenda_original")
+  cambioSolicitado  String?         @map("cambio_solicitado")
+  pedido            Pedido?         @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  detallePedido     DetallePedido?  @relation(fields: [detallePedidoId], references: [id], onDelete: Restrict)
   tipo              String          // Ej: Cobranza, Facturacion, Soporte
   asunto            String
   estado            String          @default("Abierto") // Abierto, En Proceso, Pendiente, Cerrado, Re-Abierto
@@ -496,6 +507,23 @@ model TicketGestion {
   noLeidosCreador   Int @default(0) @map("no_leidos_creador")
   noLeidosAsignados Int @default(1) @map("no_leidos_asignados") 
   @@map("tickets_gestion")
+  @@index([pedidoId])
+  @@index([detallePedidoId, estado])
+}
+
+model CambioPrendaProduccion {
+  id              String        @id @default(uuid())
+  detallePedidoId String        @map("detalle_pedido_id")
+  usuarioId       String        @map("usuario_id")
+  usuarioNombre   String        @map("usuario_nombre")
+  motivo          String        @db.Text
+  anterior        Json
+  nuevo           Json
+  createdAt       DateTime      @default(now()) @map("created_at")
+  detallePedido   DetallePedido @relation(fields: [detallePedidoId], references: [id], onDelete: Restrict)
+
+  @@index([detallePedidoId, createdAt])
+  @@map("cambios_prenda_produccion")
 }
 
 model MensajeTicket {

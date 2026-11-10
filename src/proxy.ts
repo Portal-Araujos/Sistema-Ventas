@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { PAGE_PERMISSIONS, can } from "@/lib/permissions";
+import { apiActionPermissions } from "@/lib/api-action-permissions";
 import { getJwtSecret } from "@/lib/jwt";
 
 export async function proxy(request: NextRequest) {
@@ -90,27 +92,7 @@ export async function proxy(request: NextRequest) {
     let response = NextResponse.next();
 
     if (!isApiRequest && rol !== "super_admin") {
-      const rutasProtegidas: Record<string, string> = {
-        "/configuracion/skus": "skus:ver",
-        "/pedidos": "pedidos:ver",
-        "/inicio": "inicio:ver",
-        "/instituciones": "instituciones:ver",
-        "/ventas": "ventas:ver",
-        "/base_consultas": "base_consultas:ver",
-        "/cobranzas": "cobranzas:ver",
-        "/agenda": "agenda:ver",
-        "/visitas": "visitas:ver",
-        "/seguimientos": "seguimientos:ver",
-        "/operaciones": "operaciones:ver",
-        "/produccion": "produccion:ver",
-        "/empaque": "empaque:ver",
-        "/historial-despachos": "historial-despachos:ver",
-        "/indicadores": "indicadores:ver",
-        "/configuracion": "configuracion:ver",
-        "/usuarios": "usuarios:gestionar",
-        "/tickets": "tickets:ver",
-        "/roles": "super_admin_only",
-      };
+      const rutasProtegidas = PAGE_PERMISSIONS;
 
       const rutasOrdenadas = Object.keys(rutasProtegidas).sort(
         (a, b) => b.length - a.length,
@@ -118,25 +100,21 @@ export async function proxy(request: NextRequest) {
 
       for (const ruta of rutasOrdenadas) {
         if (pathname.startsWith(ruta)) {
-          if (
-            ruta === "/instituciones" &&
-            pathname !== "/instituciones" &&
-            !pathname.startsWith("/instituciones/nueva")
-          ) {
-            break;
-          }
-
           const permisoRequerido = rutasProtegidas[ruta];
 
           if (
             permisoRequerido === "super_admin_only" ||
             !permisos.includes(permisoRequerido)
           ) {
-            response = NextResponse.redirect(new URL("/agenda", request.url));
+            response = NextResponse.redirect(new URL("/sin-acceso", request.url));
           }
           break;
         }
       }
+    }
+    if (isApiRequest && rol !== "super_admin") {
+      const required = await apiActionPermissions(request);
+      if (required.length && !required.some(permission => can({ rol, permisos }, permission))) return NextResponse.json({ error: "No tienes permiso para realizar esta acción" }, { status: 403 });
     }
     response.cookies.set("last_activity", ahora.toString(), {
       path: "/",
