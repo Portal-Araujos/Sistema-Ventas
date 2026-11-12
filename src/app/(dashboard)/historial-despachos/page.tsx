@@ -272,6 +272,11 @@ export default function HistorialDespachosPage() {
     XLSX.writeFile(wb, `Guia_Despacho_${guia.codigoGuia}.xlsx`);
   };
 
+  // Estado para el buscador dentro del modal
+  const [busquedaContrato, setBusquedaContrato] = useState("");
+
+  // Función para ignorar tildes y mayúsculas
+  // Función para ignorar tildes y mayúsculas
   const normalizar = (texto: string) =>
     (texto || "")
       .toString()
@@ -280,19 +285,26 @@ export default function HistorialDespachosPage() {
       .toLowerCase()
       .trim();
 
+  // Filtro inteligente
   const filteredData = data.filter((g) => {
     const termino = normalizar(searchTerm);
     if (!termino) return true;
+
+    // 1. Busca en la cabecera de la guía (Código o Institución)
     const coincideGuia =
       normalizar(g.codigoGuia).includes(termino) ||
       normalizar(g.institucionNombre).includes(termino);
+
+    // 2. Busca adentro de los bultos (Contrato o Nombre de Cliente)
     const coincideContratos = g.contratosInvolucrados?.some((c: any) =>
       normalizar(c.numContrato).includes(termino) ||
       normalizar(c.nombreCliente).includes(termino)
     );
 
+    // Si coincide arriba o adentro, muestra toda la guía en la tabla
     return coincideGuia || coincideContratos;
   });
+  
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const paginatedData = filteredData.slice(
@@ -312,19 +324,17 @@ export default function HistorialDespachosPage() {
           </p>
         </div>
       </div>
-
       <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
         <div className="relative w-full md:w-1/2">
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
           <Input
-            className="pl-9 text-xs h-10 bg-gray-50"
-            placeholder="Buscar por Número de Guía o Institución..."
+            className="pl-9 text-xs h-10 bg-gray-50 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            placeholder="Buscar por Guía, Institución, Cliente o N° Contrato..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
-
       {loading ? (
         <div className="p-12 text-center text-gray-500 font-bold animate-pulse">
           Cargando historial de guías...
@@ -365,7 +375,7 @@ export default function HistorialDespachosPage() {
                     </td>
                     <td className="p-3.5 text-gray-700 font-medium">{item.vendedorNombre || "N/A"}</td>
                     <td className="p-3.5 text-gray-600 font-semibold">
-                      {item.fechaDespacho}
+                      {item.fechaDespacho} 
                     </td>
                     <td className="p-3.5 text-gray-500">{item.responsable}</td>
                     <td className="p-3.5 text-center font-black text-emerald-600 text-sm">
@@ -490,106 +500,121 @@ export default function HistorialDespachosPage() {
                 </span>
               </div>
             </div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-200 pb-2 mt-4">
+              <p className="text-xs font-black uppercase text-gray-500">
+                Auditoría de Contratos involucrados en este viaje:
+              </p>
+              <div className="relative w-full sm:w-64">
+                <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                <Input
+                  className="pl-8 h-9 text-xs bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  placeholder="Buscar contrato o cliente..."
+                  value={busquedaContrato}
+                  onChange={(e) => setBusquedaContrato(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-3 pt-2">
+              {(() => {
+                const termModal = normalizar(busquedaContrato);
+                const contratosFiltrados = guiaDetalle?.contratosInvolucrados?.filter((c: any) => {
+                  if (!termModal) return true;
+                  return normalizar(c.numContrato).includes(termModal) || 
+                         normalizar(c.nombreCliente).includes(termModal);
+                }) || [];
 
-            <p className="text-xs font-black uppercase text-gray-500 border-b pb-1">
-              Auditoría de Contratos involucrados en este viaje:
-            </p>
-
-            <div className="space-y-3">
-              {guiaDetalle?.contratosInvolucrados?.map((contrato: any) => {
-                const completado = contrato.saldoPendiente === 0;
-                const isExpanded = expandedContratos[contrato.id];
-
-                return (
-                  <div
-                    key={contrato.id}
-                    className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs transition-all"
-                  >
-                    {/* ENCABEZADO CLICABLE */}
-                    <div
-                      className="p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/80 cursor-pointer hover:bg-gray-100 transition-colors gap-2"
-                      onClick={() => toggleContrato(contrato.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant="outline"
-                          className="font-black text-blue-700 bg-blue-50 border-blue-200"
-                        >
-                          C. #{contrato.numContrato}
-                        </Badge>
-                        <span className="text-xs font-bold text-gray-800">
-                          {contrato.nombreCliente}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <Badge className="bg-gray-800">
-                          Total: {contrato.totalPrendasContrato}
-                        </Badge>
-                        <Badge className="bg-emerald-600 text-white">
-                          Despachadas: {contrato.totalDespachadoHistorico}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={`font-bold ${completado ? "bg-emerald-50 text-emerald-600 border-emerald-300" : "bg-red-50 text-red-600 border-red-300"}`}
-                        >
-                          {completado
-                            ? "CONTRATO ENTREGADO"
-                            : `FALTAN ENTREGAR: ${contrato.saldoPendiente}`}
-                        </Badge>
-                        <div className="ml-1 text-gray-400 bg-white p-1 rounded-full border border-gray-200 shadow-sm">
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </div>
-                      </div>
+                if (contratosFiltrados.length === 0) {
+                  return (
+                    <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                      <p className="text-xs text-gray-500 font-bold">
+                        No se encontraron contratos para "{busquedaContrato}" en esta guía.
+                      </p>
                     </div>
-                    {isExpanded && (
-                      <div className="p-0 border-t border-gray-200 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs">
-                            <thead className="bg-gray-50 text-gray-500 font-bold uppercase">
-                              <tr>
-                                <th className="p-2.5 pl-4">SKU</th>
-                                <th className="p-2.5">Prenda</th>
-                                <th className="p-2.5">Color / Talla</th>
-                                <th className="p-2.5">Detalles</th>
-                                <th className="p-2.5 text-center pr-4">Cant. Despachada</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {contrato.prendasEnEstaGuia?.map((p: any, idx: number) => (
-                                <tr key={idx} className="hover:bg-gray-50/50">
-                                  <td className="p-2.5 pl-4 text-gray-500 font-mono">
-                                    {p.skuCodigo || "S/N"}
-                                  </td>
-                                  <td className="p-2.5 font-semibold text-gray-800">
-                                    {p.tipoRopa}
-                                  </td>
-                                  <td className="p-2.5 text-gray-600">
-                                    {p.color} <span className="text-gray-300 mx-1">|</span> {p.talla}
-                                  </td>
-                                  <td className="p-2.5 text-[10px] text-gray-500">
-                                    {p.observacion ? `Obs: ${p.observacion}` : p.bordado ? `Bordado: ${p.bordado}` : "-"}
-                                  </td>
-                                  <td className="p-2.5 text-center font-black text-blue-700 pr-4 text-sm bg-blue-50/30">
-                                    {p.cantidad}
-                                  </td>
-                                </tr>
-                              ))}
-                              {(!contrato.prendasEnEstaGuia || contrato.prendasEnEstaGuia.length === 0) && (
-                                <tr>
-                                  <td colSpan={5} className="p-4 text-center text-gray-400 italic">
-                                    No hay prendas registradas en este despacho.
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
+                  );
+                }
+
+                return contratosFiltrados.map((contrato: any) => {
+                  const completado = contrato.saldoPendiente === 0;
+                  const isExpanded = expandedContratos[contrato.id];
+
+                  return (
+                    <div
+                      key={contrato.id}
+                      className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs transition-all"
+                    >
+                      {/* ENCABEZADO CLICABLE */}
+                      <div
+                        className="p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/80 cursor-pointer hover:bg-gray-100 transition-colors gap-2"
+                        onClick={() => toggleContrato(contrato.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="font-black text-blue-700 bg-blue-50 border-blue-200">
+                            C. #{contrato.numContrato}
+                          </Badge>
+                          <span className="text-xs font-bold text-gray-800">
+                            {contrato.nombreCliente}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <Badge className="bg-gray-800">Total: {contrato.totalPrendasContrato}</Badge>
+                          <Badge className="bg-emerald-600 text-white">Despachadas: {contrato.totalDespachadoHistorico}</Badge>
+                          <Badge
+                            variant="outline"
+                            className={`font-bold ${completado ? "bg-emerald-50 text-emerald-600 border-emerald-300" : "bg-red-50 text-red-600 border-red-300"}`}
+                          >
+                            {completado ? "CONTRATO ENTREGADO" : `FALTAN ENTREGAR: ${contrato.saldoPendiente}`}
+                          </Badge>
+                          <div className="ml-1 text-gray-400 bg-white p-1 rounded-full border border-gray-200 shadow-sm">
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+
+                      {/* TABLA DESPLEGABLE DE PRENDAS */}
+                      {isExpanded && (
+                        <div className="p-0 border-t border-gray-200 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-gray-50 text-gray-500 font-bold uppercase">
+                                <tr>
+                                  <th className="p-2.5 pl-4">SKU</th>
+                                  <th className="p-2.5">Prenda</th>
+                                  <th className="p-2.5">Color / Talla</th>
+                                  <th className="p-2.5">Detalles</th>
+                                  <th className="p-2.5 text-center pr-4">Cant. Despachada</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {contrato.prendasEnEstaGuia?.map((p: any, idx: number) => (
+                                  <tr key={idx} className="hover:bg-gray-50/50">
+                                    <td className="p-2.5 pl-4 text-gray-500 font-mono">{p.skuCodigo || "S/N"}</td>
+                                    <td className="p-2.5 font-semibold text-gray-800">{p.tipoRopa}</td>
+                                    <td className="p-2.5 text-gray-600">{p.color} <span className="text-gray-300 mx-1">|</span> {p.talla}</td>
+                                    <td className="p-2.5 text-[10px] text-gray-500">
+                                      {p.observacion ? `Obs: ${p.observacion}` : p.bordado ? `Bordado: ${p.bordado}` : "-"}
+                                    </td>
+                                    <td className="p-2.5 text-center font-black text-blue-700 pr-4 text-sm bg-blue-50/30">
+                                      {p.cantidad}
+                                    </td>
+                                  </tr>
+                                ))}
+                                {(!contrato.prendasEnEstaGuia || contrato.prendasEnEstaGuia.length === 0) && (
+                                  <tr>
+                                    <td colSpan={5} className="p-4 text-center text-gray-400 italic">
+                                      No hay prendas registradas en este despacho.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
           <DialogFooter className="mt-4 flex flex-col sm:flex-row justify-between gap-3">
@@ -601,8 +626,6 @@ export default function HistorialDespachosPage() {
               >
                 <Printer size={14} className="mr-1" /> Imprimir PDF
               </Button>
-
-              {/* 🔥 NUEVO BOTÓN EXCEL EN EL MODAL */}
               <Button
                 variant="outline"
                 size="sm"

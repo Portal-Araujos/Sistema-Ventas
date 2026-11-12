@@ -92,7 +92,8 @@ export async function GET(request: Request) {
               color: true,
               talla: true,
               bordado: true,
-              observacion: true
+              observacion: true,
+              guiaDespacho: { select: { fechaDespacho: true } }
             }
           }
         },
@@ -105,6 +106,19 @@ export async function GET(request: Request) {
           p.numContrato === v.numContrato &&
           p.institucionId === v.institucionId,
       );
+      let fechaDespachoStr = "";
+      if (ped && ped.detalles.length > 0) {
+        const prendasConGuia = ped.detalles.filter((d: any) => d.guiaDespacho);
+        if (prendasConGuia.length > 0) {
+          // Tomar la primera fecha encontrada (o la más reciente) y formatearla
+          const fechaRaw = prendasConGuia[0].guiaDespacho.fechaDespacho;
+          if (fechaRaw) {
+            fechaDespachoStr = new Date(fechaRaw).toLocaleString("es-EC", {
+              timeZone: "America/Guayaquil",
+            });
+          }
+        }
+      }
       return {
         id: v.id,
         fechaVenta: new Date(v.fechaVenta).toLocaleDateString("es-EC"),
@@ -138,6 +152,7 @@ export async function GET(request: Request) {
         observacionesFact: v.observacionesFact || "Sin observaciones",
         verificacionFact: v.verificacionFact || "Sin validar",
         estadoTicket: v.estadoTicket,
+        fechaDespacho: fechaDespachoStr,
       };
     });
 

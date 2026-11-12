@@ -1018,7 +1018,7 @@ export default function VentasPage() {
 
             {/* --- TABLA --- */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto flex flex-col">
-              <Table className="w-full table-fixed min-w-1000px">
+              <Table className="w-full table-fixed min-w-1300px">
                 <TableHeader className="bg-gray-50/80">
                   <TableRow>
                     <TableHead className="font-semibold text-gray-700 w-44">
@@ -1046,7 +1046,10 @@ export default function VentasPage() {
                       {encabezadoOrden("observacionesFact", "Observaciones")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-32">
-                      {encabezadoOrden("prendas", "Prendas/Bordados")}
+                      {encabezadoOrden("prendas", "Prendas")}<br />{encabezadoOrden("prendas", "Bordado")}
+                    </TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center w-36">
+                      {encabezadoOrden("fechaDespacho", "Fecha Despacho")}
                     </TableHead>
                     <TableHead className="font-semibold text-gray-700 text-center w-32">
                       Acción
@@ -1194,6 +1197,15 @@ export default function VentasPage() {
                               </div>
                             </PopoverContent>
                           </Popover>
+                        </TableCell>
+                        <TableCell className="text-center w-36 align-middle">
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded border inline-block text-center whitespace-nowrap ${
+                            v.fechaDespacho 
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                              : "bg-gray-50 text-gray-400 border-gray-200 italic"
+                          }`}>
+                            {v.fechaDespacho || "Sin fecha de despacho"}
+                          </span>
                         </TableCell>
                         <TableCell className="text-center w-32">
                           <div className="flex justify-center gap-1">
@@ -1719,8 +1731,6 @@ export default function VentasPage() {
                 )}
               </div>
             </div>
-
-            {/* SECCIÓN 2: Nuevos Clientes */}
             <div className="bg-emerald-50 rounded-xl border border-emerald-200 overflow-hidden">
               <div className="p-3 bg-emerald-100/50 border-b border-emerald-200 flex justify-between items-center">
                 <h3 className="text-sm font-bold text-emerald-900 flex items-center gap-2">
@@ -1753,7 +1763,6 @@ export default function VentasPage() {
               </div>
             </div>
           </div>
-
           <DialogFooter className="mt-4 pt-4 border-t flex justify-end gap-2 shrink-0">
             <Button variant="outline" onClick={() => setBaseConfirmModal(prev => ({...prev, open: false}))} disabled={isImportingBase}>
               Cancelar
@@ -1838,11 +1847,6 @@ export default function VentasPage() {
                   ))}
                 </select>
               </div>
-
-
-
-
-              
               <div className="space-y-1 relative">
                 <Label className="text-xs font-bold text-red-700">
                   Vincular a Institución / Escuela
@@ -1853,7 +1857,6 @@ export default function VentasPage() {
                     size={16}
                     className="absolute left-3 top-2.5 text-gray-400"
                   />
-
                   <Input
                     placeholder="Ej. Pomasqui, Simón Bolívar..."
                     className="pl-9 pr-8 h-10 text-sm bg-gray-50 focus:bg-white border-gray-300 focus:border-emerald-500"
@@ -2257,10 +2260,6 @@ export default function VentasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-
-
-
       <Dialog
         open={ticketModal.open}
         onOpenChange={(val) => setTicketModal({ ...ticketModal, open: val })}
