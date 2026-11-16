@@ -41,14 +41,17 @@ export default function CatalogoSKUPage() {
   const { can, session: permissionSession } = usePermissions();
   const [skus, setSkus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [skuEditar, setSkuEditar] = useState<{ id: number; codigo: string; isElectroDB: boolean } | null>(null);
-  const [codigoEditar, setCodigoEditar] = useState("");
+  const [skuEditar, setSkuEditar] = useState<{ id: number; codigo: string; isElectroDB: boolean; tipoRopa: string; producto: string; color: string; genero: string; talla: string; activo: boolean } | null>(null);
+
   const [guardandoCodigo, setGuardandoCodigo] = useState(false);
   const guardarCodigo = async () => {
     if (!skuEditar) return;
+    if ([skuEditar.codigo, skuEditar.tipoRopa, skuEditar.color, skuEditar.genero, ...(skuEditar.isElectroDB ? [] : [skuEditar.talla])].some(v => !v.trim())) return showToast("error", "Completa los campos obligatorios.");
     setGuardandoCodigo(true);
     try {
-      const res = await fetch(skuEditar.isElectroDB ? "/api/pedidos/electro" : "/api/pedidos/sku", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: skuEditar.id, codigo: codigoEditar }) });
+      const res = await fetch(skuEditar.isElectroDB ? "/api/pedidos/electro" : "/api/pedidos/sku", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: skuEditar.id, codigo: skuEditar.codigo,
+        ...(skuEditar.isElectroDB ? { familia: skuEditar.tipoRopa, producto: skuEditar.producto, marcaModelo: skuEditar.color, garantia: skuEditar.genero } : { tipoRopa: skuEditar.tipoRopa, color: skuEditar.color, genero: skuEditar.genero, talla: skuEditar.talla }),
+        ...(can("skus:activar") ? { activo: skuEditar.activo } : {}) }) });
       const result = await res.json(); if (!res.ok) throw new Error(result.error);
       setSkuEditar(null); await cargarSKUs(); showToast("exito", "Código actualizado. Los pedidos existentes conservan su código original.");
     } catch (error) { showToast("error", error instanceof Error ? error.message : "No se pudo actualizar"); }
@@ -452,7 +455,7 @@ export default function CatalogoSKUPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Allowed permission="skus:editar"><Button size="icon" variant="ghost" title="Editar código" aria-label="Editar código" onClick={() => { setSkuEditar(item); setCodigoEditar(item.codigo); }}><Pencil size={15} /></Button></Allowed>
+                      <Allowed permission="skus:editar"><Button size="icon" variant="ghost" title="Editar código" aria-label="Editar código" onClick={() => { setSkuEditar({ ...item, isElectroDB: !!item.isElectroDB, producto: item.producto ?? "" }); }}><Pencil size={15} /></Button></Allowed>
                       <Allowed permission="skus:activar"><Button
                         size="icon"
                         variant="ghost"
@@ -504,10 +507,35 @@ export default function CatalogoSKUPage() {
 
       {/*MODAL: NUEVO SKU INDIVIDUAL DINÁMICO ➕ */}
       <Dialog open={!!skuEditar} onOpenChange={open => { if (!open && !guardandoCodigo) setSkuEditar(null); }}>
-        <DialogContent className="bg-white sm:max-w-md"><DialogHeader><DialogTitle>Editar código SKU</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-600">Solo cambia el catálogo para nuevas selecciones. Los pedidos y despachos anteriores conservan su código original.</p>
-          <Label>Nuevo código<Input value={codigoEditar} onChange={e => setCodigoEditar(e.target.value.toUpperCase())} disabled={guardandoCodigo} /></Label>
-          <DialogFooter><Button variant="outline" disabled={guardandoCodigo} onClick={() => setSkuEditar(null)}>Cancelar</Button><Allowed permission="skus:editar"><Button disabled={guardandoCodigo || !codigoEditar.trim()} onClick={guardarCodigo}>{guardandoCodigo ? "Guardando…" : "Guardar código"}</Button></Allowed></DialogFooter>
+        <DialogContent className="bg-white sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Editar SKU y características</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-600">Los cambios se aplican al catálogo. Los pedidos anteriores conservan sus datos originales.</p>
+          {skuEditar && <fieldset disabled={guardandoCodigo} className="space-y-3">
+            {([
+              ["codigo", "Código SKU *"],
+              ["tipoRopa", skuEditar.isElectroDB ? "Familia *" : "Tipo de prenda *"],
+              ...(skuEditar.isElectroDB ? [["producto", "Producto"]] : []),
+              ["color", skuEditar.isElectroDB ? "Marca / Modelo *" : "Color *"],
+              ...(skuEditar.isElectroDB ? [["genero", "Garantía *"]] : [["talla", "Talla *"]]),
+            ] as ["codigo" | "tipoRopa" | "producto" | "color" | "genero" | "talla", string][]).map(([campo, etiqueta]) => <div key={campo}>
+              <Label htmlFor={`editar-${campo}`}>{etiqueta}</Label>
+              <Input id={`editar-${campo}`} className="uppercase mt-1" value={skuEditar[campo]} onChange={e => setSkuEditar({ ...skuEditar, [campo]: e.target.value.toUpperCase() })} />
+            </div>)}
+            {!skuEditar.isElectroDB && <div>
+              <Label htmlFor="editar-genero">Género *</Label>
+              <select id="editar-genero" className="w-full h-9 border rounded-md px-3 text-sm bg-white" value={skuEditar.genero} onChange={e => setSkuEditar({ ...skuEditar, genero: e.target.value })}>
+                <option value="">Seleccione...</option>
+                {!["", "UNISEX", "HOMBRE", "MUJER"].includes(skuEditar.genero) && <option value={skuEditar.genero}>{skuEditar.genero}</option>}
+                <option value="UNISEX">UNISEX</option><option value="HOMBRE">HOMBRE</option><option value="MUJER">MUJER</option>
+              </select>
+            </div>}
+            <div><Label htmlFor="editar-estado">Estado</Label>
+              <select id="editar-estado" disabled={!can("skus:activar")} className="w-full h-9 border rounded-md px-3 text-sm bg-white disabled:opacity-50" value={String(skuEditar.activo)} onChange={e => setSkuEditar({ ...skuEditar, activo: e.target.value === "true" })}>
+                <option value="true">Activo</option><option value="false">Inactivo</option>
+              </select>
+            </div>
+          </fieldset>}
+          <DialogFooter><Button variant="outline" disabled={guardandoCodigo} onClick={() => setSkuEditar(null)}>Cancelar</Button><Allowed permission="skus:editar"><Button disabled={guardandoCodigo || !skuEditar?.codigo.trim()} onClick={guardarCodigo}>{guardandoCodigo ? "Guardando..." : "Guardar cambios"}</Button></Allowed></DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={modalNuevoOpen} onOpenChange={setModalNuevoOpen}>

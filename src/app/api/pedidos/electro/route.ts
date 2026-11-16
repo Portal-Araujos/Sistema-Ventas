@@ -106,11 +106,24 @@ export async function PUT(request: Request) {
   try {
     const session = await getApiSession();
     if (!session) return unauthorizedResponse();
-    const { id, activo, codigo } = await request.json();
-    const editar = codigo !== undefined;
+    const body = await request.json();
+    const { id, activo } = body;
+    const campos = ["codigo", "familia", "producto", "marcaModelo", "garantia"] as const;
+    const editar = campos.some(campo => body[campo] !== undefined);
     if (!hasPermission(session, editar ? "skus:editar" : "skus:activar")) return forbiddenResponse();
-    if (!Number.isSafeInteger(Number(id)) || Number(id) < 1 || (editar ? typeof codigo !== "string" || !codigo.trim() : typeof activo !== "boolean")) return NextResponse.json({ error: "Datos del código inválidos" }, { status: 400 });
-    const item = await prisma.catalogoElectro.update({ where: { id: Number(id) }, data: editar ? { codigo: codigo.trim().toUpperCase() } : { activo } });
+    if (!Number.isSafeInteger(Number(id)) || Number(id) < 1) return NextResponse.json({ error: "Datos del c\u00f3digo inv\u00e1lidos" }, { status: 400 });
+    const data: { codigo?: string; familia?: string; producto?: string; marcaModelo?: string; garantia?: string; activo?: boolean } = {};
+    for (const campo of campos) {
+      if (body[campo] === undefined) continue;
+      if (typeof body[campo] !== "string" || (campo !== "producto" && !body[campo].trim())) return NextResponse.json({ error: "Completa los campos obligatorios con datos v\u00e1lidos." }, { status: 400 });
+      data[campo] = body[campo].trim().toUpperCase();
+    }
+    if ((!editar && activo === undefined) || (activo !== undefined && typeof activo !== "boolean")) return NextResponse.json({ error: "Estado inv\u00e1lido" }, { status: 400 });
+    if (activo !== undefined) {
+      if (!hasPermission(session, "skus:activar")) return forbiddenResponse();
+      data.activo = activo;
+    }
+    const item = await prisma.catalogoElectro.update({ where: { id: Number(id) }, data });
     // Orders contain their original SKU as a snapshot; never rewrite those rows.
     return NextResponse.json({ success: true, data: item });
   } catch (error) {
