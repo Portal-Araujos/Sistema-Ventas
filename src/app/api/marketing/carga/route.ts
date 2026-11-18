@@ -7,6 +7,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { parsearExcel } from "@/lib/marketing";
+import { registrarAuditoriaMarketing } from "@/lib/marketing/auditoria";
 
 const MAX_TAMANO = 10 * 1024 * 1024;
 
@@ -36,12 +37,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El archivo no contiene registros" }, { status: 400 });
     }
 
+    let nuevaCargaId = "";
     await prisma.$transaction(async (tx) => {
       await tx.marketingCarga.updateMany({
         where: { activo: true },
         data: { activo: false },
       });
-      await tx.marketingCarga.create({
+      const nueva = await tx.marketingCarga.create({
         data: {
           nombreArchivo: archivo.name.slice(0, 255),
           activo: true,
@@ -60,7 +62,17 @@ export async function POST(request: Request) {
             })),
           },
         },
+        select: { id: true },
       });
+      nuevaCargaId = nueva.id;
+    });
+
+    await registrarAuditoriaMarketing({
+      accion: "CARGA_SUBIDA",
+      cargaId: nuevaCargaId,
+      nombreArchivo: archivo.name.slice(0, 255),
+      detalles: { totalRegistros: filas.length },
+      usuarioId: session.id,
     });
 
     return NextResponse.json({ totalRegistros: filas.length }, { status: 201 });

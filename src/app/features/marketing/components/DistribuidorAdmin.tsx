@@ -14,7 +14,9 @@ import {
 import type { CarteraResponse } from "../types";
 import BarraFiltros from "./BarraFiltros";
 import BotonDistribucion from "./BotonDistribucion";
+import BotonEnvio from "./BotonEnvio";
 import CargaExcel from "./CargaExcel";
+import HistorialAuditoria from "./HistorialAuditoria";
 import MetricasClientes from "./MetricasClientes";
 import SelectorColumnas from "./SelectorColumnas";
 import TablaClientes from "./TablaClientes";
@@ -28,6 +30,7 @@ export default function DistribuidorAdmin() {
   const [columnasVisibles, setColumnasVisibles] = useState<Set<string>>(
     () => new Set(COLUMNAS_TABLA),
   );
+  const [historialKey, setHistorialKey] = useState(0);
 
   const cargar = useCallback(async () => {
     setError("");
@@ -42,6 +45,11 @@ export default function DistribuidorAdmin() {
 
   useEffect(() => {
     void cargar();
+  }, [cargar]);
+
+  const recargarTodo = useCallback(async () => {
+    await cargar();
+    setHistorialKey((valor) => valor + 1);
   }, [cargar]);
 
   const fuente = distribucionAplicada
@@ -65,7 +73,7 @@ export default function DistribuidorAdmin() {
 
   return (
     <div className="flex flex-col gap-5">
-      <CargaExcel onCargado={cargar} />
+      <CargaExcel onCargado={recargarTodo} />
 
       {datos?.carga && (
         <p className="text-xs text-gray-500">
@@ -74,6 +82,34 @@ export default function DistribuidorAdmin() {
           {datos.carga.totalRegistros.toLocaleString("es-EC")} registros
         </p>
       )}
+
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-blue-900">Envío a vendedores</p>
+            <p className="text-xs text-blue-700">
+              Hasta que no envíes, los vendedores no verán clientes en su apartado.
+            </p>
+          </div>
+          <BotonEnvio
+            deshabilitado={!datos?.carga}
+            enviadoEn={datos?.carga?.enviadoEn ?? null}
+            onEnviado={recargarTodo}
+          />
+        </div>
+        {datos && datos.resumenEnvio.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-blue-200 pt-3">
+            {datos.resumenEnvio.map((item) => (
+              <span
+                key={item.vendedor}
+                className="rounded-full bg-white px-3 py-1 text-xs text-blue-900"
+              >
+                {item.vendedor}: <strong>{item.clientes}</strong>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
       <MetricasClientes
         metricas={datos?.metricas ?? {
@@ -118,6 +154,11 @@ export default function DistribuidorAdmin() {
         filas={filas}
         columnasVisibles={columnasVisibles}
         distribucionAplicada={distribucionAplicada}
+      />
+
+      <HistorialAuditoria
+        refreshKey={historialKey}
+        onCambiado={recargarTodo}
       />
     </div>
   );

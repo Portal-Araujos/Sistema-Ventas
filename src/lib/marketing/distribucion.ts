@@ -13,7 +13,10 @@ import type {
 
 const ORDEN: readonly string[] = VENDEDORES_ACTUALES;
 
-function preparar(fila: ClienteRow): ClienteDistribuido {
+export function prepararCliente(
+  fila: ClienteRow,
+  vendedorAsignado: string = fila.vendedor,
+): ClienteDistribuido {
   const vendedorOriginal = fila.vendedor;
   return {
     ...fila,
@@ -22,8 +25,12 @@ function preparar(fila: ClienteRow): ClienteDistribuido {
     provinciaKey: claveUbicacion(fila.provincia),
     ciudadKey: claveUbicacion(fila.ciudad),
     vendedorOriginal,
-    vendedorAsignado: vendedorOriginal,
+    vendedorAsignado,
   };
+}
+
+function preparar(fila: ClienteRow): ClienteDistribuido {
+  return prepararCliente(fila);
 }
 
 export function redistribuirClientes(filas: ClienteRow[]): ResultadoDistribucion {

@@ -188,6 +188,7 @@ model Usuario {
   detallesRecibidos      DetallePedido[]      @relation("UsuarioReceptorDetalle")
   notificaciones         Notificacion[]       @relation("NotificacionesUsuario")
   marketingCargas        MarketingCarga[]
+  marketingAuditorias    MarketingAuditoria[] @relation("AuditoriasMarketingUsuario")
   @@map("usuarios")
 }
 
@@ -601,8 +602,11 @@ model MarketingCarga {
   creadoPorId    String             @map("creado_por_id")
   creadoPor      Usuario            @relation(fields: [creadoPorId], references: [id])
   createdAt      DateTime           @default(now()) @map("created_at")
+  enviadoEn      DateTime?          @map("enviado_en")
   clientes       MarketingCliente[]
+  auditorias     MarketingAuditoria[] @relation("AuditoriasMarketingCarga")
   @@map("marketing_cargas")
+  @@index([activo, createdAt])
 }
 
 model MarketingCliente {
@@ -617,8 +621,24 @@ model MarketingCliente {
   ciudad         String
   direccion      String
   vendedor       String
+  vendedorAsignado String? @map("vendedor_asignado")
   @@map("marketing_clientes")
   @@index([cargaId])
+  @@index([cargaId, vendedorAsignado])
+}
+
+model MarketingAuditoria {
+  id            String         @id @default(uuid())
+  accion        String
+  cargaId       String?        @map("carga_id")
+  carga         MarketingCarga? @relation("AuditoriasMarketingCarga", fields: [cargaId], references: [id], onDelete: SetNull)
+  nombreArchivo String?        @map("nombre_archivo")
+  detalles      String?
+  usuarioId     String?        @map("usuario_id")
+  usuario       Usuario?       @relation("AuditoriasMarketingUsuario", fields: [usuarioId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  @@map("marketing_auditoria")
+  @@index([createdAt])
 }
 
 model CatalogoElectro {

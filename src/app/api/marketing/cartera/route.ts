@@ -8,8 +8,10 @@ import {
 } from "@/lib/api-auth";
 import {
   canonizarVendedor,
+  prepararCliente,
   redistribuirClientes,
   VENDEDORES_ACTUALES,
+  type ClienteDistribuido,
   type ClienteRow,
   type MetricasMarketing,
 } from "@/lib/marketing";
@@ -42,6 +44,7 @@ export async function GET() {
         aplicado: [],
         metricas: METRICAS_VACIAS,
         vendedores: VENDEDORES_ACTUALES,
+        resumenEnvio: [],
       });
     }
 
@@ -57,16 +60,39 @@ export async function GET() {
     }));
     const { original, aplicado, metricas } = redistribuirClientes(filas);
 
-    let visibles = aplicado;
+    let visibles: ClienteDistribuido[] = aplicado;
     if (!esAdmin) {
-      const usuario = await prisma.usuario.findUnique({
-        where: { id: session.id },
-        select: { nombre: true },
-      });
-      const canonico = canonizarVendedor(usuario?.nombre ?? "");
-      visibles = canonico
-        ? aplicado.filter((fila) => fila.vendedorAsignado === canonico)
-        : [];
+      visibles = [];
+      if (carga.enviadoEn) {
+        const usuario = await prisma.usuario.findUnique({
+          where: { id: session.id },
+          select: { nombre: true },
+        });
+        const canonico = canonizarVendedor(usuario?.nombre ?? "");
+        if (canonico) {
+          visibles = carga.clientes
+            .map((cliente) => ({
+              cliente,
+              asignado: canonizarVendedor(cliente.vendedorAsignado),
+            }))
+            .filter((item) => item.asignado === canonico)
+            .map(({ cliente, asignado }) =>
+              prepararCliente(
+                {
+                  fila: cliente.fila,
+                  identificacion: cliente.identificacion,
+                  nombreCliente: cliente.nombreCliente,
+                  movil: cliente.movil,
+                  provincia: cliente.provincia,
+                  ciudad: cliente.ciudad,
+                  direccion: cliente.direccion,
+                  vendedor: cliente.vendedor,
+                },
+                asignado || cliente.vendedor,
+              ),
+            );
+        }
+      }
     }
 
     return NextResponse.json({
@@ -74,11 +100,18 @@ export async function GET() {
         nombreArchivo: carga.nombreArchivo,
         createdAt: carga.createdAt.toISOString(),
         totalRegistros: carga.totalRegistros,
+        enviadoEn: carga.enviadoEn?.toISOString() ?? null,
       },
       original: esAdmin ? original : [],
       aplicado: visibles,
       metricas,
       vendedores: VENDEDORES_ACTUALES,
+      resumenEnvio: VENDEDORES_ACTUALES.map((vendedor) => ({
+        vendedor,
+        clientes: carga.clientes.filter(
+          (cliente) => canonizarVendedor(cliente.vendedorAsignado) === vendedor,
+        ).length,
+      })),
     });
   } catch (error) {
     console.error("Error consultando cartera de Marketing:", error);

@@ -39,3 +39,13 @@ export type FiltrosMarketing = {
 };
 
 export type OpcionFiltro = { clave: string; etiqueta: string };
+
+export const ACCIONES_AUDITORIA_MARKETING = [
+  "CARGA_SUBIDA",
+  "CARTERA_ENVIADA",
+  "CARGA_ELIMINADA",
+  "MANTENIMIENTO",
+] as const;
+
+export type AccionAuditoriaMarketing =
+  (typeof ACCIONES_AUDITORIA_MARKETING)[number];

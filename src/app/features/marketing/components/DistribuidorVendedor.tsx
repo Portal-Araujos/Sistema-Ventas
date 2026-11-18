@@ -55,16 +55,27 @@ export default function DistribuidorVendedor() {
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!datos) return <p className="text-sm text-gray-500">Cargando cartera…</p>;
-  if (!datos.carga || filas.length === 0) {
+  if (!datos.carga?.enviadoEn) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-        Aún no hay clientes asignados a tu cartera.
+        La cartera aún no ha sido enviada. Espera a que administración publique la
+        distribución.
+      </div>
+    );
+  }
+  if (filas.length === 0) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+        No tienes clientes asignados en la cartera enviada.
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-5">
+      <p className="text-xs text-gray-500">
+        Cartera enviada el {new Date(datos.carga.enviadoEn).toLocaleString("es-EC")}
+      </p>
       <BarraFiltros
         vendedores={opcionesVendedor()}
         provincias={provincias}

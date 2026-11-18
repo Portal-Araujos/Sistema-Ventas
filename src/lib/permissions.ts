@@ -9,7 +9,7 @@ export const PERMISSION_MODULES = [
   modulePermissions("Base de clientes", "base_consultas", [["ver", "Consultar clientes"], ["crear", "Crear / importar clientes"], ["editar", "Editar clientes"]]),
   modulePermissions("Indicadores", "indicadores", [["ver", "Ver indicadores"], ["editar_metas", "Definir y editar metas"], ["exportar", "Exportar indicadores"]]),
   modulePermissions("Cobranzas", "cobranzas", [["ver", "Ver cobranzas"], ["crear_ticket", "Crear gestión / ticket de cobranza"]]),
-  modulePermissions("Marketing", "marketing", [["ver", "Ver Mi Marketing (vendedor)"], ["administrar", "Ver panel de administración de Marketing"]]),
+  modulePermissions("Marketing", "marketing", [["ver", "Ver Mi Marketing (vendedor)"], ["administrar", "Ver panel de administración de Marketing"], ["mantenimiento", "Limpiar historial y cargas de Marketing"]]),
   modulePermissions("Catálogo SKU", "skus", [["ver", "Ver catálogo"], ["crear", "Crear códigos"], ["editar", "Editar códigos y características"], ["importar", "Importar catálogo"], ["activar", "Activar / desactivar códigos"], ["gestionar", "Administrar catálogo (permiso anterior)"]]),
   modulePermissions("Pedidos", "pedidos", [["ver", "Ver pedidos"], ["crear", "Crear pedidos"], ["editar", "Editar pedidos"], ["eliminar", "Eliminar pedidos"], ["enviar", "Enviar a Operaciones"], ["recibir", "Confirmar recepción"], ["desbloquear_recepcion", "Desbloquear recepción"], ["cambiar_produccion", "Modificar prendas en producción"]]),
   modulePermissions("Operaciones", "operaciones", [["ver", "Ver Operaciones"], ["editar", "Cambiar estados y observaciones"], ["asignar_stock", "Distribuir stock y enviar a producción"], ["cambiar_fecha", "Reprogramar fecha de entrega"]]),
