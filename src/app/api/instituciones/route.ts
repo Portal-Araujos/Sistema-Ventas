@@ -19,10 +19,22 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
+    const contexto = searchParams.get("selector");
+    const permisosSelector: Record<string, string[]> = {
+      tickets: ["tickets:ver", "tickets:crear"],
+      ventas: ["ventas:ver", "ventas:crear", "ventas:editar", "base_consultas:crear", "base_consultas:editar"],
+      agenda: ["agenda:ver", "agenda:crear", "agenda:registrar_visita", "agenda:asignar"],
+      visitas: ["visitas:ver"],
+      pedidos: ["pedidos:ver", "pedidos:crear", "pedidos:editar"],
+      operaciones: ["operaciones:ver"],
+      produccion: ["produccion:ver"],
+      empaque: ["empaque:ver"],
+    };
+    const selectorPermitido = !!contexto && (permisosSelector[contexto] || []).some(permiso => hasPermission(session, permiso));
     const tienePermisoGlobal = hasPermission(session, "instituciones:ver") || isAdministrator(session);
     const esVendedor = session.rol === "vendedor";
 
-    if (!tienePermisoGlobal && !esVendedor) {
+    if (!tienePermisoGlobal && !esVendedor && !selectorPermitido) {
       return forbiddenResponse();
     }
 
@@ -123,7 +135,7 @@ export async function GET(request: Request) {
     }));
 
     return NextResponse.json({
-      data: dataFormateada,
+      data: selectorPermitido ? dataFormateada.map(({ id, nombre, provinciaId, provincia, cantonId, canton, parroquiaId, parroquia }) => ({ id, nombre, provinciaId, provincia, cantonId, canton, parroquiaId, parroquia })) : dataFormateada,
       meta: {
         total,
         page,

@@ -86,7 +86,7 @@ function PedidosPageContent() {
   const cargarInstituciones = async () => {
     try {
       const [resInst, resCat] = await Promise.all([
-        fetch("/api/instituciones"),
+        fetch("/api/instituciones?selector=pedidos"),
         fetch("/api/catalogos"),
       ]);
       const data = await resInst.json();

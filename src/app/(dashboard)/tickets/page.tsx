@@ -218,7 +218,7 @@ export default function TicketsPage() {
     }
     try {
       const res = await fetch(
-        `/api/instituciones?search=${encodeURIComponent(termino)}&limit=15`,
+        `/api/instituciones?selector=tickets&search=${encodeURIComponent(termino)}&limit=15`,
       );
       const json = await res.json();
       setResultadosInst(Array.isArray(json) ? json : json.data || []);

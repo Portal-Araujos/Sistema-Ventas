@@ -135,7 +135,7 @@ function ProduccionPageContent() {
 
       const [resProd, resInst] = await Promise.all([
         fetch(url),
-        fetch("/api/instituciones"),
+        fetch("/api/instituciones?selector=produccion"),
       ]);
       const jsonProd = await resProd.json();
       const jsonInst = await resInst.json();

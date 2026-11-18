@@ -293,6 +293,7 @@ model Venta {
   visitaId          String?         @map("visita_id")
   visita            VisitaAgenda?   @relation(fields: [visitaId], references: [id])
   numContrato       String          @map("num_contrato")
+  nombreCliente     String?         @map("nombre_cliente")
   valorContrato     Float           @map("valor_contrato")
   abono             Float           @default(0)
   meses             Int

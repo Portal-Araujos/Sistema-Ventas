@@ -86,7 +86,7 @@ export default function VisitasPage() {
       const fetchPromises = [fetch(`/api/visitas?${params.toString()}`)];
       if (!catalogos) fetchPromises.push(fetch("/api/catalogos"));
       if (instituciones.length === 0)
-        fetchPromises.push(fetch("/api/instituciones?limit=500"));
+        fetchPromises.push(fetch("/api/instituciones?selector=visitas&limit=500"));
       if (vendedores.length === 0)
         fetchPromises.push(fetch("/api/usuarios/vendedores"));
 

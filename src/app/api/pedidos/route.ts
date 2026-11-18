@@ -483,6 +483,7 @@ export async function PUT(request: Request) {
         });
 
         const ventaData: any = {};
+        if (nombreCliente !== undefined) ventaData.nombreCliente = String(nombreCliente || "").trim();
         if (numContrato !== undefined)
           ventaData.numContrato = numContratoLimpio;
         if (valorContrato !== undefined)
@@ -518,6 +519,7 @@ export async function PUT(request: Request) {
               vendedorId: vendedorFinalId,
               fechaVenta: new Date(),
               numContrato: numContratoLimpio,
+              nombreCliente: nombreCliente ? String(nombreCliente).trim() : pedidoAntiguo.nombreCliente,
               valorContrato: parseMoney(valorContrato),
               abono: parseMoney(abono),
               cuotaMensual: parseMoney(cuotaMensual),
@@ -617,6 +619,7 @@ export async function POST(request: Request) {
         institucionId: body.institucionId,
         vendedorId: vendedorFinalId,
         numContrato: numContratoLimpio,
+        nombreCliente: body.nombreCliente ? String(body.nombreCliente).trim() : null,
         fechaVenta: new Date(),
         valorContrato: parseMoney(body.valorContrato),
         abono: parseMoney(body.abono),

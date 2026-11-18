@@ -310,6 +310,7 @@ export async function POST(request: Request) {
               vendedorId: userId,
               visitaId: nuevaVisita.id,
               numContrato: String(v.numContrato).trim(),
+              nombreCliente: v.nombreCliente ? String(v.nombreCliente).trim() : null,
               valorContrato: valor,
               abono: abonoVal,
               meses: m,
