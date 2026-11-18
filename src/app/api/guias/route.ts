@@ -8,18 +8,15 @@ export async function GET(request: Request) {
 
     const guias = await prisma.guiaDespacho.findMany({
       include: {
-        // 🔥 MODIFICACIÓN 1: Le decimos que también traiga el vendedor desde la Institución
         institucion: { 
           select: { 
             id: true, 
             nombre: true,
-            vendedor: { select: { nombre: true } } 
           } 
         },
-        vendedor: { select: { id: true, nombre: true } },
         prendasDespachadas: {
           include: {
-            pedido: { include: { detalles: true } },
+            pedido: { include: { detalles: true, usuario: { select: { id: true, nombre: true } } } },
           },
         },
       },
@@ -28,8 +25,10 @@ export async function GET(request: Request) {
 
     const resultado = guias.map((guia: any) => {
       const pedidosInvolucrados = new Map();
+      const vendedores = new Map<string, string>();
       guia.prendasDespachadas.forEach((prenda: any) => {
         const ped = prenda.pedido;
+        if (ped.usuario) vendedores.set(ped.usuario.id, ped.usuario.nombre);
         if (!pedidosInvolucrados.has(ped.id)) {
           const totalContrato = ped.detalles.reduce(
             (acc: number, d: any) => acc + (d.cantidad || 1),
@@ -42,6 +41,7 @@ export async function GET(request: Request) {
             id: ped.id,
             numContrato: ped.numContrato || "S/N",
             nombreCliente: ped.nombreCliente || "Sin Cliente",
+            vendedorNombre: ped.usuario?.nombre || "Vendedor No Asignado",
             totalPrendasContrato: totalContrato,
             totalDespachadoHistorico: totalDespachadoHistorico,
             saldoPendiente: totalContrato - totalDespachadoHistorico,
@@ -56,8 +56,7 @@ export async function GET(request: Request) {
         puedeAnular: hasPermission(session, "empaque:anular"),
         codigoGuia: guia.codigoGuia,
         institucionNombre: guia.institucion?.nombre || "Sin Escuela",
-        // 🔥 MODIFICACIÓN 2: Doble validación. Si no está en la guía, lo saca de la escuela.
-        vendedorNombre: guia.vendedor?.nombre || guia.institucion?.vendedor?.nombre || "Vendedor No Asignado",
+        vendedorNombre: Array.from(vendedores.values()).join(", ") || "Vendedor No Asignado",
         responsable: guia.responsable,
         fechaDespacho: new Date(guia.fechaDespacho).toLocaleString("es-EC", {
           timeZone: "America/Guayaquil",
