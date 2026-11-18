@@ -91,6 +91,8 @@ function LoginForm() {
     if (tienePermiso(["sku", "catalogo", "codigo"]))
       return "/configuraciones/skus";
     if (tienePermiso(["configuracion"])) return "/configuraciones";
+    if (tienePermiso(["marketing:administrar"])) return "/marketing/administracion";
+    if (tienePermiso(["marketing"])) return "/marketing";
 
     if (modulosStr[0]) {
       let moduloBase = modulosStr[0].split(":")[0].trim();
