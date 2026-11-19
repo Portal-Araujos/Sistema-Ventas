@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {Home,Building2, CalendarDays,MapPin,BarChart2,User,Settings,ChevronLeft,ChevronRight,
   LogOut,DollarSign,Shield,Menu,X,Ticket,BookCheck,Factory,Barcode,Briefcase,Package,
-  Scissors,Truck,ChevronDown,ChevronUp,Badge,FileUser,HandCoins,Bell,Megaphone} from "lucide-react";
+  Scissors,Truck,ChevronDown,ChevronUp,Badge,FileUser,HandCoins,Bell,Megaphone,History} from "lucide-react";
 
 const menuStructure = [
   {
@@ -73,6 +73,12 @@ const menuStructure = [
         icon: Settings,
         label: "Administración",
         href: "/marketing/administracion",
+        permiso: "marketing:administrar",
+      },
+      {
+        icon: History,
+        label: "Historial y auditoría",
+        href: "/marketing/historial",
         permiso: "marketing:administrar",
       },
     ],

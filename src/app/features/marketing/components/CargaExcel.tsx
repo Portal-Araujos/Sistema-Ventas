@@ -1,31 +1,79 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MESES_DEL_ANIO } from "@/lib/marketing/semana";
 
-export default function CargaExcel({ onCargado }: { onCargado: () => void }) {
+export type ResultadoCarga = {
+  cargaId: string;
+  totalRegistros: number;
+  semana: string;
+  altas: number;
+  bajas: number;
+  cambios: number;
+  total: number;
+};
+
+type Props = {
+  onCargado: (resultado: ResultadoCarga) => void | Promise<void>;
+};
+
+export default function CargaExcel({ onCargado }: Props) {
   const [archivo, setArchivo] = useState<File | null>(null);
+  const [semana, setSemana] = useState(() =>
+    String(Math.ceil(new Date().getDate() / 7)),
+  );
+  const [mes, setMes] = useState(() => String(new Date().getMonth() + 1));
+  const [anio, setAnio] = useState(() => String(new Date().getFullYear()));
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
+  const [resultado, setResultado] = useState<ResultadoCarga | null>(null);
+
+  const anioActual = new Date().getFullYear();
+  const anios = Array.from({ length: 11 }, (_, indice) => anioActual - 5 + indice);
 
   const subir = async () => {
     if (!archivo) return;
+    const numeroSemana = Number(semana);
+    const numeroMes = Number(mes);
+    const numeroAnio = Number(anio);
+    if (
+      !Number.isInteger(numeroSemana) ||
+      numeroSemana < 1 ||
+      numeroSemana > 5 ||
+      !Number.isInteger(numeroMes) ||
+      numeroMes < 1 ||
+      numeroMes > 12 ||
+      !Number.isInteger(numeroAnio) ||
+      numeroAnio < 1900 ||
+      numeroAnio > 2100
+    ) {
+      setError("Selecciona una semana, mes y año válidos.");
+      return;
+    }
     setCargando(true);
     setError("");
+    setResultado(null);
     try {
       const datos = new FormData();
       datos.append("archivo", archivo);
+      datos.append("semana", String(numeroSemana));
+      datos.append("mes", String(numeroMes));
+      datos.append("anio", String(numeroAnio));
       const respuesta = await fetch("/api/marketing/carga", {
         method: "POST",
         body: datos,
       });
+      const cuerpo = await respuesta.json().catch(() => ({}));
       if (!respuesta.ok) {
-        const cuerpo = await respuesta.json().catch(() => ({}));
         throw new Error(cuerpo.error ?? "No se pudo cargar el archivo");
       }
+      const cargado = cuerpo as ResultadoCarga;
       setArchivo(null);
-      onCargado();
+      setResultado(cargado);
+      await onCargado(cargado);
     } catch (fallo) {
       setError(fallo instanceof Error ? fallo.message : "Error inesperado");
     } finally {
@@ -51,7 +99,70 @@ export default function CargaExcel({ onCargado }: { onCargado: () => void }) {
           {cargando ? "Procesando…" : "Cargar cartera"}
         </Button>
       </div>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+          Semana del mes
+          <select
+            value={semana}
+            onChange={(evento) => setSemana(evento.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+          >
+            {[1, 2, 3, 4, 5].map((numero) => (
+              <option key={numero} value={numero}>
+                Semana {numero}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+          Mes
+          <select
+            value={mes}
+            onChange={(evento) => setMes(evento.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+          >
+            {MESES_DEL_ANIO.map((nombre, indice) => (
+              <option key={nombre} value={indice + 1}>
+                {nombre.charAt(0).toUpperCase() + nombre.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+          Año
+          <select
+            value={anio}
+            onChange={(evento) => setAnio(evento.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+          >
+            {anios.map((numero) => (
+              <option key={numero} value={numero}>
+                {numero}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {resultado && (
+        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-900">
+          <p className="font-bold">
+            {resultado.semana} cargada · {resultado.totalRegistros.toLocaleString("es-EC")}{" "}
+            registros
+          </p>
+          <p className="mt-1">
+            {resultado.altas.toLocaleString("es-EC")} altas ·{" "}
+            {resultado.bajas.toLocaleString("es-EC")} bajas ·{" "}
+            {resultado.cambios.toLocaleString("es-EC")} cambios en datos
+          </p>
+          <Link
+            href={`/marketing/historial?carga=${encodeURIComponent(resultado.cargaId)}`}
+            className="mt-1 inline-block font-bold text-green-800 underline"
+          >
+            Ver comparación con la semana anterior
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

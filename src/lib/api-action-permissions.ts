@@ -3,6 +3,9 @@ export async function apiActionPermissions(request: Request): Promise<string[]> 
   const path = new URL(request.url).pathname;
   const method = request.method;
   if (["GET", "HEAD"].includes(method)) {
+    if (/^\/api\/marketing\/cargas\/[^/]+\/cambios$/.test(path)) {
+      return ["marketing:administrar"];
+    }
     const read: Record<string, string[]> = {
       "/api/ventas": ["ventas:ver"], "/api/agenda": ["agenda:ver"], "/api/agenda/dashboard": ["agenda:ver"], "/api/visitas": ["visitas:ver"], "/api/indicadores/semanal": ["indicadores:ver"], "/api/cobranzas/radar": ["cobranzas:ver"], "/api/base-consultas": ["base_consultas:ver"], "/api/operaciones": ["operaciones:ver"], "/api/produccion": ["produccion:ver"], "/api/empaque": ["empaque:ver"], "/api/guias": ["historial-despachos:ver", "empaque:ver"], "/api/tickets": ["tickets:ver"], "/api/marketing/cartera": ["marketing:ver", "marketing:administrar"], "/api/marketing/historial": ["marketing:administrar"],
     };

@@ -10,7 +10,7 @@ export const VENDEDORES_ACTUALES = [
   "Anthony Vélez",
 ] as const;
 
-export const VENDEDORES_ANTERIORES = [
+const VENDEDORES_ANTERIORES = [
   "ALVARADO WILMAN",
   "BURGOS BREYNER",
   "CAMILA TAMAYO",

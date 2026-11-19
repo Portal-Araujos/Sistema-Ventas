@@ -8,12 +8,15 @@ import {
 } from "@/lib/api-auth";
 import {
   canonizarVendedor,
+  etiquetaCarga,
   prepararCliente,
   redistribuirClientes,
+  resumenVacio,
   VENDEDORES_ACTUALES,
   type ClienteDistribuido,
   type ClienteRow,
   type MetricasMarketing,
+  type ResumenCambiosMarketing,
 } from "@/lib/marketing";
 
 const METRICAS_VACIAS: MetricasMarketing = {
@@ -24,18 +27,46 @@ const METRICAS_VACIAS: MetricasMarketing = {
   pendientesRevision: 0,
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getApiSession();
   if (!session) return unauthorizedResponse();
   const esAdmin = hasPermission(session, "marketing:administrar");
   if (!esAdmin && !hasPermission(session, "marketing:ver")) return forbiddenResponse();
 
   try {
-    const carga = await prisma.marketingCarga.findFirst({
-      where: { activo: true },
+    const cargasDisponibles = await prisma.marketingCarga.findMany({
       orderBy: { createdAt: "desc" },
-      include: { clientes: { orderBy: { fila: "asc" } } },
+      select: {
+        id: true,
+        nombreArchivo: true,
+        createdAt: true,
+        activo: true,
+        semanaNumero: true,
+        mes: true,
+        anio: true,
+      },
     });
+    const listaCargas = cargasDisponibles.map((carga) => ({
+      id: carga.id,
+      nombreArchivo: carga.nombreArchivo,
+      createdAt: carga.createdAt.toISOString(),
+      semana: etiquetaCarga(carga),
+      activo: carga.activo,
+    }));
+
+    const idSolicitado = esAdmin
+      ? new URL(request.url).searchParams.get("cargaId") || ""
+      : "";
+    const carga = idSolicitado
+      ? await prisma.marketingCarga.findUnique({
+          where: { id: idSolicitado },
+          include: { clientes: { orderBy: { fila: "asc" } } },
+        })
+      : await prisma.marketingCarga.findFirst({
+          where: { activo: true },
+          orderBy: { createdAt: "desc" },
+          include: { clientes: { orderBy: { fila: "asc" } } },
+        });
 
     if (!carga) {
       return NextResponse.json({
@@ -45,7 +76,22 @@ export async function GET() {
         metricas: METRICAS_VACIAS,
         vendedores: VENDEDORES_ACTUALES,
         resumenEnvio: [],
+        cargasDisponibles: listaCargas,
       });
+    }
+
+    const conteos = await prisma.marketingCambio.groupBy({
+      by: ["tipo"],
+      where: { cargaId: carga.id },
+      _count: { _all: true },
+    });
+    const resumenCambios: ResumenCambiosMarketing = resumenVacio();
+    for (const conteo of conteos) {
+      const cantidad = conteo._count._all;
+      if (conteo.tipo === "ALTA") resumenCambios.altas = cantidad;
+      if (conteo.tipo === "BAJA") resumenCambios.bajas = cantidad;
+      if (conteo.tipo === "CAMBIO") resumenCambios.cambios = cantidad;
+      resumenCambios.total += cantidad;
     }
 
     const filas: ClienteRow[] = carga.clientes.map((cliente) => ({
@@ -97,10 +143,14 @@ export async function GET() {
 
     return NextResponse.json({
       carga: {
+        id: carga.id,
         nombreArchivo: carga.nombreArchivo,
         createdAt: carga.createdAt.toISOString(),
+        semana: etiquetaCarga(carga),
+        esActiva: carga.activo,
         totalRegistros: carga.totalRegistros,
         enviadoEn: carga.enviadoEn?.toISOString() ?? null,
+        cambios: resumenCambios,
       },
       original: esAdmin ? original : [],
       aplicado: visibles,
@@ -112,6 +162,7 @@ export async function GET() {
           (cliente) => canonizarVendedor(cliente.vendedorAsignado) === vendedor,
         ).length,
       })),
+      cargasDisponibles: listaCargas,
     });
   } catch (error) {
     console.error("Error consultando cartera de Marketing:", error);

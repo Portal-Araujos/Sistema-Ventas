@@ -37,15 +37,15 @@ export default function DistribuidorVendedor() {
     void cargar();
   }, []);
 
-  const filas = datos?.aplicado ?? [];
+  const filas = useMemo(() => datos?.aplicado ?? [], [datos]);
   const provincias = useMemo(
     () => opcionesConVacio(filas.map((fila) => fila.provincia), "(Sin provincia)"),
     [filas],
   );
   const ciudades = useMemo(() => {
     const previas = aplicarFiltros(filas, {
-      ...borrador,
       vendedor: FILTRO_TODOS,
+      provincia: borrador.provincia,
       ciudad: FILTRO_TODOS,
     });
     return opcionesConVacio(previas.map((fila) => fila.ciudad), "(Sin ciudad)");

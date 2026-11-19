@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ArrowRight, Megaphone } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/components/shared/PermissionsProvider";
 import DistribuidorVendedor from "@/app/features/marketing/components/DistribuidorVendedor";
 
@@ -20,9 +19,6 @@ export default function MarketingPage() {
             Tus clientes asignados, incluidos los procedentes de carteras anteriores.
           </p>
         </div>
-        <Badge variant="secondary" className="font-bold">
-          Vista vendedor
-        </Badge>
       </div>
 
       {can("marketing:administrar") && (

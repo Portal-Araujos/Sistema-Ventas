@@ -8,13 +8,12 @@ function texto(valor: unknown): string {
 }
 
 export function parsearExcel(buffer: ArrayBuffer): {
-  headers: string[];
   filas: ClienteRow[];
   faltantes: string[];
 } {
   const workbook = XLSX.read(buffer, { type: "array" });
   const hoja = workbook.Sheets[workbook.SheetNames[0]];
-  if (!hoja) return { headers: [], filas: [], faltantes: ["Hoja"] };
+  if (!hoja) return { filas: [], faltantes: ["Hoja"] };
 
   const matriz = XLSX.utils.sheet_to_json<unknown[]>(hoja, {
     header: 1,
@@ -24,7 +23,7 @@ export function parsearExcel(buffer: ArrayBuffer): {
 
   const headers = (matriz[0] ?? []).map((valor) => texto(valor));
   const { indices, faltantes } = mapearColumnas(headers);
-  if (faltantes.length) return { headers, filas: [], faltantes };
+  if (faltantes.length) return { filas: [], faltantes };
 
   const filas: ClienteRow[] = [];
   for (let i = 1; i < matriz.length; i++) {
@@ -41,5 +40,5 @@ export function parsearExcel(buffer: ArrayBuffer): {
       vendedor: texto(fila[indices.Vendedor]),
     });
   }
-  return { headers, filas, faltantes: [] };
+  return { filas, faltantes: [] };
 }

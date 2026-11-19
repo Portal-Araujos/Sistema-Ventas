@@ -7,7 +7,7 @@ import type {
 } from "./types";
 
 export const FILTRO_TODOS = "";
-export const FILTRO_SIN = "__SIN__";
+const FILTRO_SIN = "__SIN__";
 
 export const FILTROS_VACIOS: FiltrosMarketing = {
   vendedor: FILTRO_TODOS,

@@ -5,3 +5,5 @@ export * from "./columnas";
 export * from "./parse-excel";
 export * from "./distribucion";
 export * from "./filtros";
+export * from "./semana";
+export * from "./comparacion";

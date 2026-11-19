@@ -1,9 +1,42 @@
 import type {
   ClienteDistribuido,
   MetricasMarketing,
+  ResumenCambiosMarketing,
 } from "@/lib/marketing";
 
 export type ResumenEnvio = { vendedor: string; clientes: number }[];
+
+export type { ResumenCambiosMarketing };
+
+export type CargaDisponible = {
+  id: string;
+  nombreArchivo: string;
+  createdAt: string;
+  semana: string;
+  activo: boolean;
+};
+
+export type CambioCarga = {
+  id: string;
+  identificacion: string;
+  nombreCliente: string;
+  tipo: string;
+  campo: string | null;
+  valorAnterior: string | null;
+  valorNuevo: string | null;
+};
+
+export type CambiosResponse = {
+  carga: {
+    id: string;
+    nombreArchivo: string;
+    semana: string;
+    activo: boolean;
+    createdAt: string;
+  };
+  resumen: ResumenCambiosMarketing;
+  cambios: CambioCarga[];
+};
 
 export type HistorialCarga = {
   id: string;
@@ -14,6 +47,8 @@ export type HistorialCarga = {
   enviadoEn: string | null;
   createdAt: string;
   creadoPor: string;
+  semana: string;
+  cambios: ResumenCambiosMarketing;
 };
 
 export type AuditoriaMarketing = {
@@ -32,14 +67,19 @@ export type HistorialResponse = {
 
 export type CarteraResponse = {
   carga: {
+    id: string;
     nombreArchivo: string;
     createdAt: string;
+    semana: string;
+    esActiva: boolean;
     totalRegistros: number;
     enviadoEn: string | null;
+    cambios: ResumenCambiosMarketing;
   } | null;
   original: ClienteDistribuido[];
   aplicado: ClienteDistribuido[];
   metricas: MetricasMarketing;
   vendedores: string[];
   resumenEnvio: ResumenEnvio;
+  cargasDisponibles: CargaDisponible[];
 };

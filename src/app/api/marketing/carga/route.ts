@@ -6,7 +6,12 @@ import {
   hasPermission,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { parsearExcel } from "@/lib/marketing";
+import {
+  compararCargas,
+  etiquetaCarga,
+  parsearExcel,
+  type ClienteRow,
+} from "@/lib/marketing";
 import { registrarAuditoriaMarketing } from "@/lib/marketing/auditoria";
 
 const MAX_TAMANO = 10 * 1024 * 1024;
@@ -26,6 +31,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El archivo no puede superar 10 MB" }, { status: 400 });
     }
 
+    const semanaNumero = Number(formData.get("semana"));
+    const mes = Number(formData.get("mes"));
+    const anio = Number(formData.get("anio"));
+    if (
+      !Number.isInteger(semanaNumero) ||
+      semanaNumero < 1 ||
+      semanaNumero > 5 ||
+      !Number.isInteger(mes) ||
+      mes < 1 ||
+      mes > 12 ||
+      !Number.isInteger(anio) ||
+      anio < 1900 ||
+      anio > 2100
+    ) {
+      return NextResponse.json(
+        { error: "Selecciona una semana del mes, mes y año válidos" },
+        { status: 400 },
+      );
+    }
+
     const { filas, faltantes } = parsearExcel(await archivo.arrayBuffer());
     if (faltantes.length) {
       return NextResponse.json(
@@ -37,7 +62,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El archivo no contiene registros" }, { status: 400 });
     }
 
+    const anterior = await prisma.marketingCarga.findFirst({
+      where: { activo: true },
+      orderBy: { createdAt: "desc" },
+      select: {
+        clientes: {
+          select: {
+            fila: true,
+            identificacion: true,
+            nombreCliente: true,
+            movil: true,
+            provincia: true,
+            ciudad: true,
+            direccion: true,
+            vendedor: true,
+          },
+        },
+      },
+    });
+    const anteriores: ClienteRow[] = (anterior?.clientes ?? []).map((cliente) => ({
+      fila: cliente.fila,
+      identificacion: cliente.identificacion,
+      nombreCliente: cliente.nombreCliente,
+      movil: cliente.movil,
+      provincia: cliente.provincia,
+      ciudad: cliente.ciudad,
+      direccion: cliente.direccion,
+      vendedor: cliente.vendedor,
+    }));
+    const { cambios, resumen } = compararCargas(anteriores, filas);
+
     let nuevaCargaId = "";
+    let fechaCarga = new Date();
     await prisma.$transaction(async (tx) => {
       await tx.marketingCarga.updateMany({
         where: { activo: true },
@@ -49,6 +105,9 @@ export async function POST(request: Request) {
           activo: true,
           totalRegistros: filas.length,
           creadoPorId: session.id,
+          semanaNumero,
+          mes,
+          anio,
           clientes: {
             create: filas.map((fila) => ({
               fila: fila.fila,
@@ -61,21 +120,46 @@ export async function POST(request: Request) {
               vendedor: fila.vendedor,
             })),
           },
+          cambios: {
+            create: cambios.map((cambio) => ({
+              claveCliente: cambio.claveCliente,
+              identificacion: cambio.identificacion,
+              nombreCliente: cambio.nombreCliente,
+              tipo: cambio.tipo,
+              campo: cambio.campo,
+              valorAnterior: cambio.valorAnterior,
+              valorNuevo: cambio.valorNuevo,
+            })),
+          },
         },
-        select: { id: true },
+        select: { id: true, createdAt: true },
       });
       nuevaCargaId = nueva.id;
+      fechaCarga = nueva.createdAt;
     });
+    const etiqueta = etiquetaCarga({ semanaNumero, mes, anio, createdAt: fechaCarga });
 
     await registrarAuditoriaMarketing({
       accion: "CARGA_SUBIDA",
       cargaId: nuevaCargaId,
       nombreArchivo: archivo.name.slice(0, 255),
-      detalles: { totalRegistros: filas.length },
+      detalles: {
+        totalRegistros: filas.length,
+        semana: etiqueta,
+        ...resumen,
+      },
       usuarioId: session.id,
     });
 
-    return NextResponse.json({ totalRegistros: filas.length }, { status: 201 });
+    return NextResponse.json(
+      {
+        cargaId: nuevaCargaId,
+        totalRegistros: filas.length,
+        semana: etiqueta,
+        ...resumen,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Error cargando Excel de Marketing:", error);
     return NextResponse.json({ error: "No se pudo procesar el archivo" }, { status: 500 });

@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Settings } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { History, Settings } from "lucide-react";
 import { Allowed } from "@/components/shared/PermissionsProvider";
 import DistribuidorAdmin from "@/app/features/marketing/components/DistribuidorAdmin";
 
@@ -20,14 +19,11 @@ export default function AdministracionMarketingPage() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <Badge variant="secondary" className="font-bold">
-              Vista administrador
-            </Badge>
             <Link
-              href="/marketing"
+              href="/marketing/historial"
               className="inline-flex items-center gap-1 text-sm font-bold text-primary hover:underline"
             >
-              <ArrowLeft size={16} /> Vista vendedor
+              <History size={16} /> Historial y auditoría
             </Link>
           </div>
         </div>

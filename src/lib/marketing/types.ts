@@ -40,12 +40,27 @@ export type FiltrosMarketing = {
 
 export type OpcionFiltro = { clave: string; etiqueta: string };
 
-export const ACCIONES_AUDITORIA_MARKETING = [
-  "CARGA_SUBIDA",
-  "CARTERA_ENVIADA",
-  "CARGA_ELIMINADA",
-  "MANTENIMIENTO",
-] as const;
+export type TipoCambioMarketing = "ALTA" | "BAJA" | "CAMBIO";
+
+export type CambioMarketing = {
+  claveCliente: string;
+  identificacion: string;
+  nombreCliente: string;
+  tipo: TipoCambioMarketing;
+  campo: string | null;
+  valorAnterior: string | null;
+  valorNuevo: string | null;
+};
+
+export type ResumenCambiosMarketing = {
+  altas: number;
+  bajas: number;
+  cambios: number;
+  total: number;
+};
 
 export type AccionAuditoriaMarketing =
-  (typeof ACCIONES_AUDITORIA_MARKETING)[number];
+  | "CARGA_SUBIDA"
+  | "CARTERA_ENVIADA"
+  | "CARGA_ELIMINADA"
+  | "MANTENIMIENTO";

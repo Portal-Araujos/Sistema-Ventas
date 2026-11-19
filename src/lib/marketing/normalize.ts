@@ -24,12 +24,10 @@ export function claveUbicacion(valor: unknown): string {
 
 export function limpiarTelefono(valor: unknown): string {
   if (valor === null || valor === undefined) return "";
-  let texto: string;
-  if (typeof valor === "number" && Number.isFinite(valor)) {
-    texto = Number.isInteger(valor) ? String(valor) : String(valor);
-  } else {
-    texto = String(valor).trim();
-  }
+  const texto =
+    typeof valor === "number" && Number.isFinite(valor)
+      ? String(valor)
+      : String(valor).trim();
   const digitos = texto.replace(/\D/g, "");
   return digitos.length === 9 ? `0${digitos}` : digitos;
 }

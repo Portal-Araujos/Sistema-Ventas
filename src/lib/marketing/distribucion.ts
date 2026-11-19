@@ -29,12 +29,8 @@ export function prepararCliente(
   };
 }
 
-function preparar(fila: ClienteRow): ClienteDistribuido {
-  return prepararCliente(fila);
-}
-
 export function redistribuirClientes(filas: ClienteRow[]): ResultadoDistribucion {
-  const base = filas.map(preparar);
+  const base = filas.map((fila) => prepararCliente(fila));
   const original = base.map((fila) => ({ ...fila }));
   const actuales = base.filter((fila) => esVendedorActual(fila.claveVendedor));
   const anteriores = base.filter((fila) => esVendedorAnterior(fila.claveVendedor));

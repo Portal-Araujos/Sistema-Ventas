@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Megaphone } from "lucide-react";
+import { CalendarDays, Megaphone } from "lucide-react";
 import {
   aplicarFiltros,
   COLUMNAS_TABLA,
@@ -16,7 +16,6 @@ import BarraFiltros from "./BarraFiltros";
 import BotonDistribucion from "./BotonDistribucion";
 import BotonEnvio from "./BotonEnvio";
 import CargaExcel from "./CargaExcel";
-import HistorialAuditoria from "./HistorialAuditoria";
 import MetricasClientes from "./MetricasClientes";
 import SelectorColumnas from "./SelectorColumnas";
 import TablaClientes from "./TablaClientes";
@@ -27,34 +26,48 @@ export default function DistribuidorAdmin() {
   const [borrador, setBorrador] = useState<FiltrosMarketing>(FILTROS_VACIOS);
   const [aplicados, setAplicados] = useState<FiltrosMarketing>(FILTROS_VACIOS);
   const [distribucionAplicada, setDistribucionAplicada] = useState(false);
+  const [cargaIdSeleccionada, setCargaIdSeleccionada] = useState("");
   const [columnasVisibles, setColumnasVisibles] = useState<Set<string>>(
     () => new Set(COLUMNAS_TABLA),
   );
-  const [historialKey, setHistorialKey] = useState(0);
 
-  const cargar = useCallback(async () => {
-    setError("");
-    try {
-      const respuesta = await fetch("/api/marketing/cartera", { cache: "no-store" });
-      if (!respuesta.ok) throw new Error("No se pudo cargar la cartera");
-      setDatos((await respuesta.json()) as CarteraResponse);
-    } catch {
-      setError("No se pudo cargar la cartera de Marketing.");
-    }
-  }, []);
+  const cargar = useCallback(
+    async (id?: string) => {
+      setError("");
+      try {
+        const cargaId = id ?? cargaIdSeleccionada;
+        const url = cargaId
+          ? `/api/marketing/cartera?cargaId=${encodeURIComponent(cargaId)}`
+          : "/api/marketing/cartera";
+        const respuesta = await fetch(url, { cache: "no-store" });
+        if (!respuesta.ok) throw new Error("No se pudo cargar la cartera");
+        setDatos((await respuesta.json()) as CarteraResponse);
+      } catch {
+        setError("No se pudo cargar la cartera de Marketing.");
+      }
+    },
+    [cargaIdSeleccionada],
+  );
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
 
-  const recargarTodo = useCallback(async () => {
-    await cargar();
-    setHistorialKey((valor) => valor + 1);
-  }, [cargar]);
+  const despuesDeCargar = async () => {
+    setCargaIdSeleccionada("");
+    setDistribucionAplicada(false);
+    await cargar("");
+  };
 
-  const fuente = distribucionAplicada
-    ? (datos?.aplicado ?? [])
-    : (datos?.original ?? []);
+  const cambiarSemana = (id: string) => {
+    setCargaIdSeleccionada(id);
+    setDistribucionAplicada(false);
+  };
+
+  const fuente = useMemo(
+    () => (distribucionAplicada ? (datos?.aplicado ?? []) : (datos?.original ?? [])),
+    [distribucionAplicada, datos],
+  );
 
   const provincias = useMemo(
     () => opcionesConVacio(fuente.map((fila) => fila.provincia), "(Sin provincia)"),
@@ -62,8 +75,8 @@ export default function DistribuidorAdmin() {
   );
   const ciudades = useMemo(() => {
     const previas = aplicarFiltros(fuente, {
-      ...borrador,
       vendedor: FILTRO_TODOS,
+      provincia: borrador.provincia,
       ciudad: FILTRO_TODOS,
     });
     return opcionesConVacio(previas.map((fila) => fila.ciudad), "(Sin ciudad)");
@@ -73,14 +86,60 @@ export default function DistribuidorAdmin() {
 
   return (
     <div className="flex flex-col gap-5">
-      <CargaExcel onCargado={recargarTodo} />
+      <CargaExcel onCargado={despuesDeCargar} />
+
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <label className="flex flex-col gap-2 text-sm text-gray-700 sm:flex-row sm:items-center">
+          <span className="flex items-center gap-2 font-semibold">
+            <CalendarDays size={18} /> Semana consultada
+          </span>
+          <select
+            value={cargaIdSeleccionada}
+            onChange={(evento) => cambiarSemana(evento.target.value)}
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 sm:max-w-md"
+          >
+            <option value="">Semana vigente</option>
+            {(datos?.cargasDisponibles ?? []).map((carga) => (
+              <option key={carga.id} value={carga.id}>
+                {carga.semana} — {carga.nombreArchivo}
+                {carga.activo ? " (vigente)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {datos?.carga && (
-        <p className="text-xs text-gray-500">
-          Carga actual: <strong>{datos.carga.nombreArchivo}</strong> ·{" "}
-          {new Date(datos.carga.createdAt).toLocaleString("es-EC")} ·{" "}
-          {datos.carga.totalRegistros.toLocaleString("es-EC")} registros
-        </p>
+        <div className="text-xs text-gray-500">
+          <p>
+            Carga consultada: <strong>{datos.carga.semana}</strong> ·{" "}
+            <strong>{datos.carga.nombreArchivo}</strong> ·{" "}
+            {new Date(datos.carga.createdAt).toLocaleString("es-EC")} ·{" "}
+            {datos.carga.totalRegistros.toLocaleString("es-EC")} registros
+          </p>
+          <p className="mt-1">
+            Respecto a la semana anterior: {datos.carga.cambios.altas} altas ·{" "}
+            {datos.carga.cambios.bajas} bajas · {datos.carga.cambios.cambios} cambios
+          </p>
+        </div>
+      )}
+
+      {datos?.carga && !datos.carga.esActiva && (
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-bold">Carga inactiva · solo lectura</p>
+            <p className="text-xs">
+              No se puede aplicar distribución ni enviar una semana anterior.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => cambiarSemana("")}
+            className="self-start font-bold underline"
+          >
+            Volver a la semana vigente
+          </button>
+        </div>
       )}
 
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
@@ -92,9 +151,9 @@ export default function DistribuidorAdmin() {
             </p>
           </div>
           <BotonEnvio
-            deshabilitado={!datos?.carga}
+            deshabilitado={!datos?.carga || !datos.carga.esActiva}
             enviadoEn={datos?.carga?.enviadoEn ?? null}
-            onEnviado={recargarTodo}
+            onEnviado={cargar}
           />
         </div>
         {datos && datos.resumenEnvio.length > 0 && (
@@ -130,6 +189,7 @@ export default function DistribuidorAdmin() {
           <BotonDistribucion
             aplicada={distribucionAplicada}
             onToggle={() => setDistribucionAplicada((valor) => !valor)}
+            deshabilitado={!datos?.carga?.esActiva}
           />
         </div>
       </div>
@@ -154,11 +214,6 @@ export default function DistribuidorAdmin() {
         filas={filas}
         columnasVisibles={columnasVisibles}
         distribucionAplicada={distribucionAplicada}
-      />
-
-      <HistorialAuditoria
-        refreshKey={historialKey}
-        onCambiado={recargarTodo}
       />
     </div>
   );
