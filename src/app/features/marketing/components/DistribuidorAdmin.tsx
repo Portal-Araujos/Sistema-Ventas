@@ -15,7 +15,7 @@ import type { CarteraResponse } from "../types";
 import BarraFiltros from "./BarraFiltros";
 import BotonDistribucion from "./BotonDistribucion";
 import BotonEnvio from "./BotonEnvio";
-import CargaExcel from "./CargaExcel";
+import CargaExcel, { type ResultadoCarga } from "./CargaExcel";
 import MetricasClientes from "./MetricasClientes";
 import SelectorColumnas from "./SelectorColumnas";
 import TablaClientes from "./TablaClientes";
@@ -50,10 +50,11 @@ export default function DistribuidorAdmin() {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void cargar();
   }, [cargar]);
 
-  const despuesDeCargar = async () => {
+  const despuesDeCargar = async (_resultado: ResultadoCarga) => {
     setCargaIdSeleccionada("");
     setDistribucionAplicada(false);
     await cargar("");
@@ -64,10 +65,9 @@ export default function DistribuidorAdmin() {
     setDistribucionAplicada(false);
   };
 
-  const fuente = useMemo(
-    () => (distribucionAplicada ? (datos?.aplicado ?? []) : (datos?.original ?? [])),
-    [distribucionAplicada, datos],
-  );
+  const fuente = distribucionAplicada
+    ? (datos?.aplicado ?? [])
+    : (datos?.original ?? []);
 
   const provincias = useMemo(
     () => opcionesConVacio(fuente.map((fila) => fila.provincia), "(Sin provincia)"),
@@ -75,8 +75,8 @@ export default function DistribuidorAdmin() {
   );
   const ciudades = useMemo(() => {
     const previas = aplicarFiltros(fuente, {
+      ...borrador,
       vendedor: FILTRO_TODOS,
-      provincia: borrador.provincia,
       ciudad: FILTRO_TODOS,
     });
     return opcionesConVacio(previas.map((fila) => fila.ciudad), "(Sin ciudad)");

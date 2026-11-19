@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
@@ -50,25 +51,33 @@ export async function POST() {
       if (canonico) asignadosPorFila.set(fila.fila, canonico);
     }
 
+    const filasPorVendedor = new Map<string, number[]>();
+    for (const [fila, vendedor] of asignadosPorFila) {
+      const grupo = filasPorVendedor.get(vendedor) ?? [];
+      grupo.push(fila);
+      filasPorVendedor.set(vendedor, grupo);
+    }
+
     const enviadoEn = new Date();
-    await prisma.$transaction(async (tx) => {
-      await tx.marketingCliente.updateMany({
-        where: { cargaId: carga.id },
-        data: { vendedorAsignado: null },
-      });
-      for (const cliente of carga.clientes) {
-        const vendedorAsignado = asignadosPorFila.get(cliente.fila);
-        if (!vendedorAsignado) continue;
-        await tx.marketingCliente.update({
-          where: { id: cliente.id },
-          data: { vendedorAsignado },
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.marketingCliente.updateMany({
+          where: { cargaId: carga.id },
+          data: { vendedorAsignado: null },
         });
-      }
-      await tx.marketingCarga.update({
-        where: { id: carga.id },
-        data: { enviadoEn },
-      });
-    });
+        for (const [vendedor, numerosFila] of filasPorVendedor) {
+          await tx.marketingCliente.updateMany({
+            where: { cargaId: carga.id, fila: { in: numerosFila } },
+            data: { vendedorAsignado: vendedor },
+          });
+        }
+        await tx.marketingCarga.update({
+          where: { id: carga.id },
+          data: { enviadoEn },
+        });
+      },
+      { maxWait: 10_000, timeout: 30_000 },
+    );
 
     const conteos = new Map<string, number>();
     for (const vendedor of asignadosPorFila.values()) {
@@ -98,8 +107,15 @@ export async function POST() {
     });
   } catch (error) {
     console.error("Error enviando cartera de Marketing:", error);
+    const esTimeout =
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2028";
     return NextResponse.json(
-      { error: "No se pudo enviar la cartera" },
+      {
+        error: esTimeout
+          ? "La operación tardó demasiado. Vuelve a intentarlo."
+          : "No se pudo enviar la cartera",
+      },
       { status: 500 },
     );
   }
