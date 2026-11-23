@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   aplicarFiltros,
   COLUMNAS_TABLA,
   FILTRO_TODOS,
   FILTROS_VACIOS,
   opcionesConVacio,
-  opcionesVendedor,
   type FiltrosMarketing,
+  type OrdenMarketing,
 } from "@/lib/marketing";
 import type { CarteraResponse } from "../types";
 import BarraFiltros from "./BarraFiltros";
@@ -23,8 +23,14 @@ export default function DistribuidorVendedor() {
   const [columnasVisibles, setColumnasVisibles] = useState<Set<string>>(
     () => new Set(COLUMNAS_TABLA),
   );
+  const [consulta, setConsulta] = useState("");
+  const [orden, setOrden] = useState<OrdenMarketing | null>(null);
+
+  const cargadoRef = useRef(false);
 
   useEffect(() => {
+    if (cargadoRef.current) return;
+    cargadoRef.current = true;
     const cargar = async () => {
       try {
         const respuesta = await fetch("/api/marketing/cartera", { cache: "no-store" });
@@ -52,6 +58,18 @@ export default function DistribuidorVendedor() {
   }, [filas, borrador.provincia]);
 
   const visibles = useMemo(() => aplicarFiltros(filas, aplicados), [filas, aplicados]);
+  const resultadosBorrador = useMemo(
+    () => aplicarFiltros(filas, borrador).length,
+    [filas, borrador],
+  );
+
+  const limpiarTodo = () => {
+    setBorrador(FILTROS_VACIOS);
+    setAplicados(FILTROS_VACIOS);
+    setConsulta("");
+    setOrden(null);
+    setColumnasVisibles(new Set(COLUMNAS_TABLA));
+  };
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!datos) return <p className="text-sm text-gray-500">Cargando cartera…</p>;
@@ -77,12 +95,14 @@ export default function DistribuidorVendedor() {
         Cartera enviada el {new Date(datos.carga.enviadoEn).toLocaleString("es-EC")}
       </p>
       <BarraFiltros
-        vendedores={opcionesVendedor()}
+        mostrarVendedor={false}
         provincias={provincias}
         ciudades={ciudades}
         value={borrador}
         onChange={setBorrador}
         onAplicar={() => setAplicados(borrador)}
+        onLimpiarTodo={limpiarTodo}
+        resultados={resultadosBorrador}
       />
       <SelectorColumnas
         visibles={columnasVisibles}
@@ -92,6 +112,11 @@ export default function DistribuidorVendedor() {
         filas={visibles}
         columnasVisibles={columnasVisibles}
         distribucionAplicada
+        claveVista={`${datos?.carga?.id ?? ""}|${JSON.stringify(aplicados)}`}
+        consulta={consulta}
+        onConsultaChange={setConsulta}
+        orden={orden}
+        onOrdenChange={setOrden}
       />
     </div>
   );

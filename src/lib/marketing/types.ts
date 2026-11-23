@@ -9,6 +9,17 @@ export type ClienteRow = {
   vendedor: string;
 };
 
+export type CategoriaClienteMarketing =
+  | "NUEVA_RELACION"
+  | "YA_ASIGNADO"
+  | "PENDIENTE"
+  | "SIN_CAMBIO";
+
+export type FiltroMetricaMarketing =
+  | "TODOS"
+  | "CON_VENDEDOR_ANTIGUO"
+  | CategoriaClienteMarketing;
+
 export type ClienteDistribuido = ClienteRow & {
   claveCliente: string;
   claveVendedor: string;
@@ -16,6 +27,8 @@ export type ClienteDistribuido = ClienteRow & {
   ciudadKey: string;
   vendedorOriginal: string;
   vendedorAsignado: string;
+  categoria: CategoriaClienteMarketing;
+  esRepresentante: boolean;
 };
 
 export type MetricasMarketing = {
@@ -36,6 +49,17 @@ export type FiltrosMarketing = {
   vendedor: string;
   provincia: string;
   ciudad: string;
+};
+
+export type ColumnaOrdenableMarketing =
+  | "Nombre Cliente"
+  | "Provincia"
+  | "Ciudad"
+  | "Vendedor";
+
+export type OrdenMarketing = {
+  columna: ColumnaOrdenableMarketing;
+  direccion: "asc" | "desc";
 };
 
 export type OpcionFiltro = { clave: string; etiqueta: string };

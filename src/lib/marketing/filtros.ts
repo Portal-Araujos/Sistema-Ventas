@@ -2,6 +2,7 @@ import { claveUbicacion, claveVendedor, normalizarTexto } from "./normalize";
 import { VENDEDORES_ACTUALES } from "./vendedores";
 import type {
   ClienteDistribuido,
+  FiltroMetricaMarketing,
   FiltrosMarketing,
   OpcionFiltro,
 } from "./types";
@@ -74,4 +75,21 @@ export function buscarClientes(
       `${fila.identificacion} ${fila.nombreCliente} ${fila.vendedorAsignado}`,
     ).includes(texto),
   );
+}
+
+export function aplicarFiltroMetrica(
+  filas: ClienteDistribuido[],
+  filtro: FiltroMetricaMarketing,
+): ClienteDistribuido[] {
+  if (filtro === "TODOS") return filas;
+  const delGrupo =
+    filtro === "CON_VENDEDOR_ANTIGUO"
+      ? filas.filter((fila) => fila.categoria !== "SIN_CAMBIO")
+      : filas.filter((fila) => fila.categoria === filtro);
+  const vistos = new Set<string>();
+  return delGrupo.filter((fila) => {
+    if (!fila.esRepresentante || vistos.has(fila.claveCliente)) return false;
+    vistos.add(fila.claveCliente);
+    return true;
+  });
 }

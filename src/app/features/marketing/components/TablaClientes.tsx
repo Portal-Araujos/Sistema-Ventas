@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { buscarClientes, COLUMNAS_TABLA, type ClienteDistribuido } from "@/lib/marketing";
+import { useMemo, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import {
+  buscarClientes,
+  COLUMNAS_TABLA,
+  ordenarClientes,
+  type ClienteDistribuido,
+  type ColumnaOrdenableMarketing,
+  type OrdenMarketing,
+} from "@/lib/marketing";
 import {
   Table,
   TableBody,
@@ -22,35 +30,94 @@ const POR_COLUMNA: Record<string, keyof ClienteDistribuido> = {
 };
 
 const TAMANO_PAGINA = 50;
+const COLUMNAS_ORDENABLES = new Set<string>([
+  "Nombre Cliente",
+  "Provincia",
+  "Ciudad",
+  "Vendedor",
+]);
 
 type Props = {
   filas: ClienteDistribuido[];
   columnasVisibles: Set<string>;
   distribucionAplicada: boolean;
+  claveVista: string;
+  consulta: string;
+  onConsultaChange: (valor: string) => void;
+  orden: OrdenMarketing | null;
+  onOrdenChange: (orden: OrdenMarketing | null) => void;
 };
 
 export default function TablaClientes({
   filas,
   columnasVisibles,
   distribucionAplicada,
+  claveVista,
+  consulta,
+  onConsultaChange,
+  orden,
+  onOrdenChange,
 }: Props) {
-  const [consulta, setConsulta] = useState("");
+  const claveOrden = orden ? `${orden.columna}|${orden.direccion}` : "";
   const [pagina, setPagina] = useState(1);
+  const [firmaAnterior, setFirmaAnterior] = useState({
+    consulta,
+    claveVista,
+    claveOrden,
+  });
+
+  if (
+    consulta !== firmaAnterior.consulta ||
+    claveVista !== firmaAnterior.claveVista ||
+    claveOrden !== firmaAnterior.claveOrden
+  ) {
+    setFirmaAnterior({ consulta, claveVista, claveOrden });
+    setPagina(1);
+  }
+
+  const alternarOrden = (columna: string) => {
+    const destino = columna as ColumnaOrdenableMarketing;
+    if (!orden || orden.columna !== destino) {
+      onOrdenChange({ columna: destino, direccion: "asc" });
+    } else if (orden.direccion === "asc") {
+      onOrdenChange({ columna: destino, direccion: "desc" });
+    } else {
+      onOrdenChange(null);
+    }
+  };
 
   const columnas = COLUMNAS_TABLA.filter((columna) => columnasVisibles.has(columna));
   const filtradas = useMemo(() => buscarClientes(filas, consulta), [filas, consulta]);
-  const paginas = Math.max(1, Math.ceil(filtradas.length / TAMANO_PAGINA));
+  const ordenadas = useMemo(
+    () => ordenarClientes(filtradas, orden),
+    [filtradas, orden],
+  );
+  const paginas = Math.max(1, Math.ceil(ordenadas.length / TAMANO_PAGINA));
 
-  useEffect(() => setPagina(1), [filas, consulta, distribucionAplicada]);
-
-  const visibles = filtradas.slice(
+  const visibles = ordenadas.slice(
     (pagina - 1) * TAMANO_PAGINA,
     pagina * TAMANO_PAGINA,
   );
 
-  const valor = (fila: ClienteDistribuido, columna: string): string => {
-    if (columna === "Vendedor")
+  const valor = (fila: ClienteDistribuido, columna: string): ReactNode => {
+    if (columna === "Vendedor") {
+      if (
+        distribucionAplicada &&
+        fila.vendedorAsignado &&
+        fila.vendedorAsignado !== fila.vendedorOriginal
+      ) {
+        return (
+          <span className="flex flex-wrap items-center gap-1">
+            <span className="text-gray-500">{fila.vendedorOriginal || "—"}</span>
+            <span aria-hidden="true">→</span>
+            <span className="font-semibold text-green-700">
+              {fila.vendedorAsignado}
+            </span>
+          </span>
+        );
+      }
       return distribucionAplicada ? fila.vendedorAsignado : fila.vendedorOriginal;
+    }
     const clave = POR_COLUMNA[columna];
     return clave ? String(fila[clave] ?? "") : "";
   };
@@ -63,7 +130,7 @@ export default function TablaClientes({
         </p>
         <Input
           value={consulta}
-          onChange={(evento) => setConsulta(evento.target.value)}
+          onChange={(evento) => onConsultaChange(evento.target.value)}
           placeholder="Buscar por identificación, cliente o vendedor"
           className="sm:w-80"
         />
@@ -77,9 +144,54 @@ export default function TablaClientes({
         <Table>
           <TableHeader>
             <TableRow>
-              {columnas.map((columna) => (
-                <TableHead key={columna}>{columna}</TableHead>
-              ))}
+              {columnas.map((columna) => {
+                const ordenable = COLUMNAS_ORDENABLES.has(columna);
+                const activa = orden?.columna === columna;
+                const direccion = activa ? orden?.direccion : undefined;
+                const Icono =
+                  direccion === "asc"
+                    ? ArrowUp
+                    : direccion === "desc"
+                      ? ArrowDown
+                      : ArrowUpDown;
+
+                return (
+                  <TableHead
+                    key={columna}
+                    aria-sort={
+                      direccion === "asc"
+                        ? "ascending"
+                        : direccion === "desc"
+                          ? "descending"
+                          : ordenable
+                            ? "none"
+                            : undefined
+                    }
+                  >
+                    {ordenable ? (
+                      <button
+                        type="button"
+                        onClick={() => alternarOrden(columna)}
+                        aria-label={`Ordenar por ${columna}${
+                          activa
+                            ? `, actualmente ${direccion === "asc" ? "ascendente" : "descendente"}`
+                            : ""
+                        }`}
+                        className={`flex items-center gap-1 text-left hover:text-blue-700 ${activa ? "text-blue-700" : ""}`}
+                      >
+                        {columna}
+                        <Icono
+                          size={14}
+                          aria-hidden="true"
+                          className={activa ? "text-blue-600" : "text-gray-400"}
+                        />
+                      </button>
+                    ) : (
+                      columna
+                    )}
+                  </TableHead>
+                );
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>

@@ -6,6 +6,7 @@ import {
   nombreVendedorActual,
 } from "./vendedores";
 import type {
+  CategoriaClienteMarketing,
   ClienteDistribuido,
   ClienteRow,
   ResultadoDistribucion,
@@ -26,6 +27,8 @@ export function prepararCliente(
     ciudadKey: claveUbicacion(fila.ciudad),
     vendedorOriginal,
     vendedorAsignado,
+    categoria: "SIN_CAMBIO",
+    esRepresentante: true,
   };
 }
 
@@ -71,6 +74,8 @@ export function redistribuirClientes(filas: ClienteRow[]): ResultadoDistribucion
   let nuevasRelaciones = 0;
   let yaEstabanAsignados = 0;
   let pendientesRevision = 0;
+  const categorias = new Map<string, CategoriaClienteMarketing>();
+  const representantes = new Map<string, number>();
 
   for (const claveClienteGrupo of [...grupos.keys()].sort()) {
     const grupo = grupos.get(claveClienteGrupo)!;
@@ -170,19 +175,39 @@ export function redistribuirClientes(filas: ClienteRow[]): ResultadoDistribucion
 
     if (!elegido) {
       pendientesRevision += 1;
+      categorias.set(claveClienteGrupo, "PENDIENTE");
+      representantes.set(claveClienteGrupo, muestra.fila);
       aplicado.push({ ...muestra, vendedorAsignado: muestra.vendedorOriginal });
     } else if (vendedoresYa.has(elegido)) {
       yaEstabanAsignados += 1;
+      categorias.set(claveClienteGrupo, "YA_ASIGNADO");
+      const representante = actuales.find(
+        (fila) =>
+          fila.claveCliente === claveClienteGrupo &&
+          nombreVendedorActual(fila.claveVendedor) === elegido,
+      );
+      representantes.set(claveClienteGrupo, representante?.fila ?? muestra.fila);
       for (const fila of original) {
         if (fila.claveCliente === claveClienteGrupo) fila.vendedorAsignado = elegido;
       }
     } else {
       nuevasRelaciones += 1;
+      categorias.set(claveClienteGrupo, "NUEVA_RELACION");
+      representantes.set(claveClienteGrupo, muestra.fila);
       aplicado.push({ ...muestra, vendedorAsignado: elegido });
       for (const fila of original) {
         if (fila.claveCliente === claveClienteGrupo) fila.vendedorAsignado = elegido;
       }
     }
+  }
+
+  for (const fila of [...original, ...aplicado]) {
+    const categoria = categorias.get(fila.claveCliente) ?? "SIN_CAMBIO";
+    fila.categoria = categoria;
+    fila.esRepresentante =
+      categoria === "SIN_CAMBIO"
+        ? true
+        : fila.fila === representantes.get(fila.claveCliente);
   }
 
   return {

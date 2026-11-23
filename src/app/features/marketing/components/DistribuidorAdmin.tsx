@@ -1,19 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Megaphone } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDays } from "lucide-react";
 import {
+  aplicarFiltroMetrica,
   aplicarFiltros,
   COLUMNAS_TABLA,
   FILTRO_TODOS,
   FILTROS_VACIOS,
   opcionesConVacio,
   opcionesVendedor,
+  type FiltroMetricaMarketing,
   type FiltrosMarketing,
+  type OrdenMarketing,
 } from "@/lib/marketing";
 import type { CarteraResponse } from "../types";
 import BarraFiltros from "./BarraFiltros";
-import BotonDistribucion from "./BotonDistribucion";
 import BotonEnvio from "./BotonEnvio";
 import CargaExcel, { type ResultadoCarga } from "./CargaExcel";
 import MetricasClientes from "./MetricasClientes";
@@ -25,11 +27,15 @@ export default function DistribuidorAdmin() {
   const [error, setError] = useState("");
   const [borrador, setBorrador] = useState<FiltrosMarketing>(FILTROS_VACIOS);
   const [aplicados, setAplicados] = useState<FiltrosMarketing>(FILTROS_VACIOS);
-  const [distribucionAplicada, setDistribucionAplicada] = useState(false);
+  const [filtroMetrica, setFiltroMetrica] = useState<FiltroMetricaMarketing>("TODOS");
   const [cargaIdSeleccionada, setCargaIdSeleccionada] = useState("");
   const [columnasVisibles, setColumnasVisibles] = useState<Set<string>>(
     () => new Set(COLUMNAS_TABLA),
   );
+  const [consulta, setConsulta] = useState("");
+  const [orden, setOrden] = useState<OrdenMarketing | null>(null);
+
+  const claveCargadaRef = useRef<string | null>(null);
 
   const cargar = useCallback(
     async (id?: string) => {
@@ -49,25 +55,41 @@ export default function DistribuidorAdmin() {
     [cargaIdSeleccionada],
   );
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void cargar();
-  }, [cargar]);
+  const recargar = useCallback(
+    (id?: string) => {
+      const clave = id ?? cargaIdSeleccionada;
+      claveCargadaRef.current = clave;
+      void cargar(clave);
+    },
+    [cargar, cargaIdSeleccionada],
+  );
 
-  const despuesDeCargar = async (_resultado: ResultadoCarga) => {
+  useEffect(() => {
+    if (claveCargadaRef.current === cargaIdSeleccionada) return;
+    recargar(cargaIdSeleccionada);
+  }, [cargaIdSeleccionada, recargar]);
+
+  const despuesDeCargar = (_resultado: ResultadoCarga) => {
     setCargaIdSeleccionada("");
-    setDistribucionAplicada(false);
-    await cargar("");
+    setFiltroMetrica("TODOS");
+    recargar("");
   };
 
   const cambiarSemana = (id: string) => {
     setCargaIdSeleccionada(id);
-    setDistribucionAplicada(false);
+    setFiltroMetrica("TODOS");
   };
 
-  const fuente = distribucionAplicada
-    ? (datos?.aplicado ?? [])
-    : (datos?.original ?? []);
+  const despuesDeEnviar = () => {
+    setFiltroMetrica("TODOS");
+    recargar(cargaIdSeleccionada);
+  };
+
+  const distribucionAplicada = filtroMetrica !== "TODOS";
+  const fuente = aplicarFiltroMetrica(
+    distribucionAplicada ? (datos?.aplicado ?? []) : (datos?.original ?? []),
+    filtroMetrica,
+  );
 
   const provincias = useMemo(
     () => opcionesConVacio(fuente.map((fila) => fila.provincia), "(Sin provincia)"),
@@ -75,14 +97,27 @@ export default function DistribuidorAdmin() {
   );
   const ciudades = useMemo(() => {
     const previas = aplicarFiltros(fuente, {
-      ...borrador,
       vendedor: FILTRO_TODOS,
+      provincia: borrador.provincia,
       ciudad: FILTRO_TODOS,
     });
     return opcionesConVacio(previas.map((fila) => fila.ciudad), "(Sin ciudad)");
   }, [fuente, borrador.provincia]);
 
   const filas = useMemo(() => aplicarFiltros(fuente, aplicados), [fuente, aplicados]);
+  const resultadosBorrador = useMemo(
+    () => aplicarFiltros(fuente, borrador).length,
+    [fuente, borrador],
+  );
+
+  const limpiarTodo = () => {
+    setFiltroMetrica("TODOS");
+    setBorrador(FILTROS_VACIOS);
+    setAplicados(FILTROS_VACIOS);
+    setConsulta("");
+    setOrden(null);
+    setColumnasVisibles(new Set(COLUMNAS_TABLA));
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -153,7 +188,7 @@ export default function DistribuidorAdmin() {
           <BotonEnvio
             deshabilitado={!datos?.carga || !datos.carga.esActiva}
             enviadoEn={datos?.carga?.enviadoEn ?? null}
-            onEnviado={cargar}
+            onEnviado={despuesDeEnviar}
           />
         </div>
         {datos && datos.resumenEnvio.length > 0 && (
@@ -178,21 +213,10 @@ export default function DistribuidorAdmin() {
           yaEstabanAsignados: 0,
           pendientesRevision: 0,
         }}
+        seleccionada={filtroMetrica}
+        onSeleccionar={setFiltroMetrica}
+        deshabilitado={!datos?.carga?.esActiva}
       />
-
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-700">
-            <Megaphone size={18} />
-            Redistribución de clientes de vendedores anteriores
-          </div>
-          <BotonDistribucion
-            aplicada={distribucionAplicada}
-            onToggle={() => setDistribucionAplicada((valor) => !valor)}
-            deshabilitado={!datos?.carga?.esActiva}
-          />
-        </div>
-      </div>
 
       <BarraFiltros
         vendedores={opcionesVendedor()}
@@ -201,6 +225,8 @@ export default function DistribuidorAdmin() {
         value={borrador}
         onChange={setBorrador}
         onAplicar={() => setAplicados(borrador)}
+        onLimpiarTodo={limpiarTodo}
+        resultados={resultadosBorrador}
       />
 
       <SelectorColumnas
@@ -214,6 +240,11 @@ export default function DistribuidorAdmin() {
         filas={filas}
         columnasVisibles={columnasVisibles}
         distribucionAplicada={distribucionAplicada}
+        claveVista={`${datos?.carga?.id ?? ""}|${filtroMetrica}|${JSON.stringify(aplicados)}`}
+        consulta={consulta}
+        onConsultaChange={setConsulta}
+        orden={orden}
+        onOrdenChange={setOrden}
       />
     </div>
   );
