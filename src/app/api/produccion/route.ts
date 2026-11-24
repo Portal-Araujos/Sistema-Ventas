@@ -1,6 +1,26 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import { getApiSession, hasPermission, isAdministrator, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
+
+async function avisarIngresoEmpaque(ids: string[]) {
+  if (!ids.length) return;
+  try {
+    const detalles = await prisma.detallePedido.findMany({ where: { id: { in: ids }, estadoOperacion: "en empaque" }, select: { cantidad: true, pedido: { select: { usuarioId: true, numContrato: true } } } });
+    const porVendedor = new Map<string, { cantidad: number; contratos: Set<string> }>();
+    for (const detalle of detalles) {
+      const grupo = porVendedor.get(detalle.pedido.usuarioId) || { cantidad: 0, contratos: new Set<string>() };
+      grupo.cantidad += detalle.cantidad;
+      if (detalle.pedido.numContrato) grupo.contratos.add(detalle.pedido.numContrato);
+      porVendedor.set(detalle.pedido.usuarioId, grupo);
+    }
+    const avisos = await prisma.notificacion.createManyAndReturn({ data: [...porVendedor].map(([usuarioDestinoId, grupo]) => ({
+      titulo: "Prendas enviadas a empaque", mensaje: `${grupo.cantidad} prenda(s) llegaron a empaque. Contratos: ${[...grupo.contratos].join(", ") || "sin número"}.`,
+      tipoModulo: "PEDIDOS", usuarioDestinoId, urlDestino: "/pedidos",
+    })), select: { id: true } });
+    await enviarPushNotificaciones(avisos.map(aviso => aviso.id));
+  } catch (error) { console.error("No se pudo generar el aviso de empaque", error); }
+}
 
 
 
@@ -231,6 +251,7 @@ export async function PUT(request: Request) {
         where: { id: { in: prendasEscuela.map((p: any) => p.id) } },
         data: { estadoOperacion: "en empaque", estadoProduccion: "Terminado" },
       });
+      await avisarIngresoEmpaque(prendasEscuela.map(p => p.id));
       return NextResponse.json({ success: true });
     }
     if (modo === "individual_empaque") {
@@ -239,6 +260,7 @@ export async function PUT(request: Request) {
         data: { estadoOperacion: "en empaque", estadoProduccion: "Terminado" },
       });
       if (!resultado.count) return NextResponse.json({ error: "La prenda tiene un despacho activo. Anula primero su guía." }, { status: 409 });
+      await avisarIngresoEmpaque([id]);
       return NextResponse.json({ success: true });
     }
     if (prendaIds && prendaIds.length > 0) {

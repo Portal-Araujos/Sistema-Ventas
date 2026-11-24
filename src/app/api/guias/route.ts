@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import { getApiSession, hasPermission, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 export async function GET(request: Request) {
   try {
@@ -82,16 +83,18 @@ export async function DELETE(request: Request) {
   try {
     const { id, motivo } = await request.json();
     if (typeof id !== "string" || typeof motivo !== "string" || motivo.trim().length < 10) return NextResponse.json({ error: "Indica la guía y un motivo de al menos 10 caracteres" }, { status: 400 });
-    await prisma.$transaction(async tx => {
+    const avisoId = await prisma.$transaction(async tx => {
       const guia = await tx.guiaDespacho.findUnique({ where: { id }, include: { prendasDespachadas: { select: { pedidoId: true, cantidad: true } } } });
       if (!guia) throw new Error("GUIA_NO_ENCONTRADA");
       const pedidoIds = [...new Set(guia.prendasDespachadas.map(d => d.pedidoId))];
       await tx.detallePedido.updateMany({ where: { guiaDespachoId: id }, data: { guiaDespachoId: null, estadoOperacion: "Pendiente en revision", estadoProduccion: "Planificacion", estadoEmpaque: "Pendiente", recibidoPorVendedor: false, fechaRecepcion: null, usuarioReceptorId: null } });
       await tx.pedido.updateMany({ where: { id: { in: pedidoIds } }, data: { estado: "En Operaciones", fechaInicioEmpaque: null, fechaFinEmpaque: null } });
       await tx.bitacoraSeguridad.create({ data: { usuarioId: session.id, ip: request.headers.get("x-forwarded-for")?.split(",")[0] || "local", evento: JSON.stringify({ accion: "ANULAR_GUIA_DESPACHO", codigoGuia: guia.codigoGuia, guiaId: id, pedidoIds, motivo: motivo.trim() }) } });
-      if (guia.vendedorId) await tx.notificacion.create({ data: { titulo: "Despacho anulado", mensaje: `Guía ${guia.codigoGuia} anulada. Motivo: ${motivo.trim()}. Sus prendas regresaron a revisión en Operaciones.`, tipoModulo: "PEDIDOS", usuarioDestinoId: guia.vendedorId, urlDestino: "/pedidos" } });
+      const aviso = guia.vendedorId ? await tx.notificacion.create({ data: { titulo: "Despacho anulado", mensaje: `Guía ${guia.codigoGuia} anulada. Motivo: ${motivo.trim()}. Sus prendas regresaron a revisión en Operaciones.`, tipoModulo: "PEDIDOS", usuarioDestinoId: guia.vendedorId, urlDestino: "/pedidos" } }) : null;
       await tx.guiaDespacho.delete({ where: { id } });
+      return aviso?.id;
     }, { isolationLevel: "Serializable" });
+    if (avisoId) await enviarPushNotificaciones([avisoId]);
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof Error && error.message === "GUIA_NO_ENCONTRADA") return NextResponse.json({ error: "Guía no encontrada" }, { status: 404 });

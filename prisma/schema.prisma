@@ -187,6 +187,9 @@ model Usuario {
   departamento           DepartamentoEmpresa? @relation(fields: [departamentoId], references: [id])
   detallesRecibidos      DetallePedido[]      @relation("UsuarioReceptorDetalle")
   notificaciones         Notificacion[]       @relation("NotificacionesUsuario")
+  lecturasMensajes       LecturaMensajeTicket[]
+  lecturasNotificaciones LecturaNotificacion[]
+  suscripcionesPush SuscripcionPush[]
   @@map("usuarios")
 }
 
@@ -539,8 +542,19 @@ model MensajeTicket {
   createdAt     DateTime      @default(now()) @map("created_at")
   ticket        TicketGestion @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   remitente     Usuario       @relation(fields: [remitenteId], references: [id])
+  lecturas      LecturaMensajeTicket[]
 
   @@map("mensajes_ticket")
+}
+
+model LecturaMensajeTicket {
+  mensajeId Int
+  usuarioId String
+  leidoEn DateTime @default(now())
+  mensaje MensajeTicket @relation(fields: [mensajeId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@id([mensajeId, usuarioId])
+  @@map("lecturas_mensajes_ticket")
 }
 
 model ModalidadLaboral {
@@ -591,7 +605,28 @@ model Notificacion {
   usuarioDestinoId String?  @map("usuario_destino_id") // Si se llena, llega a un vendedor específico
   usuarioDestino   Usuario? @relation("NotificacionesUsuario", fields: [usuarioDestinoId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now()) @map("created_at")
+  lecturas         LecturaNotificacion[]
   @@map("notificaciones")
+}
+model LecturaNotificacion {
+  notificacionId Int
+  usuarioId String
+  leidoEn DateTime @default(now())
+  notificacion Notificacion @relation(fields: [notificacionId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@id([notificacionId, usuarioId])
+  @@map("lecturas_notificaciones")
+}
+model SuscripcionPush {
+  id String @id @default(uuid())
+  usuarioId String
+  endpoint String @unique @db.Text
+  p256dh String
+  auth String
+  createdAt DateTime @default(now())
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@index([usuarioId])
+  @@map("suscripciones_push")
 }
 model CatalogoElectro {
   id          Int      @id @default(autoincrement())

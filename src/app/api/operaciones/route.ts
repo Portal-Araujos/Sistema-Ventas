@@ -1,6 +1,7 @@
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { getApiSession, hasPermission, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
@@ -308,6 +309,13 @@ export async function PUT(request: Request) {
       });
       const personalizadas: any[] = [];
       const genericasPorContrato = new Map();
+      const distribucion = new Map<string, { produccion: number; despacho: number }>();
+      const registrarDistribucion = (pedidoId: string, produccion: number, despacho: number) => {
+        const resumen = distribucion.get(pedidoId) || { produccion: 0, despacho: 0 };
+        resumen.produccion += produccion;
+        resumen.despacho += despacho;
+        distribucion.set(pedidoId, resumen);
+      };
       for (const p of prendasPendientes) {
         const esPersonalizado = p.observacion && p.observacion.trim() !== "";
         if (esPersonalizado) {
@@ -335,6 +343,7 @@ export async function PUT(request: Request) {
           where: { id: p.id },
           data: dataProduccion,
         });
+        registrarDistribucion(p.pedidoId, p.cantidad, 0);
       }
       const contratosOrdenados = Array.from(genericasPorContrato.values()).sort(
         (a, b) => a.totalPrendas - b.totalPrendas,
@@ -365,6 +374,7 @@ export async function PUT(request: Request) {
               },
             });
             stockAsignado[key] -= prenda.cantidad;
+            registrarDistribucion(prenda.pedidoId, 0, prenda.cantidad);
           } else if (stockDisponible > 0 && stockDisponible < prenda.cantidad) {
             const faltante = prenda.cantidad - stockDisponible;
 
@@ -393,12 +403,14 @@ export async function PUT(request: Request) {
             if (fechaParseada)
               dataCreate.fechaEstimadaConfeccion = fechaParseada;
             await prisma.detallePedido.create({ data: dataCreate });
+            registrarDistribucion(prenda.pedidoId, faltante, stockDisponible);
             stockAsignado[key] = 0;
           } else {
             await prisma.detallePedido.update({
               where: { id: prenda.id },
               data: dataProduccion,
             });
+            registrarDistribucion(prenda.pedidoId, prenda.cantidad, 0);
           }
         }
       }
@@ -412,7 +424,7 @@ export async function PUT(request: Request) {
         if (pedidoBase) {
           const codigoOP = `PED-${idPedidoReal.slice(0, 6).toUpperCase()}`;
           // 1. Avisar a Producción (Taller)
-          await prisma.notificacion.create({
+          const avisoProduccion = [...distribucion.values()].some(d => d.produccion > 0) ? await prisma.notificacion.create({
             data: {
               titulo: "✂️ Nuevos Cortes Asignados",
               mensaje: `Operaciones ha enviado prendas a confección para el pedido ${codigoOP}.`,
@@ -420,17 +432,13 @@ export async function PUT(request: Request) {
               urlDestino: `/produccion?pedidoId=${codigoOP}`,
               rolDestino: "produccion", // Asegúrate de que este sea el nombre del rol o permiso de tu taller
             },
-          });
-          // 2. Avisar al Vendedor
-          await prisma.notificacion.create({
-            data: {
-              titulo: "📊 Pedido Procesado",
-              mensaje: `Tu pedido ${codigoOP} ha pasado por Operaciones y se ha distribuido el stock.`,
-              tipoModulo: "PEDIDOS",
-              urlDestino: `/pedidos?pedidoId=${codigoOP}`,
-              usuarioDestinoId: pedidoBase.usuarioId, // Aquí le llega SOLO al dueño del pedido
-            },
-          });
+          }) : null;
+          const pedidos = await prisma.pedido.findMany({ where: { id: { in: [...distribucion.keys()] } }, select: { id: true, usuarioId: true, numContrato: true } });
+          const avisos = await prisma.notificacion.createManyAndReturn({ data: pedidos.map(pedido => {
+            const resumen = distribucion.get(pedido.id)!;
+            return { titulo: "Stock distribuido", mensaje: `Contrato ${pedido.numContrato || "sin número"}: ${resumen.produccion} prenda(s) a producción y ${resumen.despacho} disponible(s) para despacho.`, tipoModulo: "PEDIDOS", urlDestino: "/pedidos", usuarioDestinoId: pedido.usuarioId };
+          }), select: { id: true } });
+          await enviarPushNotificaciones([...(avisoProduccion ? [avisoProduccion.id] : []), ...avisos.map(aviso => aviso.id)]);
         }
       }
 

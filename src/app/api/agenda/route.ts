@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 
 
 export async function GET(request: Request) {
@@ -311,6 +312,7 @@ export async function POST(request: Request) {
     const token = cookieStore.get("session_token")?.value;
     if (!token)
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    const { payload } = await jwtVerify(token, getJwtSecret());
     const body = await request.json();
     const {
       institucionId,
@@ -377,6 +379,15 @@ export async function POST(request: Request) {
         estadoGestion: "Pendiente",
       },
     });
+    if (usuarioId !== payload.id) {
+      try {
+      const aviso = await prisma.notificacion.create({ data: {
+        titulo: "Visita asignada", mensaje: `Se te asignó una visita a ${escuela?.nombre || "una institución"} para el ${fechaProgramada}.`,
+        tipoModulo: "AGENDA", usuarioDestinoId: usuarioId, urlDestino: "/agenda",
+      } });
+      await enviarPushNotificaciones([aviso.id]);
+      } catch (error) { console.error("No se pudo generar el aviso de agenda", error); }
+    }
     return NextResponse.json(nuevaVisita);
   } catch (error: any) {
     return NextResponse.json(

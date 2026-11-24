@@ -814,11 +814,7 @@ export default function TicketsPage() {
                         >
                           Abrir Chat <ChevronRight size={16} className="ml-1" />
                           {(() => {
-                            const soyCreador = t.creadorId === currentUser.id;
-                            const soyAsignado = t.asignados?.some((a: any) => a.id === currentUser.id);
-                            let misNoLeidos = 0;
-                            if (soyCreador) misNoLeidos = t.noLeidosCreador;
-                            else if (soyAsignado) misNoLeidos = t.noLeidosAsignados;
+                            const misNoLeidos = t.noLeidosUsuario || 0;
 
                             if (misNoLeidos > 0) {
                               return (

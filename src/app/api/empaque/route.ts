@@ -1,6 +1,7 @@
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
@@ -249,7 +250,7 @@ export async function PUT(request: Request) {
 
         if (detalleReferencia?.pedido) {
           const codigoOP = `PED-${detalleReferencia.pedido.id.slice(0, 6).toUpperCase()}`;
-          await prisma.notificacion.create({
+          const aviso = await prisma.notificacion.create({
             data: {
               titulo: "🚚 Guía de Despacho Generada",
               mensaje: `Bodega ha despachado prendas de tu pedido ${codigoOP}. Guía: ${codigoGuia}`,
@@ -258,6 +259,7 @@ export async function PUT(request: Request) {
               usuarioDestinoId: detalleReferencia.pedido.usuarioId, // Solo le avisa al dueño
             },
           });
+          await enviarPushNotificaciones([aviso.id]);
         }
       }
       return NextResponse.json({ success: true, guia: nuevaGuia });

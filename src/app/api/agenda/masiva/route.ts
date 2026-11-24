@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 
 
 export async function POST(request: Request) {
@@ -106,6 +107,15 @@ export async function POST(request: Request) {
       where: { id: { in: institucionIds } },
       data: { vendedorId: vendedorId },
     });
+    if (result.count > 0 && vendedorId !== payload.id) {
+      try {
+      const aviso = await prisma.notificacion.create({ data: {
+        titulo: "Visitas asignadas", mensaje: `Se asignaron ${result.count} visita(s) para el ${fechaProgramada}.`,
+        tipoModulo: "AGENDA", usuarioDestinoId: vendedorId, urlDestino: "/agenda",
+      } });
+      await enviarPushNotificaciones([aviso.id]);
+      } catch (error) { console.error("No se pudo generar el aviso de agenda masiva", error); }
+    }
     return NextResponse.json(
       { success: true, creadas: result.count },
       { status: 201 },

@@ -1,6 +1,7 @@
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
@@ -406,7 +407,7 @@ export async function PUT(request: Request) {
         const nombreEscuela =
           primerPedido.institucion?.nombre || "la institución";
 
-        await prisma.notificacion.create({
+        const aviso = await prisma.notificacion.create({
           data: {
             titulo: "📦 Nuevo Pedido Recibido",
             mensaje: `El vendedor ha enviado el pedido ${codigoOP} de ${nombreEscuela} para balance de stock.`,
@@ -415,6 +416,7 @@ export async function PUT(request: Request) {
             rolDestino: "admin",
           },
         });
+        await enviarPushNotificaciones([aviso.id]);
       }
       return NextResponse.json({ success: true });
     } else {
