@@ -49,10 +49,13 @@ function fechaParaOrden(valor: string): number | null {
   return Number(anio) * 10_000 + Number(mes) * 100 + Number(dia);
 }
 
+/** Solo para comparar durante la ordenación; el valor guardado y mostrado se deja intacto. */
 function numeroParaOrden(valor: string): number | null {
   const texto = valor.trim();
   if (!texto) return null;
-  const numero = Number(texto.replace(/\./g, "").replace(",", "."));
+  const numero = Number(
+    texto.replace(/[^\d.,-]/g, "").replace(/\./g, "").replace(",", "."),
+  );
   return Number.isFinite(numero) ? numero : null;
 }
 

@@ -1,4 +1,9 @@
-import { claveCliente, limpiarTelefono, normalizarTexto } from "./normalize";
+import {
+  claveCliente,
+  limpiarTelefono,
+  normalizarTexto,
+  textoExacto,
+} from "./normalize";
 import type {
   CambioMarketing,
   ClienteRow,
@@ -11,21 +16,21 @@ const CAMPOS = [
   { campo: "provincia", etiqueta: "Provincia", normalizar: normalizarTexto },
   { campo: "ciudad", etiqueta: "Ciudad", normalizar: normalizarTexto },
   { campo: "direccion", etiqueta: "Dirección", normalizar: normalizarTexto },
-  { campo: "fechaEmision", etiqueta: "Fecha Emisión", normalizar: normalizarTexto },
-  { campo: "fechaVence", etiqueta: "Fecha Vence", normalizar: normalizarTexto },
-  { campo: "total", etiqueta: "$ Total", normalizar: normalizarTexto },
-  { campo: "ctas", etiqueta: "# Ctas", normalizar: normalizarTexto },
-  { campo: "abonado", etiqueta: "$ Abonado", normalizar: normalizarTexto },
-  { campo: "cob", etiqueta: "# Cob", normalizar: normalizarTexto },
-  { campo: "saldo", etiqueta: "$ Saldo", normalizar: normalizarTexto },
-  { campo: "ven", etiqueta: "# Ven", normalizar: normalizarTexto },
-  { campo: "dias", etiqueta: "Días", normalizar: normalizarTexto },
-  { campo: "cuota", etiqueta: "$ Cuota", normalizar: normalizarTexto },
-  { campo: "saldoFecha", etiqueta: "Saldo Fecha", normalizar: normalizarTexto },
+  { campo: "fechaEmision", etiqueta: "Fecha Emisión", normalizar: textoExacto },
+  { campo: "fechaVence", etiqueta: "Fecha Vence", normalizar: textoExacto },
+  { campo: "total", etiqueta: "$ Total", normalizar: textoExacto },
+  { campo: "ctas", etiqueta: "# Ctas", normalizar: textoExacto },
+  { campo: "abonado", etiqueta: "$ Abonado", normalizar: textoExacto },
+  { campo: "cob", etiqueta: "# Cob", normalizar: textoExacto },
+  { campo: "saldo", etiqueta: "$ Saldo", normalizar: textoExacto },
+  { campo: "ven", etiqueta: "# Ven", normalizar: textoExacto },
+  { campo: "dias", etiqueta: "Días", normalizar: textoExacto },
+  { campo: "cuota", etiqueta: "$ Cuota", normalizar: textoExacto },
+  { campo: "saldoFecha", etiqueta: "Saldo Fecha", normalizar: textoExacto },
   {
     campo: "categoriaOrigen",
     etiqueta: "Categoría",
-    normalizar: normalizarTexto,
+    normalizar: textoExacto,
   },
 ] as const;
 
@@ -36,7 +41,7 @@ function valor(fila: ClienteRow, campo: keyof ClienteRow): string {
 function claveComparacion(fila: ClienteRow): string {
   const base = claveCliente(fila.identificacion, fila.nombreCliente, fila.movil);
   if (!base || base === "|") return "";
-  return `${base}|${normalizarTexto(fila.numDocumento)}`;
+  return `${base}|${textoExacto(fila.numDocumento)}`;
 }
 
 function indice(filas: ClienteRow[]): Map<string, ClienteRow> {

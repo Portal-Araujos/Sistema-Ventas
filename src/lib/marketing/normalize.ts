@@ -1,3 +1,7 @@
+export function textoExacto(valor: unknown): string {
+  return valor === null || valor === undefined ? "" : String(valor).trim();
+}
+
 export function normalizarTexto(valor: unknown): string {
   if (valor === null || valor === undefined) return "";
   return String(valor)
