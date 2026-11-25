@@ -9,6 +9,7 @@ import type { CambiosResponse, HistorialResponse } from "../types";
 const ETIQUETAS_ACCION: Record<string, string> = {
   CARGA_SUBIDA: "Carga subida",
   CARTERA_ENVIADA: "Cartera enviada",
+  ASIGNACION_MANUAL_ENVIADA: "Asignación manual enviada",
   CARGA_ELIMINADA: "Carga eliminada",
   MANTENIMIENTO: "Mantenimiento",
 };
@@ -53,18 +54,25 @@ export default function HistorialAuditoria() {
   }, []);
 
   useEffect(() => {
-    void cargar();
     const id = new URLSearchParams(window.location.search).get("carga");
-    if (id) setCargaComparada(id);
+    queueMicrotask(() => {
+      void cargar();
+      if (id) setCargaComparada(id);
+    });
   }, [cargar]);
 
   useEffect(() => {
-    if (!cargaComparada) {
-      setComparacion(null);
-      setErrorComparacion("");
-      return;
-    }
     let vigente = true;
+    if (!cargaComparada) {
+      queueMicrotask(() => {
+        if (!vigente) return;
+        setComparacion(null);
+        setErrorComparacion("");
+      });
+      return () => {
+        vigente = false;
+      };
+    }
     const consultar = async () => {
       setErrorComparacion("");
       try {
@@ -84,7 +92,9 @@ export default function HistorialAuditoria() {
         }
       }
     };
-    void consultar();
+    queueMicrotask(() => {
+      void consultar();
+    });
     return () => {
       vigente = false;
     };

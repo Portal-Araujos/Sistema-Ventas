@@ -614,18 +614,31 @@ model MarketingCarga {
 }
 
 model MarketingCliente {
-  id             String         @id @default(uuid())
-  cargaId        String         @map("carga_id")
-  carga          MarketingCarga @relation(fields: [cargaId], references: [id], onDelete: Cascade)
-  fila           Int
-  identificacion String
-  nombreCliente  String         @map("nombre_cliente")
-  movil          String
-  provincia      String
-  ciudad         String
-  direccion      String
-  vendedor       String
-  vendedorAsignado String? @map("vendedor_asignado")
+  id               String         @id @default(uuid())
+  cargaId          String         @map("carga_id")
+  carga            MarketingCarga @relation(fields: [cargaId], references: [id], onDelete: Cascade)
+  fila             Int
+  identificacion   String
+  nombreCliente    String         @map("nombre_cliente")
+  numDocumento     String         @default("") @map("num_documento")
+  fechaEmision     String         @default("") @map("fecha_emision")
+  fechaVence       String         @default("") @map("fecha_vence")
+  total            String         @default("")
+  ctas             String         @default("")
+  abonado          String         @default("")
+  cob              String         @default("")
+  saldo            String         @default("")
+  ven              String         @default("")
+  dias             String         @default("")
+  movil            String
+  vendedor         String
+  cuota            String         @default("")
+  saldoFecha       String         @default("") @map("saldo_fecha")
+  categoriaOrigen  String         @default("") @map("categoria_origen")
+  provincia        String
+  ciudad           String
+  direccion        String
+  vendedorAsignado String?        @map("vendedor_asignado")
   @@map("marketing_clientes")
   @@index([cargaId])
   @@index([cargaId, vendedorAsignado])

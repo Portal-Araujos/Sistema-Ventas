@@ -19,6 +19,7 @@ export function parsearExcel(buffer: ArrayBuffer): {
     header: 1,
     defval: "",
     blankrows: false,
+    raw: false,
   }) as unknown[][];
 
   const headers = (matriz[0] ?? []).map((valor) => texto(valor));
@@ -33,11 +34,24 @@ export function parsearExcel(buffer: ArrayBuffer): {
       fila: i,
       identificacion: texto(fila[indices.Identificación]),
       nombreCliente: texto(fila[indices["Nombre Cliente"]]),
+      numDocumento: texto(fila[indices["Núm. Documento"]]),
+      fechaEmision: texto(fila[indices["Fecha Emisión"]]),
+      fechaVence: texto(fila[indices["Fecha Vence"]]),
+      total: texto(fila[indices["$ Total"]]),
+      ctas: texto(fila[indices["# Ctas"]]),
+      abonado: texto(fila[indices["$ Abonado"]]),
+      cob: texto(fila[indices["# Cob"]]),
+      saldo: texto(fila[indices["$ Saldo"]]),
+      ven: texto(fila[indices["# Ven"]]),
+      dias: texto(fila[indices["Días"]]),
       movil: limpiarTelefono(fila[indices.Móvil]),
+      vendedor: texto(fila[indices.Vendedor]),
+      cuota: texto(fila[indices["$ Cuota"]]),
+      saldoFecha: texto(fila[indices["Saldo Fecha"]]),
+      categoriaOrigen: texto(fila[indices["Categoría (Excel)"]]),
       provincia: texto(fila[indices.Provincia]),
       ciudad: texto(fila[indices.Ciudad]),
       direccion: texto(fila[indices.Dirección]),
-      vendedor: texto(fila[indices.Vendedor]),
     });
   }
   return { filas, faltantes: [] };

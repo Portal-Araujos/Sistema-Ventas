@@ -1,5 +1,8 @@
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import type { AccionAuditoriaMarketing } from "./types";
+
+type ClientePrisma = Prisma.TransactionClient | typeof prisma;
 
 type RegistroAuditoria = {
   accion: AccionAuditoriaMarketing;
@@ -7,6 +10,7 @@ type RegistroAuditoria = {
   nombreArchivo?: string | null;
   detalles?: Record<string, unknown>;
   usuarioId?: string | null;
+  cliente?: ClientePrisma;
 };
 
 export async function registrarAuditoriaMarketing({
@@ -15,8 +19,9 @@ export async function registrarAuditoriaMarketing({
   nombreArchivo = null,
   detalles,
   usuarioId = null,
+  cliente = prisma,
 }: RegistroAuditoria) {
-  await prisma.marketingAuditoria.create({
+  await cliente.marketingAuditoria.create({
     data: {
       accion,
       cargaId,

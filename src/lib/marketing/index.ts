@@ -4,6 +4,7 @@ export * from "./vendedores";
 export * from "./columnas";
 export * from "./parse-excel";
 export * from "./distribucion";
+export * from "./asignacion";
 export * from "./filtros";
 export * from "./orden";
 export * from "./semana";

@@ -64,6 +64,30 @@ export function aplicarFiltros(
   );
 }
 
+const CAMPOS_BUSQUEDA: (keyof ClienteDistribuido)[] = [
+  "identificacion",
+  "nombreCliente",
+  "numDocumento",
+  "fechaEmision",
+  "fechaVence",
+  "total",
+  "ctas",
+  "abonado",
+  "cob",
+  "saldo",
+  "ven",
+  "dias",
+  "movil",
+  "vendedor",
+  "cuota",
+  "saldoFecha",
+  "categoriaOrigen",
+  "provincia",
+  "ciudad",
+  "direccion",
+  "vendedorAsignado",
+];
+
 export function buscarClientes(
   filas: ClienteDistribuido[],
   consulta: string,
@@ -72,7 +96,7 @@ export function buscarClientes(
   if (!texto) return filas;
   return filas.filter((fila) =>
     normalizarTexto(
-      `${fila.identificacion} ${fila.nombreCliente} ${fila.vendedorAsignado}`,
+      CAMPOS_BUSQUEDA.map((campo) => fila[campo] ?? "").join(" "),
     ).includes(texto),
   );
 }

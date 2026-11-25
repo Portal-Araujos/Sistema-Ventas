@@ -27,6 +27,19 @@ const POR_COLUMNA: Record<string, keyof ClienteDistribuido> = {
   "Provincia": "provincia",
   "Ciudad": "ciudad",
   "Dirección": "direccion",
+  "Núm. Documento": "numDocumento",
+  "Fecha Emisión": "fechaEmision",
+  "Fecha Vence": "fechaVence",
+  "$ Total": "total",
+  "# Ctas": "ctas",
+  "$ Abonado": "abonado",
+  "# Cob": "cob",
+  "$ Saldo": "saldo",
+  "# Ven": "ven",
+  "Días": "dias",
+  "$ Cuota": "cuota",
+  "Saldo Fecha": "saldoFecha",
+  "Categoría (Excel)": "categoriaOrigen",
 };
 
 const TAMANO_PAGINA = 50;
@@ -35,6 +48,19 @@ const COLUMNAS_ORDENABLES = new Set<string>([
   "Provincia",
   "Ciudad",
   "Vendedor",
+  "Núm. Documento",
+  "Fecha Emisión",
+  "Fecha Vence",
+  "$ Total",
+  "# Ctas",
+  "$ Abonado",
+  "# Cob",
+  "$ Saldo",
+  "# Ven",
+  "Días",
+  "$ Cuota",
+  "Saldo Fecha",
+  "Categoría (Excel)",
 ]);
 
 type Props = {
@@ -131,7 +157,7 @@ export default function TablaClientes({
         <Input
           value={consulta}
           onChange={(evento) => onConsultaChange(evento.target.value)}
-          placeholder="Buscar por identificación, cliente o vendedor"
+          placeholder="Buscar por cliente, documento, vendedor o cualquier dato de la cartera"
           className="sm:w-80"
         />
       </div>

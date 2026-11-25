@@ -64,12 +64,6 @@ const menuStructure = [
     isGroup: true,
     items: [
       {
-        icon: Megaphone,
-        label: "Mi Marketing",
-        href: "/marketing",
-        permiso: "marketing:ver",
-      },
-      {
         icon: Settings,
         label: "Administración",
         href: "/marketing/administracion",

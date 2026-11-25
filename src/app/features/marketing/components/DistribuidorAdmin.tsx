@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CalendarDays } from "lucide-react";
 import {
   aplicarFiltroMetrica,
   aplicarFiltros,
-  COLUMNAS_TABLA,
+  COLUMNAS_TABLA_INICIALES,
   FILTRO_TODOS,
   FILTROS_VACIOS,
   opcionesConVacio,
@@ -14,10 +15,10 @@ import {
   type FiltrosMarketing,
   type OrdenMarketing,
 } from "@/lib/marketing";
-import type { CarteraResponse } from "../types";
+import type { CarteraResponse, RespuestaEnvioAsignacion } from "../types";
+import AsignacionManual from "./AsignacionManual";
 import BarraFiltros from "./BarraFiltros";
-import BotonEnvio from "./BotonEnvio";
-import CargaExcel, { type ResultadoCarga } from "./CargaExcel";
+import CargaExcel from "./CargaExcel";
 import MetricasClientes from "./MetricasClientes";
 import SelectorColumnas from "./SelectorColumnas";
 import TablaClientes from "./TablaClientes";
@@ -30,10 +31,13 @@ export default function DistribuidorAdmin() {
   const [filtroMetrica, setFiltroMetrica] = useState<FiltroMetricaMarketing>("TODOS");
   const [cargaIdSeleccionada, setCargaIdSeleccionada] = useState("");
   const [columnasVisibles, setColumnasVisibles] = useState<Set<string>>(
-    () => new Set(COLUMNAS_TABLA),
+    () => new Set(COLUMNAS_TABLA_INICIALES),
   );
   const [consulta, setConsulta] = useState("");
   const [orden, setOrden] = useState<OrdenMarketing | null>(null);
+  const [ultimoTicket, setUltimoTicket] =
+    useState<RespuestaEnvioAsignacion | null>(null);
+  const [claveAsignacionManual, setClaveAsignacionManual] = useState(0);
 
   const claveCargadaRef = useRef<string | null>(null);
 
@@ -69,19 +73,28 @@ export default function DistribuidorAdmin() {
     recargar(cargaIdSeleccionada);
   }, [cargaIdSeleccionada, recargar]);
 
-  const despuesDeCargar = (_resultado: ResultadoCarga) => {
+  const reiniciarAsignacionManual = (limpiarTicket = true) => {
+    if (limpiarTicket) setUltimoTicket(null);
+    setClaveAsignacionManual((clave) => clave + 1);
+  };
+
+  const despuesDeCargar = () => {
     setCargaIdSeleccionada("");
     setFiltroMetrica("TODOS");
+    reiniciarAsignacionManual();
     recargar("");
   };
 
   const cambiarSemana = (id: string) => {
     setCargaIdSeleccionada(id);
     setFiltroMetrica("TODOS");
+    reiniciarAsignacionManual();
   };
 
-  const despuesDeEnviar = () => {
+  const despuesDeEnviar = (resultado: RespuestaEnvioAsignacion) => {
+    setUltimoTicket(resultado);
     setFiltroMetrica("TODOS");
+    reiniciarAsignacionManual(false);
     recargar(cargaIdSeleccionada);
   };
 
@@ -116,7 +129,8 @@ export default function DistribuidorAdmin() {
     setAplicados(FILTROS_VACIOS);
     setConsulta("");
     setOrden(null);
-    setColumnasVisibles(new Set(COLUMNAS_TABLA));
+    setColumnasVisibles(new Set(COLUMNAS_TABLA_INICIALES));
+    reiniciarAsignacionManual();
   };
 
   return (
@@ -177,33 +191,43 @@ export default function DistribuidorAdmin() {
         </div>
       )}
 
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-blue-900">Envío a vendedores</p>
-            <p className="text-xs text-blue-700">
-              Hasta que no envíes, los vendedores no verán clientes en su apartado.
-            </p>
-          </div>
-          <BotonEnvio
-            deshabilitado={!datos?.carga || !datos.carga.esActiva}
-            enviadoEn={datos?.carga?.enviadoEn ?? null}
-            onEnviado={despuesDeEnviar}
-          />
+      <AsignacionManual
+        key={`${datos?.carga?.id ?? ""}|${claveAsignacionManual}`}
+        cargaId={datos?.carga?.id ?? ""}
+        semana={datos?.carga?.semana ?? ""}
+        deshabilitado={!datos?.carga || !datos.carga.esActiva}
+        filasBase={fuente}
+        onEnviado={despuesDeEnviar}
+      />
+
+      {ultimoTicket && (
+        <div className="flex flex-col gap-2 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            Ticket <strong>{ultimoTicket.ticket.codigo}</strong> enviado con{" "}
+            <strong>{ultimoTicket.totalAsignados.toLocaleString("es-EC")}</strong>{" "}
+            clientes asignados.
+          </p>
+          <Link
+            href={ultimoTicket.ticket.url}
+            className="inline-flex w-fit items-center gap-1 font-bold underline"
+          >
+            Ver ticket <ArrowRight size={16} aria-hidden="true" />
+          </Link>
         </div>
-        {datos && datos.resumenEnvio.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2 border-t border-blue-200 pt-3">
-            {datos.resumenEnvio.map((item) => (
-              <span
-                key={item.vendedor}
-                className="rounded-full bg-white px-3 py-1 text-xs text-blue-900"
-              >
-                {item.vendedor}: <strong>{item.clientes}</strong>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
+
+      {datos && datos.resumenEnvio.length > 0 && (
+        <div className="flex flex-wrap gap-2 rounded-xl border border-gray-200 bg-white p-4">
+          {datos.resumenEnvio.map((item) => (
+            <span
+              key={item.vendedor}
+              className="rounded-full bg-gray-50 px-3 py-1 text-xs text-gray-700"
+            >
+              {item.vendedor}: <strong>{item.clientes}</strong>
+            </span>
+          ))}
+        </div>
+      )}
 
       <MetricasClientes
         metricas={datos?.metricas ?? {

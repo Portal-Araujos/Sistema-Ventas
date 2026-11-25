@@ -65,6 +65,45 @@ export type HistorialResponse = {
   auditorias: AuditoriaMarketing[];
 };
 
+export type ClienteAsignableVista = {
+  fila: number;
+  identificacion: string;
+  nombreCliente: string;
+  movil: string;
+  provincia: string;
+  ciudad: string;
+  direccion: string;
+  vendedorOriginal: string;
+  vendedorAsignado: string;
+};
+
+export type RespuestaPrevisualizacionAsignacion = {
+  carga: {
+    id: string;
+    nombreArchivo: string;
+    semana: string;
+    totalRegistros: number;
+  };
+  vendedor: {
+    id: string;
+    nombre: string;
+    canonico: string;
+  };
+  elegibles: number;
+  semilla: string;
+  clientes: ClienteAsignableVista[];
+};
+
+export type RespuestaEnvioAsignacion = {
+  enviadoEn: string;
+  totalAsignados: number;
+  ticket: {
+    id: number;
+    codigo: string;
+    url: string;
+  };
+};
+
 export type CarteraResponse = {
   carga: {
     id: string;

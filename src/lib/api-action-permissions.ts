@@ -7,7 +7,7 @@ export async function apiActionPermissions(request: Request): Promise<string[]> 
       return ["marketing:administrar"];
     }
     const read: Record<string, string[]> = {
-      "/api/ventas": ["ventas:ver"], "/api/agenda": ["agenda:ver"], "/api/agenda/dashboard": ["agenda:ver"], "/api/visitas": ["visitas:ver"], "/api/indicadores/semanal": ["indicadores:ver"], "/api/cobranzas/radar": ["cobranzas:ver"], "/api/base-consultas": ["base_consultas:ver"], "/api/operaciones": ["operaciones:ver"], "/api/produccion": ["produccion:ver"], "/api/empaque": ["empaque:ver"], "/api/guias": ["historial-despachos:ver", "empaque:ver"], "/api/tickets": ["tickets:ver"], "/api/marketing/cartera": ["marketing:ver", "marketing:administrar"], "/api/marketing/historial": ["marketing:administrar"],
+      "/api/ventas": ["ventas:ver"], "/api/agenda": ["agenda:ver"], "/api/agenda/dashboard": ["agenda:ver"], "/api/visitas": ["visitas:ver"], "/api/indicadores/semanal": ["indicadores:ver"], "/api/cobranzas/radar": ["cobranzas:ver"], "/api/base-consultas": ["base_consultas:ver"], "/api/operaciones": ["operaciones:ver"], "/api/produccion": ["produccion:ver"], "/api/empaque": ["empaque:ver"], "/api/guias": ["historial-despachos:ver", "empaque:ver"], "/api/tickets": ["tickets:ver"], "/api/marketing/cartera": ["marketing:administrar"], "/api/marketing/historial": ["marketing:administrar"],
     };
     return read[path] || [];
   }
@@ -38,7 +38,8 @@ export async function apiActionPermissions(request: Request): Promise<string[]> 
   if (path === "/api/usuarios/seguridad") return ["usuarios:seguridad"];
   if (path === "/api/usuarios/vendedores") return [method === "POST" ? "usuarios:crear" : "usuarios:editar"];
   if (path === "/api/marketing/carga") return ["marketing:administrar"];
-  if (path === "/api/marketing/enviar") return ["marketing:administrar"];
+  if (path === "/api/marketing/asignacion/previsualizar") return ["marketing:administrar"];
+  if (path === "/api/marketing/asignacion/enviar") return ["marketing:administrar"];
   if (path === "/api/marketing/mantenimiento") return ["marketing:mantenimiento"];
   if (path.startsWith("/api/marketing/cargas/") && method === "DELETE") return ["marketing:mantenimiento"];
   if (path === "/api/seguridad") return ["configuracion:seguridad"];

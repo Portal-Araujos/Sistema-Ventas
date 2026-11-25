@@ -7,13 +7,12 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import {
+  aplicarAsignacionesPersistidas,
   canonizarVendedor,
   etiquetaCarga,
-  prepararCliente,
   redistribuirClientes,
   resumenVacio,
   VENDEDORES_ACTUALES,
-  type ClienteDistribuido,
   type ClienteRow,
   type MetricasMarketing,
   type ResumenCambiosMarketing,
@@ -30,8 +29,7 @@ const METRICAS_VACIAS: MetricasMarketing = {
 export async function GET(request: Request) {
   const session = await getApiSession();
   if (!session) return unauthorizedResponse();
-  const esAdmin = hasPermission(session, "marketing:administrar");
-  if (!esAdmin && !hasPermission(session, "marketing:ver")) return forbiddenResponse();
+  if (!hasPermission(session, "marketing:administrar")) return forbiddenResponse();
 
   try {
     const cargasDisponibles = await prisma.marketingCarga.findMany({
@@ -54,9 +52,7 @@ export async function GET(request: Request) {
       activo: carga.activo,
     }));
 
-    const idSolicitado = esAdmin
-      ? new URL(request.url).searchParams.get("cargaId") || ""
-      : "";
+    const idSolicitado = new URL(request.url).searchParams.get("cargaId") || "";
     const carga = idSolicitado
       ? await prisma.marketingCarga.findUnique({
           where: { id: idSolicitado },
@@ -98,48 +94,37 @@ export async function GET(request: Request) {
       fila: cliente.fila,
       identificacion: cliente.identificacion,
       nombreCliente: cliente.nombreCliente,
+      numDocumento: cliente.numDocumento,
+      fechaEmision: cliente.fechaEmision,
+      fechaVence: cliente.fechaVence,
+      total: cliente.total,
+      ctas: cliente.ctas,
+      abonado: cliente.abonado,
+      cob: cliente.cob,
+      saldo: cliente.saldo,
+      ven: cliente.ven,
+      dias: cliente.dias,
       movil: cliente.movil,
+      vendedor: cliente.vendedor,
+      cuota: cliente.cuota,
+      saldoFecha: cliente.saldoFecha,
+      categoriaOrigen: cliente.categoriaOrigen,
       provincia: cliente.provincia,
       ciudad: cliente.ciudad,
       direccion: cliente.direccion,
-      vendedor: cliente.vendedor,
     }));
-    const { original, aplicado, metricas } = redistribuirClientes(filas);
-
-    let visibles: ClienteDistribuido[] = aplicado;
-    if (!esAdmin) {
-      visibles = [];
-      if (carga.enviadoEn) {
-        const usuario = await prisma.usuario.findUnique({
-          where: { id: session.id },
-          select: { nombre: true },
-        });
-        const canonico = canonizarVendedor(usuario?.nombre ?? "");
-        if (canonico) {
-          visibles = carga.clientes
-            .map((cliente) => ({
-              cliente,
-              asignado: canonizarVendedor(cliente.vendedorAsignado),
-            }))
-            .filter((item) => item.asignado === canonico)
-            .map(({ cliente, asignado }) =>
-              prepararCliente(
-                {
-                  fila: cliente.fila,
-                  identificacion: cliente.identificacion,
-                  nombreCliente: cliente.nombreCliente,
-                  movil: cliente.movil,
-                  provincia: cliente.provincia,
-                  ciudad: cliente.ciudad,
-                  direccion: cliente.direccion,
-                  vendedor: cliente.vendedor,
-                },
-                asignado || cliente.vendedor,
-              ),
-            );
-        }
-      }
+    const asignadosPorFila = new Map<number, string>();
+    for (const cliente of carga.clientes) {
+      const canonico = canonizarVendedor(cliente.vendedorAsignado);
+      if (canonico) asignadosPorFila.set(cliente.fila, canonico);
     }
+
+    const { original, aplicado: propuesto, metricas } = redistribuirClientes(filas);
+    const originalConAsignaciones = aplicarAsignacionesPersistidas(
+      original,
+      asignadosPorFila,
+    );
+    const aplicado = aplicarAsignacionesPersistidas(propuesto, asignadosPorFila);
 
     return NextResponse.json({
       carga: {
@@ -152,8 +137,8 @@ export async function GET(request: Request) {
         enviadoEn: carga.enviadoEn?.toISOString() ?? null,
         cambios: resumenCambios,
       },
-      original: esAdmin ? original : [],
-      aplicado: visibles,
+      original: originalConAsignaciones,
+      aplicado,
       metricas,
       vendedores: VENDEDORES_ACTUALES,
       resumenEnvio: VENDEDORES_ACTUALES.map((vendedor) => ({

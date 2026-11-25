@@ -2,11 +2,24 @@ export type ClienteRow = {
   fila: number;
   identificacion: string;
   nombreCliente: string;
+  numDocumento: string;
+  fechaEmision: string;
+  fechaVence: string;
+  total: string;
+  ctas: string;
+  abonado: string;
+  cob: string;
+  saldo: string;
+  ven: string;
+  dias: string;
   movil: string;
+  vendedor: string;
+  cuota: string;
+  saldoFecha: string;
+  categoriaOrigen: string;
   provincia: string;
   ciudad: string;
   direccion: string;
-  vendedor: string;
 };
 
 export type CategoriaClienteMarketing =
@@ -55,7 +68,20 @@ export type ColumnaOrdenableMarketing =
   | "Nombre Cliente"
   | "Provincia"
   | "Ciudad"
-  | "Vendedor";
+  | "Vendedor"
+  | "Núm. Documento"
+  | "Fecha Emisión"
+  | "Fecha Vence"
+  | "$ Total"
+  | "# Ctas"
+  | "$ Abonado"
+  | "# Cob"
+  | "$ Saldo"
+  | "# Ven"
+  | "Días"
+  | "$ Cuota"
+  | "Saldo Fecha"
+  | "Categoría (Excel)";
 
 export type OrdenMarketing = {
   columna: ColumnaOrdenableMarketing;
@@ -86,5 +112,6 @@ export type ResumenCambiosMarketing = {
 export type AccionAuditoriaMarketing =
   | "CARGA_SUBIDA"
   | "CARTERA_ENVIADA"
+  | "ASIGNACION_MANUAL_ENVIADA"
   | "CARGA_ELIMINADA"
   | "MANTENIMIENTO";

@@ -11,17 +11,39 @@ const CAMPOS = [
   { campo: "provincia", etiqueta: "Provincia", normalizar: normalizarTexto },
   { campo: "ciudad", etiqueta: "Ciudad", normalizar: normalizarTexto },
   { campo: "direccion", etiqueta: "Dirección", normalizar: normalizarTexto },
+  { campo: "fechaEmision", etiqueta: "Fecha Emisión", normalizar: normalizarTexto },
+  { campo: "fechaVence", etiqueta: "Fecha Vence", normalizar: normalizarTexto },
+  { campo: "total", etiqueta: "$ Total", normalizar: normalizarTexto },
+  { campo: "ctas", etiqueta: "# Ctas", normalizar: normalizarTexto },
+  { campo: "abonado", etiqueta: "$ Abonado", normalizar: normalizarTexto },
+  { campo: "cob", etiqueta: "# Cob", normalizar: normalizarTexto },
+  { campo: "saldo", etiqueta: "$ Saldo", normalizar: normalizarTexto },
+  { campo: "ven", etiqueta: "# Ven", normalizar: normalizarTexto },
+  { campo: "dias", etiqueta: "Días", normalizar: normalizarTexto },
+  { campo: "cuota", etiqueta: "$ Cuota", normalizar: normalizarTexto },
+  { campo: "saldoFecha", etiqueta: "Saldo Fecha", normalizar: normalizarTexto },
+  {
+    campo: "categoriaOrigen",
+    etiqueta: "Categoría",
+    normalizar: normalizarTexto,
+  },
 ] as const;
 
 function valor(fila: ClienteRow, campo: keyof ClienteRow): string {
   return String(fila[campo] ?? "").trim();
 }
 
+function claveComparacion(fila: ClienteRow): string {
+  const base = claveCliente(fila.identificacion, fila.nombreCliente, fila.movil);
+  if (!base || base === "|") return "";
+  return `${base}|${normalizarTexto(fila.numDocumento)}`;
+}
+
 function indice(filas: ClienteRow[]): Map<string, ClienteRow> {
   const mapa = new Map<string, ClienteRow>();
   for (const fila of filas) {
-    const clave = claveCliente(fila.identificacion, fila.nombreCliente, fila.movil);
-    if (clave && clave !== "|" && !mapa.has(clave)) mapa.set(clave, fila);
+    const clave = claveComparacion(fila);
+    if (clave && !mapa.has(clave)) mapa.set(clave, fila);
   }
   return mapa;
 }
@@ -32,7 +54,7 @@ const ORDEN_TIPO: Record<CambioMarketing["tipo"], number> = {
   BAJA: 2,
 };
 
-/** Compara dos carteras completas usando la misma identidad de cliente de la redistribución. */
+/** Compara dos carteras por cliente y número de documento. */
 export function compararCargas(
   anteriores: ClienteRow[],
   nuevas: ClienteRow[],

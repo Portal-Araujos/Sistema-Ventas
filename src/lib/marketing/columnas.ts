@@ -8,6 +8,29 @@ export const COLUMNAS_TABLA = [
   "Ciudad",
   "Dirección",
   "Vendedor",
+  "Núm. Documento",
+  "Fecha Emisión",
+  "Fecha Vence",
+  "$ Total",
+  "# Ctas",
+  "$ Abonado",
+  "# Cob",
+  "$ Saldo",
+  "# Ven",
+  "Días",
+  "$ Cuota",
+  "Saldo Fecha",
+  "Categoría (Excel)",
+] as const;
+
+export const COLUMNAS_TABLA_INICIALES = [
+  "Identificación",
+  "Nombre Cliente",
+  "Móvil",
+  "Provincia",
+  "Ciudad",
+  "Dirección",
+  "Vendedor",
 ] as const;
 
 const EQUIVALENCIAS: Record<string, string[]> = {
@@ -18,6 +41,37 @@ const EQUIVALENCIAS: Record<string, string[]> = {
   Ciudad: ["Ciudad", "Cantón", "Canton"],
   Dirección: ["Dirección", "Direccion", "Domicilio"],
   Vendedor: ["Vendedor", "Asesor", "Comercial"],
+  "Núm. Documento": [
+    "Núm. Documento",
+    "Num. Documento",
+    "Número Documento",
+    "Numero Documento",
+    "Nro. Documento",
+    "Nro Documento",
+    "No. Documento",
+  ],
+  "Fecha Emisión": ["Fecha Emisión", "Fecha Emision", "F. Emisión", "F Emision"],
+  "Fecha Vence": [
+    "Fecha Vence",
+    "Fecha de Vencimiento",
+    "Fecha Vencimiento",
+    "Vencimiento",
+  ],
+  "$ Total": ["$ Total", "$Total", "Total"],
+  "# Ctas": ["# Ctas", "#Ctas", "Ctas", "N Ctas", "No Ctas"],
+  "$ Abonado": ["$ Abonado", "$Abonado", "Abonado", "Total Abonado"],
+  "# Cob": ["# Cob", "#Cob", "Cob", "Cobros"],
+  "$ Saldo": ["$ Saldo", "$Saldo", "Saldo", "Total Saldo"],
+  "# Ven": ["# Ven", "#Ven", "Ven", "Ventas"],
+  Días: ["Días", "Dias", "Día", "Dia"],
+  "$ Cuota": ["$ Cuota", "$Cuota", "Cuota", "Valor Cuota"],
+  "Saldo Fecha": [
+    "Saldo Fecha",
+    "Saldo a la Fecha",
+    "Saldo a Fecha",
+    "Saldo Fecha",
+  ],
+  "Categoría (Excel)": ["Categoría", "Categoria", "Categoría Cliente", "Categoria Cliente"],
 };
 
 export function mapearColumnas(headers: string[]): {

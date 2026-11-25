@@ -12,6 +12,7 @@ import {
   InvalidTicketAttachmentError,
   ticketMessageData,
 } from "@/lib/ticket-uploads";
+import { generarSiguienteCodigoTicket } from "@/lib/tickets/codigo";
 
 export async function GET(request: Request) {
   try {
@@ -387,25 +388,12 @@ export async function POST(request: Request) {
           asignadosData = { connect: asignadosIds.map((id: string) => ({ id })) };
         }
 
-        const ticketsTKT = await prisma.ticketGestion.findMany({
-          where: { codigo: { startsWith: "TKT-" } },
-          select: { codigo: true },
-        });
-
-        let maxNumber = 0;
-        ticketsTKT.forEach((t) => {
-          const numero = parseInt(t.codigo.replace("TKT-", ""));
-          if (!isNaN(numero) && numero > maxNumber) {
-            maxNumber = numero;
-          }
-        });
-
-        let nextNumber = maxNumber + 1;
+        let siguienteCodigo = await generarSiguienteCodigoTicket(prisma);
         let ticketCreado = null;
         let intentos = 0;
 
         while (!ticketCreado && intentos < 10) {
-          const nuevoCodigo = `TKT-${nextNumber.toString().padStart(3, "0")}`;
+          const codigo = siguienteCodigo;
           try {
             ticketCreado = await prisma.$transaction(async (tx) => {
               let prendaOriginal;
@@ -424,7 +412,7 @@ export async function POST(request: Request) {
               const creado = await tx.ticketGestion.create({
               data: {
                 ...(detallePedidoId ? { detallePedidoId, pedidoId, cantidadCambio, motivoCambio, cambioSolicitado, prendaOriginal } : {}),
-                codigo: nuevoCodigo,
+                codigo,
                 tipo: tipo || "General",
                 asunto,
                 prioridad: prioridad || "Media",
@@ -447,7 +435,8 @@ export async function POST(request: Request) {
           } catch (error: any) {
             if (error.code === "P2002") {
               if (detallePedidoId && String(error.meta?.target).includes("detalle_pedido_id")) throw new CambioError("Esta prenda ya tiene un ticket activo", 409);
-              nextNumber++;
+              const numero = Number.parseInt(codigo.replace("TKT-", ""), 10);
+              siguienteCodigo = `TKT-${String(numero + 1).padStart(3, "0")}`;
               intentos++;
             } else {
               throw error;
