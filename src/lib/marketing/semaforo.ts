@@ -132,6 +132,7 @@ export type DatosCargaSemaforo = {
   semanaNumero?: number | null;
   mes?: number | null;
   anio?: number | null;
+  anioMinimoSinContrato?: number | null;
   semana: string;
 };
 
@@ -145,6 +146,7 @@ export type AnalisisCartera = {
     esActiva: boolean;
     totalRegistros: number;
     identificacionesUnicas: number;
+    anioMinimoSinContrato: number | null;
   };
   resumen: ResumenSemaforo;
   indicadores: IndicadoresSemaforo;
@@ -289,9 +291,11 @@ export function analizarCartera(
 ): AnalisisCartera {
   const fechaCorte = fechaCorteDeCarga(carga);
   const fechaCorteMs = fechaCorte.getTime();
+  const anioMinimo = carga.anioMinimoSinContrato ?? null;
 
   const existentes = new Map<GrupoSemaforoId, Set<string>>();
   const reventa = new Map<GrupoSemaforoId, Set<string>>();
+  const contratoFinalizado = new Map<GrupoSemaforoId, Set<string>>();
   const estadoCliente = new Map<
     GrupoSemaforoId,
     Map<string, { tienePendiente: boolean; bloqueado: boolean }>
@@ -300,11 +304,13 @@ export function analizarCartera(
   for (const grupo of GRUPOS_SEMAFORO) {
     existentes.set(grupo.id, new Set());
     reventa.set(grupo.id, new Set());
+    contratoFinalizado.set(grupo.id, new Set());
     estadoCliente.set(grupo.id, new Map());
   }
 
   const existentesGenerales = new Set<string>();
   const reventaGeneral = new Set<string>();
+  const contratoFinalizadoGeneral = new Set<string>();
   const documentos: DocumentoAnalisis[] = [];
   const pagados: DocumentoPagado[] = [];
   const categorias = new Set<string>();
@@ -355,6 +361,10 @@ export function analizarCartera(
       coincidenMontos !== coincidenCuotas;
 
     if (pagado && !inconsistente) {
+      if (anioMinimo !== null && vence && vence.getUTCFullYear() >= anioMinimo) {
+        contratoFinalizado.get(grupo)!.add(idKey);
+        contratoFinalizadoGeneral.add(idKey);
+      }
       pagados.push({
         ...fila,
         cargaId: carga.id,
@@ -404,7 +414,10 @@ export function analizarCartera(
   for (const grupo of GRUPOS_SEMAFORO) {
     const conjunto = new Set<string>();
     for (const [idKey, estado] of estadoCliente.get(grupo.id)!) {
-      if (!estado.bloqueado) {
+      if (
+        !estado.bloqueado &&
+        (anioMinimo === null || contratoFinalizado.get(grupo.id)!.has(idKey))
+      ) {
         conjunto.add(idKey);
         reventaGeneral.add(idKey);
       }
@@ -443,6 +456,7 @@ export function analizarCartera(
       esActiva: carga.activo,
       totalRegistros: carga.totalRegistros,
       identificacionesUnicas: existentesGenerales.size,
+      anioMinimoSinContrato: anioMinimo,
     },
     resumen,
     indicadores: {

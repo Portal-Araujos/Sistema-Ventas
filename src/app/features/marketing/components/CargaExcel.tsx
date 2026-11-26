@@ -9,6 +9,8 @@ import { MESES_DEL_ANIO } from "@/lib/marketing/semana";
 export type ResultadoCarga = {
   cargaId: string;
   totalRegistros: number;
+  descartados?: number;
+  anioMinimoSinContrato?: number | null;
   semana: string;
 };
 
@@ -23,18 +25,25 @@ export default function CargaExcel({ onCargado }: Props) {
   );
   const [mes, setMes] = useState(() => String(new Date().getMonth() + 1));
   const [anio, setAnio] = useState(() => String(new Date().getFullYear()));
+  const [anioMinimoSinContrato, setAnioMinimoSinContrato] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState<ResultadoCarga | null>(null);
 
   const anioActual = new Date().getFullYear();
   const anios = Array.from({ length: 11 }, (_, indice) => anioActual - 5 + indice);
+  const aniosMinimo = Array.from(
+    { length: 21 },
+    (_, indice) => anioActual - 15 + indice,
+  );
 
   const subir = async () => {
     if (!archivo) return;
     const numeroSemana = Number(semana);
     const numeroMes = Number(mes);
     const numeroAnio = Number(anio);
+    const numeroAnioMinimo =
+      anioMinimoSinContrato === "" ? null : Number(anioMinimoSinContrato);
     if (
       !Number.isInteger(numeroSemana) ||
       numeroSemana < 1 ||
@@ -44,7 +53,11 @@ export default function CargaExcel({ onCargado }: Props) {
       numeroMes > 12 ||
       !Number.isInteger(numeroAnio) ||
       numeroAnio < 1900 ||
-      numeroAnio > 2100
+      numeroAnio > 2100 ||
+      (numeroAnioMinimo !== null &&
+        (!Number.isInteger(numeroAnioMinimo) ||
+          numeroAnioMinimo < 1900 ||
+          numeroAnioMinimo > 2100))
     ) {
       setError("Selecciona una semana, mes y año válidos.");
       return;
@@ -58,6 +71,7 @@ export default function CargaExcel({ onCargado }: Props) {
       datos.append("semana", String(numeroSemana));
       datos.append("mes", String(numeroMes));
       datos.append("anio", String(numeroAnio));
+      datos.append("anioMinimoSinContrato", anioMinimoSinContrato);
       const respuesta = await fetch("/api/marketing/carga", {
         method: "POST",
         body: datos,
@@ -138,6 +152,21 @@ export default function CargaExcel({ onCargado }: Props) {
             ))}
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-gray-700">
+          Año mínimo sin contrato
+          <select
+            value={anioMinimoSinContrato}
+            onChange={(evento) => setAnioMinimoSinContrato(evento.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">Sin filtro</option>
+            {aniosMinimo.map((numero) => (
+              <option key={numero} value={numero}>
+                {numero}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       {resultado && (
@@ -146,6 +175,17 @@ export default function CargaExcel({ onCargado }: Props) {
             {resultado.semana} cargada · {resultado.totalRegistros.toLocaleString("es-EC")}{" "}
             registros
           </p>
+          {resultado.descartados ? (
+            <p>
+              {resultado.descartados.toLocaleString("es-EC")} registros descartados
+              (consumidor final)
+            </p>
+          ) : null}
+          {resultado.anioMinimoSinContrato ? (
+            <p>
+              Año mínimo sin contrato: {resultado.anioMinimoSinContrato}
+            </p>
+          ) : null}
           <Link
             href="/marketing/historial"
             className="mt-1 inline-block font-bold text-green-800 underline"

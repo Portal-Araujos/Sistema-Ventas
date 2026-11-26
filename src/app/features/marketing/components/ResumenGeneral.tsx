@@ -46,7 +46,7 @@ export default function ResumenGeneral({ datos }: { datos: SemaforoResponse }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-6">
         <Dato etiqueta="Semana" valor={carga.semana} />
         <Dato etiqueta="Fecha y hora de carga" valor={fechaHora(carga.createdAt)} />
         <Dato etiqueta="Fecha de corte" valor={fecha(carga.fechaCorteISO)} />
@@ -57,6 +57,14 @@ export default function ResumenGeneral({ datos }: { datos: SemaforoResponse }) {
         <Dato
           etiqueta="Identificaciones únicas"
           valor={carga.identificacionesUnicas.toLocaleString("es-EC")}
+        />
+        <Dato
+          etiqueta="Año mínimo sin contrato"
+          valor={
+            carga.anioMinimoSinContrato
+              ? String(carga.anioMinimoSinContrato)
+              : "Sin filtro"
+          }
         />
       </div>
 

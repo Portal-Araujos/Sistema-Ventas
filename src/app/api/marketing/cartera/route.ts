@@ -29,6 +29,25 @@ function tabValida(valor: string): TabSemaforo {
   return "resumen";
 }
 
+function anioMinimoDeAuditoria(detalles: string | null): number | null {
+  if (!detalles) return null;
+  try {
+    const parsed: unknown = JSON.parse(detalles);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    const valor = (parsed as Record<string, unknown>).anioMinimoSinContrato;
+    return typeof valor === "number" &&
+      Number.isInteger(valor) &&
+      valor >= 1900 &&
+      valor <= 2100
+      ? valor
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function aClienteCartera(cliente: {
   fila: number;
   identificacion: string;
@@ -119,12 +138,28 @@ export async function GET(request: Request) {
     const carga = idSolicitado
       ? await prisma.marketingCarga.findUnique({
           where: { id: idSolicitado },
-          include: { clientes: { orderBy: { fila: "asc" } } },
+          include: {
+            clientes: { orderBy: { fila: "asc" } },
+            auditorias: {
+              where: { accion: "CARGA_SUBIDA" },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { detalles: true },
+            },
+          },
         })
       : await prisma.marketingCarga.findFirst({
           where: { activo: true },
           orderBy: { createdAt: "desc" },
-          include: { clientes: { orderBy: { fila: "asc" } } },
+          include: {
+            clientes: { orderBy: { fila: "asc" } },
+            auditorias: {
+              where: { accion: "CARGA_SUBIDA" },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { detalles: true },
+            },
+          },
         });
 
     if (!carga) {
@@ -145,6 +180,9 @@ export async function GET(request: Request) {
       {
         ...carga,
         semana: etiquetaCarga(carga),
+        anioMinimoSinContrato: anioMinimoDeAuditoria(
+          carga.auditorias[0]?.detalles ?? null,
+        ),
       },
       carga.clientes.map(aClienteCartera),
     );

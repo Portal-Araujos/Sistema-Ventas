@@ -35,6 +35,11 @@ export async function POST(request: Request) {
     const semanaNumero = Number(formData.get("semana"));
     const mes = Number(formData.get("mes"));
     const anio = Number(formData.get("anio"));
+    const anioMinimoBruto = formData.get("anioMinimoSinContrato");
+    const anioMinimoSinContrato =
+      anioMinimoBruto === null || anioMinimoBruto === ""
+        ? null
+        : Number(anioMinimoBruto);
     if (
       !Number.isInteger(semanaNumero) ||
       semanaNumero < 1 ||
@@ -51,8 +56,21 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    if (
+      anioMinimoSinContrato !== null &&
+      (!Number.isInteger(anioMinimoSinContrato) ||
+        anioMinimoSinContrato < 1900 ||
+        anioMinimoSinContrato > 2100)
+    ) {
+      return NextResponse.json(
+        { error: "Selecciona un año mínimo sin contrato válido" },
+        { status: 400 },
+      );
+    }
 
-    const { filas, faltantes } = parsearExcel(await archivo.arrayBuffer());
+    const { filas, faltantes, descartados } = parsearExcel(
+      await archivo.arrayBuffer(),
+    );
     if (faltantes.length) {
       return NextResponse.json(
         { error: `Faltan columnas obligatorias: ${faltantes.join(", ")}` },
@@ -126,9 +144,11 @@ export async function POST(request: Request) {
       detalles: {
         cargaId: nuevaCargaId,
         totalRegistros: filas.length,
+        descartados,
         identificacionesUnicas,
         semana: etiqueta,
         fechaCorte: fechaCorteISO,
+        anioMinimoSinContrato,
       },
       usuarioId: session.id,
     });
@@ -137,6 +157,8 @@ export async function POST(request: Request) {
       {
         cargaId: nuevaCargaId,
         totalRegistros: filas.length,
+        descartados,
+        anioMinimoSinContrato,
         semana: etiqueta,
       },
       { status: 201 },
