@@ -6,7 +6,11 @@ import {
   hasPermission,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { etiquetaCarga } from "@/lib/marketing";
+import {
+  aISO,
+  etiquetaCarga,
+  fechaCorteDeCarga,
+} from "@/lib/marketing";
 
 function parsearDetalles(valor: string | null): Record<string, unknown> | null {
   if (!valor) return null;
@@ -59,17 +63,45 @@ export async function GET() {
       },
     });
 
+    const detallesCargas = await prisma.marketingAuditoria.findMany({
+      where: { accion: "CARGA_SUBIDA", cargaId: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { cargaId: true, detalles: true },
+    });
+    const datosPorCarga = new Map<
+      string,
+      { fechaCorte: string | null; identificacionesUnicas: number | null }
+    >();
+    for (const registro of detallesCargas) {
+      if (!registro.cargaId || datosPorCarga.has(registro.cargaId)) continue;
+      const detalles = parsearDetalles(registro.detalles);
+      datosPorCarga.set(registro.cargaId, {
+        fechaCorte:
+          typeof detalles?.fechaCorte === "string" ? detalles.fechaCorte : null,
+        identificacionesUnicas:
+          typeof detalles?.identificacionesUnicas === "number"
+            ? detalles.identificacionesUnicas
+            : null,
+      });
+    }
+
     return NextResponse.json({
-      cargas: cargas.map((carga) => ({
-        id: carga.id,
-        nombreArchivo: carga.nombreArchivo,
-        activo: carga.activo,
-        totalRegistros: carga.totalRegistros,
-        clientes: carga._count.clientes,
-        createdAt: carga.createdAt.toISOString(),
-        creadoPor: carga.creadoPor.nombre,
-        semana: etiquetaCarga(carga),
-      })),
+      cargas: cargas.map((carga) => {
+        const guardado = datosPorCarga.get(carga.id);
+        return {
+          id: carga.id,
+          nombreArchivo: carga.nombreArchivo,
+          activo: carga.activo,
+          totalRegistros: carga.totalRegistros,
+          clientes: carga._count.clientes,
+          createdAt: carga.createdAt.toISOString(),
+          creadoPor: carga.creadoPor.nombre,
+          semana: etiquetaCarga(carga),
+          fechaCorte:
+            guardado?.fechaCorte ?? aISO(fechaCorteDeCarga(carga)),
+          identificacionesUnicas: guardado?.identificacionesUnicas ?? null,
+        };
+      }),
       auditorias: auditorias.map((auditoria) => ({
         id: auditoria.id,
         accion: auditoria.accion,

@@ -1,4 +1,19 @@
-import type { ClienteCartera } from "@/lib/marketing";
+import type {
+  AnalisisCartera,
+  DocumentoAnalisis,
+  DocumentoPagado,
+  FiltrosSemaforo,
+  IndicadoresSemaforo,
+  ResumenSemaforo,
+  TabSemaforo,
+} from "@/lib/marketing";
+
+export type {
+  DocumentoAnalisis,
+  DocumentoPagado,
+  FiltrosSemaforo,
+  TabSemaforo,
+};
 
 export type CargaDisponible = {
   id: string;
@@ -7,6 +22,8 @@ export type CargaDisponible = {
   semana: string;
   activo: boolean;
 };
+
+export type CarteraCarga = AnalisisCartera["carga"];
 
 export type HistorialCarga = {
   id: string;
@@ -17,6 +34,8 @@ export type HistorialCarga = {
   createdAt: string;
   creadoPor: string;
   semana: string;
+  fechaCorte: string | null;
+  identificacionesUnicas: number | null;
 };
 
 export type AuditoriaMarketing = {
@@ -33,15 +52,18 @@ export type HistorialResponse = {
   auditorias: AuditoriaMarketing[];
 };
 
-export type CarteraResponse = {
-  carga: {
-    id: string;
-    nombreArchivo: string;
-    createdAt: string;
-    semana: string;
-    esActiva: boolean;
-    totalRegistros: number;
-  } | null;
-  clientes: ClienteCartera[];
+export type SemaforoResponse = {
+  carga: CarteraCarga | null;
   cargasDisponibles: CargaDisponible[];
+  resumen: ResumenSemaforo;
+  indicadores: IndicadoresSemaforo;
+  documentos: DocumentoAnalisis[];
+  totalDocumentos: number;
+  pagina: number;
+  porPagina: number;
+  categorias: string[];
+};
+
+export type DocumentosPagadosResponse = {
+  documentos: DocumentoPagado[];
 };

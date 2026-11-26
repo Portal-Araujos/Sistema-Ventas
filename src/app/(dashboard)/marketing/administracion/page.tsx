@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { History, Settings } from "lucide-react";
 import { Allowed } from "@/components/shared/PermissionsProvider";
-import CarteraAdmin from "@/app/features/marketing/components/CarteraAdmin";
+import SemaforoAdmin from "@/app/features/marketing/components/SemaforoAdmin";
 
 export default function AdministracionMarketingPage() {
   return (
@@ -15,7 +15,7 @@ export default function AdministracionMarketingPage() {
               <Settings className="text-primary" /> Administración de Marketing
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Carga y consulta de cartera.
+              Semaforización de cartera y oportunidades de reventa.
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -27,7 +27,7 @@ export default function AdministracionMarketingPage() {
             </Link>
           </div>
         </div>
-        <CarteraAdmin />
+        <SemaforoAdmin />
       </div>
     </Allowed>
   );

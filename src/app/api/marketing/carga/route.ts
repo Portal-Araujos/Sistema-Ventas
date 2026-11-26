@@ -6,7 +6,13 @@ import {
   hasPermission,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { etiquetaCarga, parsearExcel } from "@/lib/marketing";
+import {
+  aISO,
+  claveIdentificacion,
+  etiquetaCarga,
+  fechaCorteDeCarga,
+  parsearExcel,
+} from "@/lib/marketing";
 import { registrarAuditoriaMarketing } from "@/lib/marketing/auditoria";
 
 const MAX_TAMANO = 10 * 1024 * 1024;
@@ -106,14 +112,23 @@ export async function POST(request: Request) {
     });
 
     const etiqueta = etiquetaCarga({ semanaNumero, mes, anio, createdAt: fechaCarga });
+    const fechaCorteISO = aISO(
+      fechaCorteDeCarga({ semanaNumero, mes, anio, createdAt: fechaCarga }),
+    );
+    const identificacionesUnicas = new Set(
+      filas.map((fila) => claveIdentificacion(fila.identificacion)),
+    ).size;
 
     await registrarAuditoriaMarketing({
       accion: "CARGA_SUBIDA",
       cargaId: nuevaCargaId,
       nombreArchivo: archivo.name.slice(0, 255),
       detalles: {
+        cargaId: nuevaCargaId,
         totalRegistros: filas.length,
+        identificacionesUnicas,
         semana: etiqueta,
+        fechaCorte: fechaCorteISO,
       },
       usuarioId: session.id,
     });

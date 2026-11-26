@@ -148,6 +148,8 @@ export default function HistorialAuditoria() {
             <thead className="border-b border-gray-200 text-xs text-gray-500">
               <tr>
                 <th className="p-3 text-left">Semana</th>
+                <th className="p-3 text-left">Corte</th>
+                <th className="p-3 text-left">IDs únicos</th>
                 <th className="p-3 text-left">Archivo</th>
                 <th className="p-3 text-left">Subida</th>
                 <th className="p-3 text-left">Por</th>
@@ -161,6 +163,14 @@ export default function HistorialAuditoria() {
                 <tr key={carga.id} className="border-b border-gray-100">
                   <td className="p-3 text-xs font-semibold text-gray-700">
                     {carga.semana}
+                  </td>
+                  <td className="p-3 text-xs text-gray-600">
+                    {carga.fechaCorte ?? "—"}
+                  </td>
+                  <td className="p-3 text-xs text-gray-600">
+                    {carga.identificacionesUnicas !== null
+                      ? carga.identificacionesUnicas.toLocaleString("es-EC")
+                      : "—"}
                   </td>
                   <td className="p-3 font-medium text-gray-800">
                     {carga.nombreArchivo}
@@ -202,7 +212,7 @@ export default function HistorialAuditoria() {
               ))}
               {!datos?.cargas.length && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-sm text-gray-500">
+                  <td colSpan={9} className="p-6 text-center text-sm text-gray-500">
                     No hay cargas registradas.
                   </td>
                 </tr>
@@ -218,10 +228,21 @@ export default function HistorialAuditoria() {
           <div className="flex flex-col gap-2">
             {(datos?.auditorias ?? []).map((auditoria) => {
               const detalles = auditoria.detalles;
-              const resumen =
-                auditoria.accion === "CARGA_SUBIDA" && detalles
-                  ? ` · ${numero(detalles.totalRegistros).toLocaleString("es-EC")} registros`
-                  : "";
+              const partes: string[] = [];
+              if (auditoria.accion === "CARGA_SUBIDA" && detalles) {
+                partes.push(
+                  `${numero(detalles.totalRegistros).toLocaleString("es-EC")} registros`,
+                );
+                if (typeof detalles.fechaCorte === "string") {
+                  partes.push(`Corte ${detalles.fechaCorte}`);
+                }
+                if (typeof detalles.identificacionesUnicas === "number") {
+                  partes.push(
+                    `${detalles.identificacionesUnicas.toLocaleString("es-EC")} IDs únicos`,
+                  );
+                }
+              }
+              const resumen = partes.length ? ` · ${partes.join(" · ")}` : "";
               return (
                 <div
                   key={auditoria.id}

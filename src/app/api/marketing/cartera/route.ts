@@ -6,7 +6,76 @@ import {
   hasPermission,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { etiquetaCarga, type ClienteCartera } from "@/lib/marketing";
+import {
+  analizarCartera,
+  etiquetaCarga,
+  filtrarDocumentos,
+  FILTROS_SEMAFORO_VACIOS,
+  GRUPOS_SEMAFORO,
+  ordenarDocumentos,
+  resumenVacio,
+  type ClienteCartera,
+  type FiltrosSemaforo,
+  type TabSemaforo,
+} from "@/lib/marketing";
+
+const POR_PAGINA = 50;
+
+function tabValida(valor: string): TabSemaforo {
+  if (valor === "resumen" || valor === "general") return valor;
+  if (GRUPOS_SEMAFORO.some((grupo) => grupo.id === valor)) {
+    return valor as TabSemaforo;
+  }
+  return "resumen";
+}
+
+function aClienteCartera(cliente: {
+  fila: number;
+  identificacion: string;
+  nombreCliente: string;
+  numDocumento: string;
+  fechaEmision: string;
+  fechaVence: string;
+  total: string;
+  ctas: string;
+  abonado: string;
+  cob: string;
+  saldo: string;
+  ven: string;
+  dias: string;
+  movil: string;
+  vendedor: string;
+  cuota: string;
+  saldoFecha: string;
+  categoriaOrigen: string;
+  provincia: string;
+  ciudad: string;
+  direccion: string;
+}): ClienteCartera {
+  return {
+    fila: cliente.fila,
+    identificacion: cliente.identificacion,
+    nombreCliente: cliente.nombreCliente,
+    numDocumento: cliente.numDocumento,
+    fechaEmision: cliente.fechaEmision,
+    fechaVence: cliente.fechaVence,
+    total: cliente.total,
+    ctas: cliente.ctas,
+    abonado: cliente.abonado,
+    cob: cliente.cob,
+    saldo: cliente.saldo,
+    ven: cliente.ven,
+    dias: cliente.dias,
+    movil: cliente.movil,
+    vendedor: cliente.vendedor,
+    cuota: cliente.cuota,
+    saldoFecha: cliente.saldoFecha,
+    categoriaOrigen: cliente.categoriaOrigen,
+    provincia: cliente.provincia,
+    ciudad: cliente.ciudad,
+    direccion: cliente.direccion,
+  };
+}
 
 export async function GET(request: Request) {
   const session = await getApiSession();
@@ -14,6 +83,18 @@ export async function GET(request: Request) {
   if (!hasPermission(session, "marketing:administrar")) return forbiddenResponse();
 
   try {
+    const params = new URL(request.url).searchParams;
+    const tab = tabValida(params.get("tab") || "resumen");
+    const paginaSolicitada = Number(params.get("pagina"));
+    const pagina =
+      Number.isInteger(paginaSolicitada) && paginaSolicitada > 0
+        ? paginaSolicitada
+        : 1;
+    const filtros: FiltrosSemaforo = { ...FILTROS_SEMAFORO_VACIOS };
+    for (const clave of Object.keys(filtros) as (keyof FiltrosSemaforo)[]) {
+      filtros[clave] = params.get(clave) ?? "";
+    }
+
     const cargasDisponibles = await prisma.marketingCarga.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -34,7 +115,7 @@ export async function GET(request: Request) {
       activo: carga.activo,
     }));
 
-    const idSolicitado = new URL(request.url).searchParams.get("cargaId") || "";
+    const idSolicitado = params.get("cargaId") || "";
     const carga = idSolicitado
       ? await prisma.marketingCarga.findUnique({
           where: { id: idSolicitado },
@@ -49,49 +130,45 @@ export async function GET(request: Request) {
     if (!carga) {
       return NextResponse.json({
         carga: null,
-        clientes: [],
         cargasDisponibles: listaCargas,
+        resumen: resumenVacio(),
+        indicadores: { clientesUnicos: 0, oportunidadesReventa: 0 },
+        documentos: [],
+        totalDocumentos: 0,
+        pagina: 1,
+        porPagina: POR_PAGINA,
+        categorias: [],
       });
     }
 
-    const clientes: ClienteCartera[] = carga.clientes.map((cliente) => ({
-      fila: cliente.fila,
-      identificacion: cliente.identificacion,
-      nombreCliente: cliente.nombreCliente,
-      numDocumento: cliente.numDocumento,
-      fechaEmision: cliente.fechaEmision,
-      fechaVence: cliente.fechaVence,
-      total: cliente.total,
-      ctas: cliente.ctas,
-      abonado: cliente.abonado,
-      cob: cliente.cob,
-      saldo: cliente.saldo,
-      ven: cliente.ven,
-      dias: cliente.dias,
-      movil: cliente.movil,
-      vendedor: cliente.vendedor,
-      cuota: cliente.cuota,
-      saldoFecha: cliente.saldoFecha,
-      categoriaOrigen: cliente.categoriaOrigen,
-      provincia: cliente.provincia,
-      ciudad: cliente.ciudad,
-      direccion: cliente.direccion,
-    }));
+    const analisis = analizarCartera(
+      {
+        ...carga,
+        semana: etiquetaCarga(carga),
+      },
+      carga.clientes.map(aClienteCartera),
+    );
+
+    const filtradas = ordenarDocumentos(
+      filtrarDocumentos(analisis.documentos, filtros, tab),
+    );
 
     return NextResponse.json({
-      carga: {
-        id: carga.id,
-        nombreArchivo: carga.nombreArchivo,
-        createdAt: carga.createdAt.toISOString(),
-        semana: etiquetaCarga(carga),
-        esActiva: carga.activo,
-        totalRegistros: carga.totalRegistros,
-      },
-      clientes,
+      carga: analisis.carga,
       cargasDisponibles: listaCargas,
+      resumen: analisis.resumen,
+      indicadores: analisis.indicadores,
+      documentos: filtradas.slice(
+        (pagina - 1) * POR_PAGINA,
+        pagina * POR_PAGINA,
+      ),
+      totalDocumentos: filtradas.length,
+      pagina,
+      porPagina: POR_PAGINA,
+      categorias: analisis.categorias,
     });
   } catch (error) {
-    console.error("Error consultando cartera de Marketing:", error);
+    console.error("Error consultando semaforización de Marketing:", error);
     return NextResponse.json({ error: "No se pudo cargar la cartera" }, { status: 500 });
   }
 }
