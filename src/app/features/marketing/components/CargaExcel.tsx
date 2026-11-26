@@ -10,10 +10,6 @@ export type ResultadoCarga = {
   cargaId: string;
   totalRegistros: number;
   semana: string;
-  altas: number;
-  bajas: number;
-  cambios: number;
-  total: number;
 };
 
 type Props = {
@@ -95,7 +91,7 @@ export default function CargaExcel({ onCargado }: Props) {
           />
         </label>
         {archivo && <span className="text-sm text-gray-600">{archivo.name}</span>}
-        <Button type="button" onClick={subir} disabled={!archivo || cargando}>
+        <Button type="button" onClick={() => void subir()} disabled={!archivo || cargando}>
           {cargando ? "Procesando…" : "Cargar cartera"}
         </Button>
       </div>
@@ -150,16 +146,11 @@ export default function CargaExcel({ onCargado }: Props) {
             {resultado.semana} cargada · {resultado.totalRegistros.toLocaleString("es-EC")}{" "}
             registros
           </p>
-          <p className="mt-1">
-            {resultado.altas.toLocaleString("es-EC")} altas ·{" "}
-            {resultado.bajas.toLocaleString("es-EC")} bajas ·{" "}
-            {resultado.cambios.toLocaleString("es-EC")} cambios en datos
-          </p>
           <Link
-            href={`/marketing/historial?carga=${encodeURIComponent(resultado.cargaId)}`}
+            href="/marketing/historial"
             className="mt-1 inline-block font-bold text-green-800 underline"
           >
-            Ver comparación con la semana anterior
+            Ver historial de cargas
           </Link>
         </div>
       )}

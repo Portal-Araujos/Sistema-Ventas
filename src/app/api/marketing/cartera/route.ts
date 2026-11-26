@@ -6,25 +6,7 @@ import {
   hasPermission,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import {
-  aplicarAsignacionesPersistidas,
-  canonizarVendedor,
-  etiquetaCarga,
-  redistribuirClientes,
-  resumenVacio,
-  VENDEDORES_ACTUALES,
-  type ClienteRow,
-  type MetricasMarketing,
-  type ResumenCambiosMarketing,
-} from "@/lib/marketing";
-
-const METRICAS_VACIAS: MetricasMarketing = {
-  registrosLeidos: 0,
-  clientesHistoricos: 0,
-  nuevasRelaciones: 0,
-  yaEstabanAsignados: 0,
-  pendientesRevision: 0,
-};
+import { etiquetaCarga, type ClienteCartera } from "@/lib/marketing";
 
 export async function GET(request: Request) {
   const session = await getApiSession();
@@ -67,30 +49,12 @@ export async function GET(request: Request) {
     if (!carga) {
       return NextResponse.json({
         carga: null,
-        original: [],
-        aplicado: [],
-        metricas: METRICAS_VACIAS,
-        vendedores: VENDEDORES_ACTUALES,
-        resumenEnvio: [],
+        clientes: [],
         cargasDisponibles: listaCargas,
       });
     }
 
-    const conteos = await prisma.marketingCambio.groupBy({
-      by: ["tipo"],
-      where: { cargaId: carga.id },
-      _count: { _all: true },
-    });
-    const resumenCambios: ResumenCambiosMarketing = resumenVacio();
-    for (const conteo of conteos) {
-      const cantidad = conteo._count._all;
-      if (conteo.tipo === "ALTA") resumenCambios.altas = cantidad;
-      if (conteo.tipo === "BAJA") resumenCambios.bajas = cantidad;
-      if (conteo.tipo === "CAMBIO") resumenCambios.cambios = cantidad;
-      resumenCambios.total += cantidad;
-    }
-
-    const filas: ClienteRow[] = carga.clientes.map((cliente) => ({
+    const clientes: ClienteCartera[] = carga.clientes.map((cliente) => ({
       fila: cliente.fila,
       identificacion: cliente.identificacion,
       nombreCliente: cliente.nombreCliente,
@@ -113,18 +77,6 @@ export async function GET(request: Request) {
       ciudad: cliente.ciudad,
       direccion: cliente.direccion,
     }));
-    const asignadosPorFila = new Map<number, string>();
-    for (const cliente of carga.clientes) {
-      const canonico = canonizarVendedor(cliente.vendedorAsignado);
-      if (canonico) asignadosPorFila.set(cliente.fila, canonico);
-    }
-
-    const { original, aplicado: propuesto, metricas } = redistribuirClientes(filas);
-    const originalConAsignaciones = aplicarAsignacionesPersistidas(
-      original,
-      asignadosPorFila,
-    );
-    const aplicado = aplicarAsignacionesPersistidas(propuesto, asignadosPorFila);
 
     return NextResponse.json({
       carga: {
@@ -134,19 +86,8 @@ export async function GET(request: Request) {
         semana: etiquetaCarga(carga),
         esActiva: carga.activo,
         totalRegistros: carga.totalRegistros,
-        enviadoEn: carga.enviadoEn?.toISOString() ?? null,
-        cambios: resumenCambios,
       },
-      original: originalConAsignaciones,
-      aplicado,
-      metricas,
-      vendedores: VENDEDORES_ACTUALES,
-      resumenEnvio: VENDEDORES_ACTUALES.map((vendedor) => ({
-        vendedor,
-        clientes: carga.clientes.filter(
-          (cliente) => canonizarVendedor(cliente.vendedorAsignado) === vendedor,
-        ).length,
-      })),
+      clientes,
       cargasDisponibles: listaCargas,
     });
   } catch (error) {

@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import {
   buscarClientes,
   COLUMNAS_TABLA,
   ordenarClientes,
-  type ClienteDistribuido,
+  type ClienteCartera,
   type ColumnaOrdenableMarketing,
   type OrdenMarketing,
 } from "@/lib/marketing";
@@ -20,13 +20,14 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 
-const POR_COLUMNA: Record<string, keyof ClienteDistribuido> = {
+const POR_COLUMNA: Record<string, keyof ClienteCartera> = {
   "Identificación": "identificacion",
   "Nombre Cliente": "nombreCliente",
   "Móvil": "movil",
   "Provincia": "provincia",
   "Ciudad": "ciudad",
   "Dirección": "direccion",
+  "Vendedor": "vendedor",
   "Núm. Documento": "numDocumento",
   "Fecha Emisión": "fechaEmision",
   "Fecha Vence": "fechaVence",
@@ -64,28 +65,15 @@ const COLUMNAS_ORDENABLES = new Set<string>([
 ]);
 
 type Props = {
-  filas: ClienteDistribuido[];
-  columnasVisibles: Set<string>;
-  distribucionAplicada: boolean;
+  filas: ClienteCartera[];
   claveVista: string;
-  consulta: string;
-  onConsultaChange: (valor: string) => void;
-  orden: OrdenMarketing | null;
-  onOrdenChange: (orden: OrdenMarketing | null) => void;
 };
 
-export default function TablaClientes({
-  filas,
-  columnasVisibles,
-  distribucionAplicada,
-  claveVista,
-  consulta,
-  onConsultaChange,
-  orden,
-  onOrdenChange,
-}: Props) {
-  const claveOrden = orden ? `${orden.columna}|${orden.direccion}` : "";
+export default function TablaClientes({ filas, claveVista }: Props) {
+  const [consulta, setConsulta] = useState("");
+  const [orden, setOrden] = useState<OrdenMarketing | null>(null);
   const [pagina, setPagina] = useState(1);
+  const claveOrden = orden ? `${orden.columna}|${orden.direccion}` : "";
   const [firmaAnterior, setFirmaAnterior] = useState({
     consulta,
     claveVista,
@@ -104,15 +92,14 @@ export default function TablaClientes({
   const alternarOrden = (columna: string) => {
     const destino = columna as ColumnaOrdenableMarketing;
     if (!orden || orden.columna !== destino) {
-      onOrdenChange({ columna: destino, direccion: "asc" });
+      setOrden({ columna: destino, direccion: "asc" });
     } else if (orden.direccion === "asc") {
-      onOrdenChange({ columna: destino, direccion: "desc" });
+      setOrden({ columna: destino, direccion: "desc" });
     } else {
-      onOrdenChange(null);
+      setOrden(null);
     }
   };
 
-  const columnas = COLUMNAS_TABLA.filter((columna) => columnasVisibles.has(columna));
   const filtradas = useMemo(() => buscarClientes(filas, consulta), [filas, consulta]);
   const ordenadas = useMemo(
     () => ordenarClientes(filtradas, orden),
@@ -125,29 +112,6 @@ export default function TablaClientes({
     pagina * TAMANO_PAGINA,
   );
 
-  const valor = (fila: ClienteDistribuido, columna: string): ReactNode => {
-    if (columna === "Vendedor") {
-      if (
-        distribucionAplicada &&
-        fila.vendedorAsignado &&
-        fila.vendedorAsignado !== fila.vendedorOriginal
-      ) {
-        return (
-          <span className="flex flex-wrap items-center gap-1">
-            <span className="text-gray-500">{fila.vendedorOriginal || "—"}</span>
-            <span aria-hidden="true">→</span>
-            <span className="font-semibold text-green-700">
-              {fila.vendedorAsignado}
-            </span>
-          </span>
-        );
-      }
-      return distribucionAplicada ? fila.vendedorAsignado : fila.vendedorOriginal;
-    }
-    const clave = POR_COLUMNA[columna];
-    return clave ? String(fila[clave] ?? "") : "";
-  };
-
   return (
     <div className="rounded-xl border border-gray-200 bg-white">
       <div className="flex flex-col gap-2 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -156,7 +120,7 @@ export default function TablaClientes({
         </p>
         <Input
           value={consulta}
-          onChange={(evento) => onConsultaChange(evento.target.value)}
+          onChange={(evento) => setConsulta(evento.target.value)}
           placeholder="Buscar por cliente, documento, vendedor o cualquier dato de la cartera"
           className="sm:w-80"
         />
@@ -164,13 +128,15 @@ export default function TablaClientes({
 
       {visibles.length === 0 ? (
         <p className="p-8 text-center text-sm text-gray-500">
-          Ningún registro coincide con los filtros o la búsqueda.
+          {filas.length === 0
+            ? "No hay una cartera cargada para mostrar."
+            : "Ningún registro coincide con la búsqueda."}
         </p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              {columnas.map((columna) => {
+              {COLUMNAS_TABLA.map((columna) => {
                 const ordenable = COLUMNAS_ORDENABLES.has(columna);
                 const activa = orden?.columna === columna;
                 const direccion = activa ? orden?.direccion : undefined;
@@ -222,12 +188,16 @@ export default function TablaClientes({
           </TableHeader>
           <TableBody>
             {visibles.map((fila) => (
-              <TableRow key={`${fila.fila}-${fila.claveCliente}`}>
-                {columnas.map((columna) => (
-                  <TableCell key={columna} className="max-w-xs truncate">
-                    {valor(fila, columna) || "—"}
-                  </TableCell>
-                ))}
+              <TableRow key={`${fila.fila}-${fila.numDocumento}-${fila.identificacion}`}>
+                {COLUMNAS_TABLA.map((columna) => {
+                  const clave = POR_COLUMNA[columna];
+                  const valor = clave ? fila[clave] ?? "" : "";
+                  return (
+                    <TableCell key={columna} className="max-w-xs truncate">
+                      {String(valor) || "—"}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>

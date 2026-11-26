@@ -14,18 +14,6 @@ export function normalizarTexto(valor: unknown): string {
     .trim();
 }
 
-export function claveVendedor(valor: unknown): string {
-  return normalizarTexto(valor)
-    .split(" ")
-    .filter(Boolean)
-    .sort()
-    .join(" ");
-}
-
-export function claveUbicacion(valor: unknown): string {
-  return normalizarTexto(valor);
-}
-
 export function limpiarTelefono(valor: unknown): string {
   if (valor === null || valor === undefined) return "";
   const texto =
@@ -34,14 +22,4 @@ export function limpiarTelefono(valor: unknown): string {
       : String(valor).trim();
   const digitos = texto.replace(/\D/g, "");
   return digitos.length === 9 ? `0${digitos}` : digitos;
-}
-
-export function claveCliente(
-  identificacion: unknown,
-  nombreCliente: unknown,
-  movil: unknown,
-): string {
-  const id = normalizarTexto(identificacion).replace(/\s+/g, "");
-  if (id) return id;
-  return `${normalizarTexto(nombreCliente)}|${limpiarTelefono(movil)}`;
 }

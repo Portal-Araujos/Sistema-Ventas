@@ -15,7 +15,7 @@ export default function HistorialMarketingPage() {
               <History className="text-primary" /> Historial y auditoría
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Cargas subidas, envíos y limpiezas de Marketing.
+              Cargas subidas y mantenimiento de Marketing.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-4">

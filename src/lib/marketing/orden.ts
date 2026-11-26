@@ -1,15 +1,15 @@
 import { normalizarTexto } from "./normalize";
 import type {
-  ClienteDistribuido,
+  ClienteCartera,
   ColumnaOrdenableMarketing,
   OrdenMarketing,
 } from "./types";
 
-const VALOR_COLUMNA: Record<ColumnaOrdenableMarketing, keyof ClienteDistribuido> = {
+const VALOR_COLUMNA: Record<ColumnaOrdenableMarketing, keyof ClienteCartera> = {
   "Nombre Cliente": "nombreCliente",
   Provincia: "provincia",
   Ciudad: "ciudad",
-  Vendedor: "vendedorOriginal",
+  Vendedor: "vendedor",
   "Núm. Documento": "numDocumento",
   "Fecha Emisión": "fechaEmision",
   "Fecha Vence": "fechaVence",
@@ -25,12 +25,12 @@ const VALOR_COLUMNA: Record<ColumnaOrdenableMarketing, keyof ClienteDistribuido>
   "Categoría (Excel)": "categoriaOrigen",
 };
 
-const CAMPOS_FECHA = new Set<keyof ClienteDistribuido>([
+const CAMPOS_FECHA = new Set<keyof ClienteCartera>([
   "fechaEmision",
   "fechaVence",
 ]);
 
-const CAMPOS_NUMERO = new Set<keyof ClienteDistribuido>([
+const CAMPOS_NUMERO = new Set<keyof ClienteCartera>([
   "total",
   "ctas",
   "abonado",
@@ -60,8 +60,8 @@ function numeroParaOrden(valor: string): number | null {
 }
 
 function valorParaOrden(
-  fila: ClienteDistribuido,
-  columna: keyof ClienteDistribuido,
+  fila: ClienteCartera,
+  columna: keyof ClienteCartera,
 ): string | number {
   const valor = String(fila[columna] ?? "");
   if (CAMPOS_FECHA.has(columna)) return fechaParaOrden(valor) ?? valor;
@@ -70,9 +70,9 @@ function valorParaOrden(
 }
 
 export function ordenarClientes(
-  filas: ClienteDistribuido[],
+  filas: ClienteCartera[],
   orden: OrdenMarketing | null,
-): ClienteDistribuido[] {
+): ClienteCartera[] {
   if (!orden) return filas;
 
   const columna = VALOR_COLUMNA[orden.columna];

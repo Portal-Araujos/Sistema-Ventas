@@ -602,12 +602,10 @@ model MarketingCarga {
   creadoPorId    String             @map("creado_por_id")
   creadoPor      Usuario            @relation(fields: [creadoPorId], references: [id])
   createdAt      DateTime           @default(now()) @map("created_at")
-  enviadoEn      DateTime?          @map("enviado_en")
   semanaNumero   Int?               @map("semana_numero")
   mes            Int?
   anio           Int?
   clientes       MarketingCliente[]
-  cambios        MarketingCambio[]
   auditorias     MarketingAuditoria[] @relation("AuditoriasMarketingCarga")
   @@map("marketing_cargas")
   @@index([activo, createdAt])
@@ -638,26 +636,8 @@ model MarketingCliente {
   provincia        String
   ciudad           String
   direccion        String
-  vendedorAsignado String?        @map("vendedor_asignado")
   @@map("marketing_clientes")
   @@index([cargaId])
-  @@index([cargaId, vendedorAsignado])
-}
-
-model MarketingCambio {
-  id            String         @id @default(uuid())
-  cargaId       String         @map("carga_id")
-  carga         MarketingCarga @relation(fields: [cargaId], references: [id], onDelete: Cascade)
-  claveCliente  String         @map("clave_cliente")
-  identificacion String
-  nombreCliente  String         @map("nombre_cliente")
-  tipo          String
-  campo         String?
-  valorAnterior String?        @map("valor_anterior")
-  valorNuevo    String?        @map("valor_nuevo")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  @@map("marketing_cambios")
-  @@index([cargaId, tipo])
 }
 
 model MarketingAuditoria {

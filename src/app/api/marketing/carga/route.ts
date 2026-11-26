@@ -6,12 +6,7 @@ import {
   hasPermission,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import {
-  compararCargas,
-  etiquetaCarga,
-  parsearExcel,
-  type ClienteRow,
-} from "@/lib/marketing";
+import { etiquetaCarga, parsearExcel } from "@/lib/marketing";
 import { registrarAuditoriaMarketing } from "@/lib/marketing/auditoria";
 
 const MAX_TAMANO = 10 * 1024 * 1024;
@@ -62,62 +57,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El archivo no contiene registros" }, { status: 400 });
     }
 
-    const anterior = await prisma.marketingCarga.findFirst({
-      where: { activo: true },
-      orderBy: { createdAt: "desc" },
-      select: {
-        clientes: {
-          select: {
-            fila: true,
-            identificacion: true,
-            nombreCliente: true,
-            numDocumento: true,
-            fechaEmision: true,
-            fechaVence: true,
-            total: true,
-            ctas: true,
-            abonado: true,
-            cob: true,
-            saldo: true,
-            ven: true,
-            dias: true,
-            movil: true,
-            vendedor: true,
-            cuota: true,
-            saldoFecha: true,
-            categoriaOrigen: true,
-            provincia: true,
-            ciudad: true,
-            direccion: true,
-          },
-        },
-      },
-    });
-    const anteriores: ClienteRow[] = (anterior?.clientes ?? []).map((cliente) => ({
-      fila: cliente.fila,
-      identificacion: cliente.identificacion,
-      nombreCliente: cliente.nombreCliente,
-      numDocumento: cliente.numDocumento,
-      fechaEmision: cliente.fechaEmision,
-      fechaVence: cliente.fechaVence,
-      total: cliente.total,
-      ctas: cliente.ctas,
-      abonado: cliente.abonado,
-      cob: cliente.cob,
-      saldo: cliente.saldo,
-      ven: cliente.ven,
-      dias: cliente.dias,
-      movil: cliente.movil,
-      vendedor: cliente.vendedor,
-      cuota: cliente.cuota,
-      saldoFecha: cliente.saldoFecha,
-      categoriaOrigen: cliente.categoriaOrigen,
-      provincia: cliente.provincia,
-      ciudad: cliente.ciudad,
-      direccion: cliente.direccion,
-    }));
-    const { cambios, resumen } = compararCargas(anteriores, filas);
-
     let nuevaCargaId = "";
     let fechaCarga = new Date();
     await prisma.$transaction(async (tx) => {
@@ -159,23 +98,13 @@ export async function POST(request: Request) {
               direccion: fila.direccion,
             })),
           },
-          cambios: {
-            create: cambios.map((cambio) => ({
-              claveCliente: cambio.claveCliente,
-              identificacion: cambio.identificacion,
-              nombreCliente: cambio.nombreCliente,
-              tipo: cambio.tipo,
-              campo: cambio.campo,
-              valorAnterior: cambio.valorAnterior,
-              valorNuevo: cambio.valorNuevo,
-            })),
-          },
         },
         select: { id: true, createdAt: true },
       });
       nuevaCargaId = nueva.id;
       fechaCarga = nueva.createdAt;
     });
+
     const etiqueta = etiquetaCarga({ semanaNumero, mes, anio, createdAt: fechaCarga });
 
     await registrarAuditoriaMarketing({
@@ -185,7 +114,6 @@ export async function POST(request: Request) {
       detalles: {
         totalRegistros: filas.length,
         semana: etiqueta,
-        ...resumen,
       },
       usuarioId: session.id,
     });
@@ -195,7 +123,6 @@ export async function POST(request: Request) {
         cargaId: nuevaCargaId,
         totalRegistros: filas.length,
         semana: etiqueta,
-        ...resumen,
       },
       { status: 201 },
     );
