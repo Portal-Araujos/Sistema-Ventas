@@ -7,3 +7,4 @@ export * from "./orden";
 export * from "./semana";
 export * from "./auditoria";
 export * from "./semaforo";
+export * from "./envios";

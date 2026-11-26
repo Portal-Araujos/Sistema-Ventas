@@ -29,7 +29,12 @@ export const GRUPOS_SEMAFORO = [
 ] as const;
 
 export type GrupoSemaforoId = (typeof GRUPOS_SEMAFORO)[number]["id"];
-export type TabSemaforo = "resumen" | "general" | "sin-contrato" | GrupoSemaforoId;
+export type TabSemaforo =
+  | "resumen"
+  | "general"
+  | "sin-contrato"
+  | "envios"
+  | GrupoSemaforoId;
 export type EstadoSemaforo =
   | "VERDE"
   | "AMARILLO"
@@ -188,6 +193,7 @@ export type AnalisisCartera = {
   documentos: DocumentoAnalisis[];
   sinContrato: DocumentoAnalisis[];
   pagados: DocumentoPagado[];
+  idsReventa: string[];
   categorias: string[];
   categoriasPorGrupo: Record<GrupoSemaforoId, string[]>;
   provincias: string[];
@@ -568,6 +574,7 @@ export function analizarCartera(
     documentos,
     sinContrato,
     pagados,
+    idsReventa: [...reventaGeneral].sort((a, b) => a.localeCompare(b, "es")),
     categorias: [...categorias].sort((a, b) => a.localeCompare(b, "es")),
     categoriasPorGrupo: Object.fromEntries(
       [...categoriasPorGrupo].map(([id, conjunto]) => [

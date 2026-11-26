@@ -18,6 +18,7 @@ import type {
 } from "../types";
 import CargaExcel from "./CargaExcel";
 import DocumentosTabla from "./DocumentosTabla";
+import EnviosVendedores from "./EnviosVendedores";
 import FiltrosDocumentos from "./FiltrosDocumentos";
 import HistorialPagadosDialog from "./HistorialPagadosDialog";
 import ModalColumnas from "./ModalColumnas";
@@ -39,6 +40,7 @@ const PESTANAS: { id: TabSemaforo; etiqueta: string }[] = [
   })),
   { id: "general", etiqueta: "General" },
   { id: "sin-contrato", etiqueta: "Sin Contrato" },
+  { id: "envios", etiqueta: "Envío a vendedores" },
 ];
 
 function claveDe(snapshot: Snapshot): string {
@@ -66,6 +68,7 @@ export default function SemaforoAdmin() {
 
   const cargar = useCallback(async (snapshot: Snapshot) => {
     setError("");
+    if (snapshot.tab === "envios") return;
     try {
       const parametros = new URLSearchParams();
       if (snapshot.cargaId) parametros.set("cargaId", snapshot.cargaId);
@@ -261,7 +264,12 @@ export default function SemaforoAdmin() {
         ))}
       </div>
 
-      {tab === "resumen" ? (
+      {tab === "envios" ? (
+        <EnviosVendedores
+          key={cargaIdSeleccionada || "vigente"}
+          cargaId={cargaIdSeleccionada}
+        />
+      ) : tab === "resumen" ? (
         datos ? (
           <ResumenGeneral datos={datos} />
         ) : (

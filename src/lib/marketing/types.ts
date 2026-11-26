@@ -51,4 +51,5 @@ export type OrdenMarketing = {
 export type AccionAuditoriaMarketing =
   | "CARGA_SUBIDA"
   | "CARGA_ELIMINADA"
-  | "MANTENIMIENTO";
+  | "MANTENIMIENTO"
+  | "ENVIO_TICKET";
