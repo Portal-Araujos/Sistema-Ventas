@@ -43,7 +43,10 @@ export default function ModalColumnas({
         if (!abierto) onCerrar();
       }}
     >
-      <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent
+        className="max-h-[85vh] overflow-y-auto bg-white p-5 sm:max-w-lg"
+        overlayClassName="bg-transparent backdrop-blur-none supports-backdrop-filter:backdrop-blur-none"
+      >
         <DialogHeader>
           <DialogTitle>Configurar columnas</DialogTitle>
           <DialogDescription>

@@ -6,8 +6,9 @@ import {
   COLUMNAS_SEMAFORO,
   FILTROS_SEMAFORO_VACIOS,
   GRUPOS_SEMAFORO,
-  etiquetaGrupo,
   type FiltrosSemaforo,
+  type GrupoSemaforoId,
+  type OrdenSemaforo,
   type TabSemaforo,
 } from "@/lib/marketing";
 import type {
@@ -27,6 +28,7 @@ type Snapshot = {
   tab: TabSemaforo;
   filtros: FiltrosSemaforo;
   pagina: number;
+  orden: OrdenSemaforo | null;
 };
 
 const PESTANAS: { id: TabSemaforo; etiqueta: string }[] = [
@@ -36,6 +38,7 @@ const PESTANAS: { id: TabSemaforo; etiqueta: string }[] = [
     etiqueta: grupo.etiqueta,
   })),
   { id: "general", etiqueta: "General" },
+  { id: "sin-contrato", etiqueta: "Sin Contrato" },
 ];
 
 function claveDe(snapshot: Snapshot): string {
@@ -51,6 +54,7 @@ export default function SemaforoAdmin() {
     ...FILTROS_SEMAFORO_VACIOS,
   });
   const [pagina, setPagina] = useState(1);
+  const [orden, setOrden] = useState<OrdenSemaforo | null>(null);
   const [columnasVisibles, setColumnasVisibles] = useState<string[]>([
     ...COLUMNAS_SEMAFORO,
   ]);
@@ -69,6 +73,10 @@ export default function SemaforoAdmin() {
       parametros.set("pagina", String(snapshot.pagina));
       for (const [clave, valor] of Object.entries(snapshot.filtros)) {
         if (valor) parametros.set(clave, valor);
+      }
+      if (snapshot.orden) {
+        parametros.set("ordenColumna", snapshot.orden.columna);
+        parametros.set("ordenDireccion", snapshot.orden.direccion);
       }
       const respuesta = await fetch(
         `/api/marketing/cartera?${parametros.toString()}`,
@@ -94,6 +102,7 @@ export default function SemaforoAdmin() {
     tab,
     filtros,
     pagina,
+    orden,
   };
 
   useEffect(() => {
@@ -101,7 +110,7 @@ export default function SemaforoAdmin() {
     if (claveCargadaRef.current === claveActual) return;
     recargar(snapshotActual);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cargaIdSeleccionada, tab, filtros, pagina, recargar]);
+  }, [cargaIdSeleccionada, tab, filtros, pagina, orden, recargar]);
 
   const cambiarSemana = (id: string) => {
     setCargaIdSeleccionada(id);
@@ -110,9 +119,21 @@ export default function SemaforoAdmin() {
   };
 
   const cambiarTab = (siguiente: TabSemaforo) => {
+    const filtrosSiguientes = {
+      ...snapshotActual.filtros,
+      categoria: "",
+      provincia: "",
+      cuotas: "",
+    };
     setTab(siguiente);
+    setFiltros(filtrosSiguientes);
     setPagina(1);
-    recargar({ ...snapshotActual, tab: siguiente, pagina: 1 });
+    recargar({
+      ...snapshotActual,
+      tab: siguiente,
+      filtros: filtrosSiguientes,
+      pagina: 1,
+    });
   };
 
   const cambiarFiltros = (siguientes: FiltrosSemaforo) => {
@@ -124,6 +145,12 @@ export default function SemaforoAdmin() {
   const cambiarPagina = (siguiente: number) => {
     setPagina(siguiente);
     recargar({ ...snapshotActual, pagina: siguiente });
+  };
+
+  const cambiarOrden = (siguiente: OrdenSemaforo) => {
+    setOrden(siguiente);
+    setPagina(1);
+    recargar({ ...snapshotActual, orden: siguiente, pagina: 1 });
   };
 
   const despuesDeCargar = () => {
@@ -155,6 +182,11 @@ export default function SemaforoAdmin() {
       setCargandoPagados(false);
     }
   };
+
+  const esVistaGeneral = tab === "general" || tab === "sin-contrato";
+  const categoriasVisibles = esVistaGeneral
+    ? (datos?.categorias ?? [])
+    : (datos?.categoriasPorGrupo[tab as GrupoSemaforoId] ?? []);
 
   return (
     <div className="flex flex-col gap-5">
@@ -218,15 +250,13 @@ export default function SemaforoAdmin() {
             onClick={() => cambiarTab(pestana.id)}
             className={`rounded-t-lg px-3 py-2 text-sm font-semibold ${
               tab === pestana.id
-                ? "border border-b-0 border-gray-200 bg-white text-primary"
+                ? pestana.id === "sin-contrato"
+                  ? "border border-b-0 border-green-200 bg-green-50 text-green-700"
+                  : "border border-b-0 border-gray-200 bg-white text-primary"
                 : "text-gray-600 hover:bg-gray-50"
             }`}
           >
-            {pestana.id === "resumen"
-              ? pestana.etiqueta
-              : pestana.id === "general"
-                ? "General"
-                : etiquetaGrupo(pestana.id as (typeof GRUPOS_SEMAFORO)[number]["id"])}
+            {pestana.etiqueta}
           </button>
         ))}
       </div>
@@ -242,18 +272,22 @@ export default function SemaforoAdmin() {
           <FiltrosDocumentos
             filtros={filtros}
             onChange={cambiarFiltros}
-            categorias={datos?.categorias ?? []}
-            onVerPagados={() => void verPagados(filtros.identificacion)}
+            categorias={categoriasVisibles}
+            provincias={datos?.provincias ?? []}
+            cuotas={datos?.cuotas ?? []}
           />
           <DocumentosTabla
             documentos={datos?.documentos ?? []}
             columnasVisibles={columnasVisibles}
             onConfigurar={() => setModalColumnas(true)}
             pagina={datos?.pagina ?? pagina}
-            porPagina={datos?.porPagina ?? 50}
+            porPagina={datos?.porPagina ?? 15}
             total={datos?.totalDocumentos ?? 0}
             onPagina={cambiarPagina}
             onVerPagados={(identificacion) => void verPagados(identificacion)}
+            esSinContrato={tab === "sin-contrato"}
+            orden={orden}
+            onOrden={cambiarOrden}
           />
         </>
       )}

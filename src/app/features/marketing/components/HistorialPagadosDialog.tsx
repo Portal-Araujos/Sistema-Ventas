@@ -41,7 +41,10 @@ export default function HistorialPagadosDialog({
         if (!abierto) onCerrar();
       }}
     >
-      <DialogContent className="max-h-[85vh] max-w-6xl overflow-y-auto">
+      <DialogContent
+        className="max-h-[85vh] max-w-[95vw] overflow-y-auto bg-white p-5 sm:max-w-6xl"
+        overlayClassName="bg-transparent backdrop-blur-none supports-backdrop-filter:backdrop-blur-none"
+      >
         <DialogHeader>
           <DialogTitle>Documentos pagados</DialogTitle>
           <DialogDescription>
@@ -57,26 +60,30 @@ export default function HistorialPagadosDialog({
             No hay documentos pagados para esta identificación.
           </p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {COLUMNAS_SEMAFORO.map((columna) => (
-                  <TableHead key={columna}>{columna}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {documentos.map((documento, indice) => (
-                <TableRow key={`${documento.cargaId}-${documento.fila}-${indice}`}>
+          <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-gray-200">
+            <Table className="min-w-[1500px] text-xs">
+              <TableHeader className="sticky top-0 z-10 bg-gray-50">
+                <TableRow>
                   {COLUMNAS_SEMAFORO.map((columna) => (
-                    <TableCell key={columna} className="max-w-xs truncate">
-                      {String(documento[CAMPO_POR_COLUMNA[columna]] ?? "") || "—"}
-                    </TableCell>
+                    <TableHead key={columna} className="whitespace-nowrap">
+                      {columna}
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {documentos.map((documento, indice) => (
+                  <TableRow key={`${documento.cargaId}-${documento.fila}-${indice}`}>
+                    {COLUMNAS_SEMAFORO.map((columna) => (
+                      <TableCell key={columna} className="whitespace-nowrap">
+                        {String(documento[CAMPO_POR_COLUMNA[columna]] ?? "") || "—"}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </DialogContent>
     </Dialog>

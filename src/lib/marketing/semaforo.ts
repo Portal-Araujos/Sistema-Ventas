@@ -29,7 +29,7 @@ export const GRUPOS_SEMAFORO = [
 ] as const;
 
 export type GrupoSemaforoId = (typeof GRUPOS_SEMAFORO)[number]["id"];
-export type TabSemaforo = "resumen" | "general" | GrupoSemaforoId;
+export type TabSemaforo = "resumen" | "general" | "sin-contrato" | GrupoSemaforoId;
 export type EstadoSemaforo =
   | "VERDE"
   | "AMARILLO"
@@ -85,6 +85,31 @@ export const CAMPO_POR_COLUMNA: Record<ColumnaSemaforo, keyof ClienteCartera> = 
   Dirección: "direccion",
 };
 
+export const COLUMNAS_ORDENABLES_SEMAFORO = [
+  "Nombre Cliente",
+  "# Ctas",
+  "# Cob",
+  "# Ven",
+  "Vendedor",
+  "Categoría",
+  "Ciudad",
+  "Provincia",
+] as const;
+
+export type ColumnaOrdenableSemaforo =
+  (typeof COLUMNAS_ORDENABLES_SEMAFORO)[number];
+
+export type OrdenSemaforo = {
+  columna: ColumnaOrdenableSemaforo;
+  direccion: "asc" | "desc";
+};
+
+export function esColumnaOrdenableSemaforo(
+  columna: string,
+): columna is ColumnaOrdenableSemaforo {
+  return (COLUMNAS_ORDENABLES_SEMAFORO as readonly string[]).includes(columna);
+}
+
 export type DocumentoAnalisis = ClienteCartera & {
   id: string;
   grupo: GrupoSemaforoId;
@@ -113,9 +138,19 @@ export type FilaResumenSemaforo = {
   r: number;
 };
 
+export type FilaSinContratoSemaforo = {
+  categoria: string;
+  etiqueta: string;
+  total: number;
+};
+
 export type ResumenSemaforo = {
   grupos: FilaResumenSemaforo[];
   general: FilaResumenSemaforo;
+  sinContrato: {
+    grupos: FilaSinContratoSemaforo[];
+    general: FilaSinContratoSemaforo;
+  };
 };
 
 export type IndicadoresSemaforo = {
@@ -151,36 +186,33 @@ export type AnalisisCartera = {
   resumen: ResumenSemaforo;
   indicadores: IndicadoresSemaforo;
   documentos: DocumentoAnalisis[];
+  sinContrato: DocumentoAnalisis[];
   pagados: DocumentoPagado[];
   categorias: string[];
+  categoriasPorGrupo: Record<GrupoSemaforoId, string[]>;
+  provincias: string[];
 };
 
 export type FiltrosSemaforo = {
   busqueda: string;
-  identificacion: string;
-  nombre: string;
-  documento: string;
   categoria: string;
-  estado: string;
+  provincia: string;
+  color: string;
   reventa: string;
   fechaVenceDesde: string;
   fechaVenceHasta: string;
-  cuotasMin: string;
-  cuotasMax: string;
+  cuotas: string;
 };
 
 export const FILTROS_SEMAFORO_VACIOS: FiltrosSemaforo = {
   busqueda: "",
-  identificacion: "",
-  nombre: "",
-  documento: "",
   categoria: "",
-  estado: "",
+  provincia: "",
+  color: "",
   reventa: "",
   fechaVenceDesde: "",
   fechaVenceHasta: "",
-  cuotasMin: "",
-  cuotasMax: "",
+  cuotas: "",
 };
 
 export function grupoDeCategoria(categoria: string): GrupoSemaforoId | null {
@@ -314,7 +346,13 @@ export function analizarCartera(
   const documentos: DocumentoAnalisis[] = [];
   const pagados: DocumentoPagado[] = [];
   const categorias = new Set<string>();
+  const categoriasPorGrupo = new Map<GrupoSemaforoId, Set<string>>();
+  const provincias = new Set<string>();
   const documentosVistos = new Set<string>();
+
+  for (const grupo of GRUPOS_SEMAFORO) {
+    categoriasPorGrupo.set(grupo.id, new Set());
+  }
 
   for (const fila of filas) {
     const grupo = grupoDeCategoria(fila.categoriaOrigen);
@@ -324,6 +362,9 @@ export function analizarCartera(
       String(fila.categoriaOrigen ?? "").trim() || "SIN CATEGORÍA";
     const idKey = claveIdentificacion(fila.identificacion);
     categorias.add(categoriaOriginal);
+    categoriasPorGrupo.get(grupo)!.add(categoriaOriginal);
+    const provincia = String(fila.provincia ?? "").trim();
+    if (provincia) provincias.add(provincia);
     existentes.get(grupo)!.add(idKey);
     existentesGenerales.add(idKey);
 
@@ -431,6 +472,55 @@ export function analizarCartera(
       false;
   }
 
+  const conDocumentoActivo = new Set(
+    documentos.map((documento) => claveIdentificacion(documento.identificacion)),
+  );
+  const ultimoPagado = new Map<
+    string,
+    { documento: DocumentoPagado; vence: Date | null; ms: number }
+  >();
+
+  for (const pagado of pagados) {
+    const idKey = claveIdentificacion(pagado.identificacion);
+    if (conDocumentoActivo.has(idKey)) continue;
+    const vence = parsearFechaVence(pagado.fechaVence);
+    if (anioMinimo !== null && (!vence || vence.getUTCFullYear() < anioMinimo)) {
+      continue;
+    }
+    const ms = vence?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const anterior = ultimoPagado.get(idKey);
+    if (!anterior || ms > anterior.ms) {
+      ultimoPagado.set(idKey, { documento: pagado, vence, ms });
+    }
+  }
+
+  const sinContrato: DocumentoAnalisis[] = [...ultimoPagado.values()].map(
+    ({ documento, vence }) => ({
+      ...documento,
+      id: `${carga.id}-sc-${claveIdentificacion(documento.identificacion)}`,
+      grupo: documento.grupo,
+      categoriaOriginal: documento.categoriaOriginal,
+      estado: "VERDE" as const,
+      cuotasPendientes: 0,
+      fechaVenceISO: vence ? aISO(vence) : null,
+      finGraciaISO: vence ? aISO(finGracia(vence)) : null,
+      esReventa:
+        reventa
+          .get(documento.grupo)
+          ?.has(claveIdentificacion(documento.identificacion)) ?? false,
+      inconsistente: false,
+    }),
+  );
+
+  const totalesSinContrato = new Map<GrupoSemaforoId, number>();
+  for (const grupo of GRUPOS_SEMAFORO) totalesSinContrato.set(grupo.id, 0);
+  for (const documento of sinContrato) {
+    totalesSinContrato.set(
+      documento.grupo,
+      (totalesSinContrato.get(documento.grupo) ?? 0) + 1,
+    );
+  }
+
   const resumen: ResumenSemaforo = {
     grupos: GRUPOS_SEMAFORO.map((grupo) => ({
       categoria: grupo.etiqueta,
@@ -443,6 +533,18 @@ export function analizarCartera(
       etiqueta: "General",
       e: existentesGenerales.size,
       r: reventaGeneral.size,
+    },
+    sinContrato: {
+      grupos: GRUPOS_SEMAFORO.map((grupo) => ({
+        categoria: grupo.etiqueta,
+        etiqueta: grupo.etiqueta,
+        total: totalesSinContrato.get(grupo.id) ?? 0,
+      })),
+      general: {
+        categoria: "General",
+        etiqueta: "General",
+        total: sinContrato.length,
+      },
     },
   };
 
@@ -464,8 +566,16 @@ export function analizarCartera(
       oportunidadesReventa: reventaGeneral.size,
     },
     documentos,
+    sinContrato,
     pagados,
     categorias: [...categorias].sort((a, b) => a.localeCompare(b, "es")),
+    categoriasPorGrupo: Object.fromEntries(
+      [...categoriasPorGrupo].map(([id, conjunto]) => [
+        id,
+        [...conjunto].sort((a, b) => a.localeCompare(b, "es")),
+      ]),
+    ) as Record<GrupoSemaforoId, string[]>,
+    provincias: [...provincias].sort((a, b) => a.localeCompare(b, "es")),
   };
 }
 
@@ -478,7 +588,34 @@ export function resumenVacio(): ResumenSemaforo {
       r: 0,
     })),
     general: { categoria: "General", etiqueta: "General", e: 0, r: 0 },
+    sinContrato: {
+      grupos: GRUPOS_SEMAFORO.map((grupo) => ({
+        categoria: grupo.etiqueta,
+        etiqueta: grupo.etiqueta,
+        total: 0,
+      })),
+      general: { categoria: "General", etiqueta: "General", total: 0 },
+    },
   };
+}
+
+export function provinciasDe(documentos: DocumentoAnalisis[]): string[] {
+  const provincias = new Set<string>();
+  for (const documento of documentos) {
+    const provincia = String(documento.provincia ?? "").trim();
+    if (provincia) provincias.add(provincia);
+  }
+  return [...provincias].sort((a, b) => a.localeCompare(b, "es"));
+}
+
+export function cuotasDe(documentos: DocumentoAnalisis[]): number[] {
+  const cuotas = new Set<number>();
+  for (const documento of documentos) {
+    if (documento.cuotasPendientes !== null) {
+      cuotas.add(documento.cuotasPendientes);
+    }
+  }
+  return [...cuotas].sort((a, b) => a - b);
 }
 
 export function filtrarDocumentos(
@@ -489,15 +626,13 @@ export function filtrarDocumentos(
   if (tab === "resumen") return [];
 
   const busqueda = normalizarTexto(filtros.busqueda);
-  const identificacion = normalizarTexto(filtros.identificacion);
-  const nombre = normalizarTexto(filtros.nombre);
-  const documento = normalizarTexto(filtros.documento);
   const categoria = normalizarTexto(filtros.categoria);
-  const cuotasMin = filtros.cuotasMin === "" ? null : Number(filtros.cuotasMin);
-  const cuotasMax = filtros.cuotasMax === "" ? null : Number(filtros.cuotasMax);
+  const provincia = normalizarTexto(filtros.provincia);
+  const cuotas = filtros.cuotas.trim() === "" ? null : Number(filtros.cuotas);
+  const vistaGeneral = tab === "general" || tab === "sin-contrato";
 
   return documentos.filter((fila) => {
-    if (tab !== "general" && fila.grupo !== tab) return false;
+    if (!vistaGeneral && fila.grupo !== tab) return false;
     if (
       busqueda &&
       !normalizarTexto(
@@ -507,26 +642,10 @@ export function filtrarDocumentos(
           fila.numDocumento,
           fila.vendedor,
           fila.categoriaOriginal,
+          fila.provincia,
+          fila.ciudad,
         ].join(" "),
       ).includes(busqueda)
-    ) {
-      return false;
-    }
-    if (
-      identificacion &&
-      !normalizarTexto(fila.identificacion).includes(identificacion)
-    ) {
-      return false;
-    }
-    if (
-      nombre &&
-      !normalizarTexto(fila.nombreCliente).includes(nombre)
-    ) {
-      return false;
-    }
-    if (
-      documento &&
-      !normalizarTexto(fila.numDocumento).includes(documento)
     ) {
       return false;
     }
@@ -536,7 +655,10 @@ export function filtrarDocumentos(
     ) {
       return false;
     }
-    if (filtros.estado && fila.estado !== filtros.estado) return false;
+    if (provincia && !normalizarTexto(fila.provincia).includes(provincia)) {
+      return false;
+    }
+    if (filtros.color && fila.estado !== filtros.color) return false;
     if (filtros.reventa === "si" && !fila.esReventa) return false;
     if (filtros.reventa === "no" && fila.esReventa) return false;
     if (
@@ -552,14 +674,9 @@ export function filtrarDocumentos(
       return false;
     }
     if (
-      cuotasMin !== null &&
-      (fila.cuotasPendientes === null || fila.cuotasPendientes < cuotasMin)
-    ) {
-      return false;
-    }
-    if (
-      cuotasMax !== null &&
-      (fila.cuotasPendientes === null || fila.cuotasPendientes > cuotasMax)
+      cuotas !== null &&
+      Number.isFinite(cuotas) &&
+      fila.cuotasPendientes !== cuotas
     ) {
       return false;
     }
@@ -567,13 +684,52 @@ export function filtrarDocumentos(
   });
 }
 
+function numeroParaOrden(valor: string): number | null {
+  const texto = valor.trim();
+  if (!texto) return null;
+  const numero = Number(
+    texto.replace(/[^\d.,-]/g, "").replace(/\./g, "").replace(",", "."),
+  );
+  return Number.isFinite(numero) ? numero : null;
+}
+
 export function ordenarDocumentos(
   documentos: DocumentoAnalisis[],
+  orden: OrdenSemaforo | null = null,
 ): DocumentoAnalisis[] {
+  const campo =
+    orden && esColumnaOrdenableSemaforo(orden.columna)
+      ? CAMPO_POR_COLUMNA[orden.columna]
+      : null;
+  const esNumerico = campo === "ctas" || campo === "cob" || campo === "ven";
+  const factor = orden?.direccion === "desc" ? -1 : 1;
+
   return [...documentos].sort((a, b) => {
-    const fechaA = a.fechaVenceISO ?? "9999-12-31";
-    const fechaB = b.fechaVenceISO ?? "9999-12-31";
-    if (fechaA !== fechaB) return fechaA.localeCompare(fechaB);
-    return a.fila - b.fila;
+    if (!campo) {
+      const fechaA = a.fechaVenceISO ?? "9999-12-31";
+      const fechaB = b.fechaVenceISO ?? "9999-12-31";
+      if (fechaA !== fechaB) return fechaA.localeCompare(fechaB);
+      return a.fila - b.fila;
+    }
+
+    const valorA = String(a[campo] ?? "");
+    const valorB = String(b[campo] ?? "");
+    let comparacion: number;
+
+    if (esNumerico) {
+      const numeroA = numeroParaOrden(valorA);
+      const numeroB = numeroParaOrden(valorB);
+      comparacion =
+        numeroA !== null && numeroB !== null
+          ? numeroA - numeroB
+          : valorA.localeCompare(valorB, "es");
+    } else {
+      comparacion = normalizarTexto(valorA).localeCompare(
+        normalizarTexto(valorB),
+        "es",
+      );
+    }
+
+    return comparacion !== 0 ? comparacion * factor : a.fila - b.fila;
   });
 }

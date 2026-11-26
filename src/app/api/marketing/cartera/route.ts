@@ -8,25 +8,46 @@ import {
 } from "@/lib/api-auth";
 import {
   analizarCartera,
+  cuotasDe,
   etiquetaCarga,
   filtrarDocumentos,
   FILTROS_SEMAFORO_VACIOS,
   GRUPOS_SEMAFORO,
+  esColumnaOrdenableSemaforo,
   ordenarDocumentos,
+  provinciasDe,
   resumenVacio,
   type ClienteCartera,
   type FiltrosSemaforo,
+  type GrupoSemaforoId,
+  type OrdenSemaforo,
   type TabSemaforo,
 } from "@/lib/marketing";
 
-const POR_PAGINA = 50;
+const POR_PAGINA = 15;
 
 function tabValida(valor: string): TabSemaforo {
-  if (valor === "resumen" || valor === "general") return valor;
+  if (valor === "resumen" || valor === "general" || valor === "sin-contrato") {
+    return valor;
+  }
   if (GRUPOS_SEMAFORO.some((grupo) => grupo.id === valor)) {
     return valor as TabSemaforo;
   }
   return "resumen";
+}
+
+function ordenDeParams(params: URLSearchParams): OrdenSemaforo | null {
+  const columna = params.get("ordenColumna") ?? "";
+  const direccion = params.get("ordenDireccion") ?? "asc";
+  if (!esColumnaOrdenableSemaforo(columna)) return null;
+  if (direccion !== "asc" && direccion !== "desc") return null;
+  return { columna, direccion };
+}
+
+function categoriasPorGrupoVacio(): Record<GrupoSemaforoId, string[]> {
+  const vacio = {} as Record<GrupoSemaforoId, string[]>;
+  for (const grupo of GRUPOS_SEMAFORO) vacio[grupo.id] = [];
+  return vacio;
 }
 
 function anioMinimoDeAuditoria(detalles: string | null): number | null {
@@ -113,6 +134,7 @@ export async function GET(request: Request) {
     for (const clave of Object.keys(filtros) as (keyof FiltrosSemaforo)[]) {
       filtros[clave] = params.get(clave) ?? "";
     }
+    const orden = ordenDeParams(params);
 
     const cargasDisponibles = await prisma.marketingCarga.findMany({
       orderBy: { createdAt: "desc" },
@@ -173,6 +195,9 @@ export async function GET(request: Request) {
         pagina: 1,
         porPagina: POR_PAGINA,
         categorias: [],
+        categoriasPorGrupo: categoriasPorGrupoVacio(),
+        provincias: [],
+        cuotas: [],
       });
     }
 
@@ -187,8 +212,22 @@ export async function GET(request: Request) {
       carga.clientes.map(aClienteCartera),
     );
 
+    const baseDocumentos =
+      tab === "sin-contrato"
+        ? analisis.sinContrato
+        : tab === "general"
+          ? [...analisis.documentos, ...analisis.sinContrato]
+          : [
+              ...analisis.documentos,
+              ...analisis.sinContrato.filter(
+                (documento) => documento.grupo === tab,
+              ),
+            ];
+    const provincias = provinciasDe(baseDocumentos);
+    const cuotas = cuotasDe(baseDocumentos);
     const filtradas = ordenarDocumentos(
-      filtrarDocumentos(analisis.documentos, filtros, tab),
+      filtrarDocumentos(baseDocumentos, filtros, tab),
+      orden,
     );
 
     return NextResponse.json({
@@ -204,6 +243,9 @@ export async function GET(request: Request) {
       pagina,
       porPagina: POR_PAGINA,
       categorias: analisis.categorias,
+      categoriasPorGrupo: analisis.categoriasPorGrupo,
+      provincias,
+      cuotas,
     });
   } catch (error) {
     console.error("Error consultando semaforización de Marketing:", error);

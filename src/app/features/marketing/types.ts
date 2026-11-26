@@ -3,6 +3,7 @@ import type {
   DocumentoAnalisis,
   DocumentoPagado,
   FiltrosSemaforo,
+  GrupoSemaforoId,
   IndicadoresSemaforo,
   ResumenSemaforo,
   TabSemaforo,
@@ -62,6 +63,9 @@ export type SemaforoResponse = {
   pagina: number;
   porPagina: number;
   categorias: string[];
+  categoriasPorGrupo: Record<GrupoSemaforoId, string[]>;
+  provincias: string[];
+  cuotas: number[];
 };
 
 export type DocumentosPagadosResponse = {

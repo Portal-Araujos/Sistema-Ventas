@@ -43,6 +43,10 @@ export default function ResumenGeneral({ datos }: { datos: SemaforoResponse }) {
   }
 
   const filas = [...datos.resumen.grupos, datos.resumen.general];
+  const filasSinContrato = [
+    ...datos.resumen.sinContrato.grupos,
+    datos.resumen.sinContrato.general,
+  ];
 
   return (
     <div className="flex flex-col gap-5">
@@ -83,12 +87,13 @@ export default function ResumenGeneral({ datos }: { datos: SemaforoResponse }) {
         </span>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 p-4">
-          <p className="text-sm font-bold text-gray-800">
+      <div className="mx-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white">
+        <div className="border-b border-gray-200 p-4 text-center">
+          <p className="text-sm font-bold text-gray-800">Tabla Operativa</p>
+          <p className="mt-1 text-sm font-semibold text-gray-700">
             Clientes existentes y oportunidades de reventa
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="mt-1 text-xs text-gray-500">
             E = identificación con documentos en la categoría · R = identificación
             con oportunidad de reventa
           </p>
@@ -113,6 +118,35 @@ export default function ResumenGeneral({ datos }: { datos: SemaforoResponse }) {
                 </TableCell>
                 <TableCell className="text-right">
                   {fila.r.toLocaleString("es-EC")}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="mx-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white">
+        <div className="border-b border-gray-200 p-4 text-center">
+          <p className="text-sm font-bold text-gray-800">
+            Oportunidades de reventa (sin contrato)
+          </p>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Categoría</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filasSinContrato.map((fila) => (
+              <TableRow
+                key={fila.categoria}
+                className={fila.categoria === "General" ? "font-semibold" : ""}
+              >
+                <TableCell>{fila.etiqueta}</TableCell>
+                <TableCell className="text-right">
+                  {fila.total.toLocaleString("es-EC")}
                 </TableCell>
               </TableRow>
             ))}

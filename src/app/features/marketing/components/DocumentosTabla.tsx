@@ -3,10 +3,13 @@
 import {
   CAMPO_POR_COLUMNA,
   COLUMNAS_SEMAFORO,
+  esColumnaOrdenableSemaforo,
   type DocumentoAnalisis,
   type EstadoSemaforo,
+  type OrdenSemaforo,
 } from "@/lib/marketing";
 import { Button } from "@/components/ui/button";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -17,11 +20,11 @@ import {
 } from "@/components/ui/table";
 
 const CLASES_ESTADO: Record<EstadoSemaforo, string> = {
-  VERDE: "bg-green-50 hover:bg-green-100",
-  AMARILLO: "bg-yellow-50 hover:bg-yellow-100",
-  NARANJA: "bg-orange-50 hover:bg-orange-100",
-  ROJO: "bg-red-50 hover:bg-red-100",
-  REVISION: "bg-gray-100 hover:bg-gray-200",
+  VERDE: "bg-green-100 hover:bg-green-200",
+  AMARILLO: "bg-yellow-100 hover:bg-yellow-200",
+  NARANJA: "bg-orange-100 hover:bg-orange-200",
+  ROJO: "bg-red-100 hover:bg-red-200",
+  REVISION: "bg-gray-200 hover:bg-gray-300",
 };
 
 type Props = {
@@ -33,6 +36,9 @@ type Props = {
   total: number;
   onPagina: (pagina: number) => void;
   onVerPagados: (identificacion: string) => void;
+  esSinContrato?: boolean;
+  orden: OrdenSemaforo | null;
+  onOrden: (orden: OrdenSemaforo) => void;
 };
 
 export default function DocumentosTabla({
@@ -44,6 +50,9 @@ export default function DocumentosTabla({
   total,
   onPagina,
   onVerPagados,
+  esSinContrato = false,
+  orden,
+  onOrden,
 }: Props) {
   const visibles = new Set(columnasVisibles);
   const columnas = COLUMNAS_SEMAFORO.filter((columna) => visibles.has(columna));
@@ -53,7 +62,8 @@ export default function DocumentosTabla({
     <div className="rounded-xl border border-gray-200 bg-white">
       <div className="flex flex-col gap-2 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm font-semibold text-gray-700">
-          {total.toLocaleString("es-EC")} documentos
+          {total.toLocaleString("es-EC")}{" "}
+          {esSinContrato ? "clientes" : "documentos"}
         </p>
         <Button type="button" variant="outline" onClick={onConfigurar}>
           Configurar columnas
@@ -62,15 +72,47 @@ export default function DocumentosTabla({
 
       {documentos.length === 0 ? (
         <p className="p-8 text-center text-sm text-gray-500">
-          No hay documentos para mostrar con los filtros seleccionados.
+          No hay {esSinContrato ? "clientes" : "documentos"} para mostrar con
+          los filtros seleccionados.
         </p>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              {columnas.map((columna) => (
-                <TableHead key={columna}>{columna}</TableHead>
-              ))}
+              {columnas.map((columna) => {
+                if (!esColumnaOrdenableSemaforo(columna)) {
+                  return <TableHead key={columna}>{columna}</TableHead>;
+                }
+                const ascendente =
+                  orden?.columna === columna && orden.direccion === "asc";
+                const descendente =
+                  orden?.columna === columna && orden.direccion === "desc";
+                const Icono = ascendente
+                  ? ArrowUp
+                  : descendente
+                    ? ArrowDown
+                    : ArrowUpDown;
+                return (
+                  <TableHead key={columna}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOrden({
+                          columna,
+                          direccion: ascendente ? "desc" : "asc",
+                        })
+                      }
+                      title={`Ordenar por ${columna} ${
+                        ascendente ? "descendentemente" : "ascendentemente"
+                      }`}
+                      className="inline-flex items-center gap-1 hover:text-gray-900"
+                    >
+                      {columna}
+                      <Icono size={14} aria-hidden="true" />
+                    </button>
+                  </TableHead>
+                );
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>
