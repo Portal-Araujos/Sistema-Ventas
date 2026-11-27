@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import {
   etiquetaMotivos,
+  ubicacionDe,
   type CandidatoEnvio,
   type ConteoVendedor,
   type EstadoFiltroEnvio,
@@ -206,11 +207,16 @@ export function filtrarCandidatos(
   candidatos: CandidatoEnvio[],
   busqueda: string,
   estado: EstadoFiltroEnvio,
+  ubicacion: string,
 ): CandidatoEnvio[] {
   const texto = busqueda.trim().toUpperCase();
+  const ubicacionBuscada = ubicacion.trim();
   return candidatos.filter((cliente) => {
     if (estado === "pendientes" && cliente.enviado) return false;
     if (estado === "enviados" && !cliente.enviado) return false;
+    if (ubicacionBuscada && ubicacionDe(cliente) !== ubicacionBuscada) {
+      return false;
+    }
     if (!texto) return true;
     return [cliente.identificacion, cliente.nombreCliente, cliente.provincia]
       .join(" ")

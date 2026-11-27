@@ -11,6 +11,7 @@ import {
   type FiltrosSemaforo,
   type GrupoSemaforoId,
   type OrdenSemaforo,
+  type OrdenUbicacion,
   type TabSemaforo,
 } from "@/lib/marketing";
 import type {
@@ -69,6 +70,9 @@ export default function SemaforoAdmin() {
   const [exportando, setExportando] = useState(false);
   const [busquedaEnvios, setBusquedaEnvios] = useState("");
   const [estadoEnvios, setEstadoEnvios] = useState<EstadoFiltroEnvio>("todos");
+  const [ubicacionEnvios, setUbicacionEnvios] = useState("");
+  const [ordenUbicacionEnvios, setOrdenUbicacionEnvios] =
+    useState<OrdenUbicacion | null>(null);
   const claveCargadaRef = useRef<string | null>(null);
 
   const cargar = useCallback(async (snapshot: Snapshot) => {
@@ -214,6 +218,10 @@ export default function SemaforoAdmin() {
       if (tab === "envios") {
         if (busquedaEnvios) parametros.set("busqueda", busquedaEnvios);
         if (estadoEnvios !== "todos") parametros.set("estado", estadoEnvios);
+        if (ubicacionEnvios) parametros.set("ubicacion", ubicacionEnvios);
+        if (ordenUbicacionEnvios) {
+          parametros.set("ordenUbicacion", ordenUbicacionEnvios);
+        }
       }
 
       const respuesta = await fetch(
@@ -348,6 +356,10 @@ export default function SemaforoAdmin() {
           onBusqueda={setBusquedaEnvios}
           estado={estadoEnvios}
           onEstado={setEstadoEnvios}
+          ubicacion={ubicacionEnvios}
+          onUbicacion={setUbicacionEnvios}
+          ordenUbicacion={ordenUbicacionEnvios}
+          onOrdenUbicacion={setOrdenUbicacionEnvios}
         />
       ) : tab === "resumen" ? (
         datos ? (

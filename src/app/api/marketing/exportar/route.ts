@@ -10,7 +10,9 @@ import {
   filtrarDocumentos,
   GRUPOS_SEMAFORO,
   ordenarDocumentos,
+  ordenarPorUbicacion,
   type EstadoFiltroEnvio,
+  type OrdenUbicacion,
   type TabSemaforo,
 } from "@/lib/marketing";
 import {
@@ -55,6 +57,10 @@ function estadoDeParams(valor: string): EstadoFiltroEnvio {
   return valor === "pendientes" || valor === "enviados" ? valor : "todos";
 }
 
+function ordenUbicacionDeParams(valor: string): OrdenUbicacion | null {
+  return valor === "asc" || valor === "desc" ? valor : null;
+}
+
 export async function GET(request: Request) {
   const session = await getApiSession();
   if (!session) return unauthorizedResponse();
@@ -78,12 +84,19 @@ export async function GET(request: Request) {
             envios.estados,
           )
         : [];
+      const candidatosFiltrados = filtrarCandidatos(
+        candidatos,
+        params.get("busqueda") ?? "",
+        estadoDeParams(params.get("estado") ?? ""),
+        params.get("ubicacion") ?? "",
+      );
+      const ordenUbicacion = ordenUbicacionDeParams(
+        params.get("ordenUbicacion") ?? "",
+      );
       libro = libroEnvios({
-        candidatos: filtrarCandidatos(
-          candidatos,
-          params.get("busqueda") ?? "",
-          estadoDeParams(params.get("estado") ?? ""),
-        ),
+        candidatos: ordenUbicacion
+          ? ordenarPorUbicacion(candidatosFiltrados, ordenUbicacion)
+          : candidatosFiltrados,
         conteos: envios.conteos,
         registros: envios.registros,
       });

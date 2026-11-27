@@ -30,6 +30,22 @@ interface TicketChatDrawerProps {
   currentUserRol: string;
 }
 
+function mensajeClientesMarketing(contenido: string) {
+  if (!/^Se asignaron \d+ cliente\(s\) a /.test(contenido)) return null;
+  const lineas = contenido.split("\n");
+  const inicioClientes = lineas.findIndex(
+    (linea) =>
+      linea.includes("Identificación:") && linea.includes("Nombre Cliente:"),
+  );
+  if (inicioClientes < 0) return null;
+  return {
+    cabecera: lineas.slice(0, inicioClientes),
+    clientes: lineas
+      .slice(inicioClientes)
+      .filter((linea) => linea.trim().length > 0),
+  };
+}
+
 export default function TicketChatDrawer({
   isOpen,
   onClose,
@@ -44,7 +60,18 @@ export default function TicketChatDrawer({
   const [mensaje, setMensaje] = useState("");
   const [archivoAdjunto, setArchivoAdjunto] = useState<File[]>([]);
   const [motivoReapertura, setMotivoReapertura] = useState("");
+  const [mensajesExpandidos, setMensajesExpandidos] = useState<Set<number>>(new Set());
   const mensajesEndRef = useRef<HTMLDivElement>(null);
+
+  const alternarMensaje = (indice: number) => {
+    setMensajesExpandidos((actual) => {
+      const siguiente = new Set(actual);
+      if (siguiente.has(indice)) siguiente.delete(indice);
+      else siguiente.add(indice);
+      return siguiente;
+    });
+  };
+
   // Estados existentes...
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -107,6 +134,7 @@ export default function TicketChatDrawer({
       setTicket(null);
       setMensaje("");
       setArchivoAdjunto([]);
+      setMensajesExpandidos(new Set());
     }
   }, [isOpen, ticketId]);
   const enviarMensaje = async (e?: React.FormEvent) => {
@@ -255,6 +283,31 @@ export default function TicketChatDrawer({
           ) : (
             ticket.mensajes?.map((msg: any, idx: number) => {
               if (msg.esSistema && !msg.adjuntoUrl) {
+                const partes = mensajeClientesMarketing(
+                  String(msg.contenido ?? ""),
+                );
+                if (partes) {
+                  const expandido = mensajesExpandidos.has(idx);
+                  const lineasVisibles = expandido
+                    ? [...partes.cabecera, ...partes.clientes]
+                    : [...partes.cabecera, ...partes.clientes.slice(0, 3)];
+                  return (
+                    <div key={idx} className="my-4 w-full max-w-[85%] mx-auto rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-gray-700 shadow-inner">
+                      <p className="whitespace-pre-wrap text-xs">
+                        {lineasVisibles.join("\n")}
+                      </p>
+                      {partes.clientes.length > 3 && (
+                        <button
+                          type="button"
+                          onClick={() => alternarMensaje(idx)}
+                          className="mt-2 text-xs font-bold text-primary hover:underline"
+                        >
+                          {expandido ? "Mostrar menos" : "Mostrar más"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
                 return (
                   <div key={idx} className="flex justify-center my-4">
                     <div className="bg-gray-200 text-gray-600 text-[10px] font-bold px-4 py-1.5 rounded-full border border-gray-300 shadow-inner flex items-center gap-2">

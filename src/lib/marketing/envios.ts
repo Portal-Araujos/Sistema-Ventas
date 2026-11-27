@@ -4,6 +4,24 @@ import type { ClienteCartera } from "./types";
 export type MotivoEnvio = "REVENTA" | "SIN CONTRATO";
 
 export type EstadoFiltroEnvio = "todos" | "pendientes" | "enviados";
+export type OrdenUbicacion = "asc" | "desc";
+export type VendedorEnvio = { id: string; nombre: string; email: string };
+
+export function ubicacionDe(cliente: {
+  provincia: string;
+  ciudad: string;
+}): string {
+  return [cliente.provincia, cliente.ciudad].filter(Boolean).join(" / ") || "—";
+}
+
+export function ordenarPorUbicacion<
+  T extends { provincia: string; ciudad: string },
+>(clientes: T[], direccion: OrdenUbicacion): T[] {
+  const factor = direccion === "desc" ? -1 : 1;
+  return [...clientes].sort(
+    (a, b) => factor * ubicacionDe(a).localeCompare(ubicacionDe(b), "es"),
+  );
+}
 
 export type CandidatoEnvio = {
   clave: string;
@@ -250,16 +268,11 @@ export function cuerpoMensajeTicket({
     "Clientes asignados:",
   ];
 
-  clientes.forEach((cliente, indice) => {
-    const ubicacion =
-      [cliente.provincia, cliente.ciudad].filter(Boolean).join(" / ") ||
-      "Sin ubicación";
-    const anterior = cliente.vendedorAnterior || "N/A";
-    const movil = cliente.movil || "—";
+  for (const cliente of clientes) {
     lineas.push(
-      `${indice + 1}. Nombre: ${cliente.nombreCliente} — Móvil: ${movil} — Identificación: ${cliente.identificacion} — ${etiquetaMotivos(cliente.motivos)} — ${ubicacion} — vendedor anterior: ${anterior}`,
+      `Identificación: ${cliente.identificacion} · Nombre Cliente: ${cliente.nombreCliente} · Móvil: ${cliente.movil || "—"}`,
     );
-  });
+  }
 
   return lineas.join("\n");
 }
