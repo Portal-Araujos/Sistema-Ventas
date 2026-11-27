@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {Home,Building2, CalendarDays,MapPin,BarChart2,User,Settings,ChevronLeft,ChevronRight,
   LogOut,DollarSign,Shield,Menu,X,Ticket,BookCheck,Factory,Barcode,Briefcase,Package,
-  Scissors,Truck,ChevronDown,ChevronUp,Badge,FileUser,HandCoins,Bell} from "lucide-react";
+  Scissors,Truck,ChevronDown,ChevronUp,Badge,FileUser,HandCoins,Bell,Megaphone,History} from "lucide-react";
 
 const menuStructure = [
   {
@@ -55,6 +55,25 @@ const menuStructure = [
         label: "Cobranzas",
         href: "/cobranzas",
         permiso: "cobranzas:ver",
+      },
+    ],
+  },
+  {
+    label: "MARKETING",
+    icon: Megaphone,
+    isGroup: true,
+    items: [
+      {
+        icon: Settings,
+        label: "Administración",
+        href: "/marketing/administracion",
+        permiso: "marketing:administrar",
+      },
+      {
+        icon: History,
+        label: "Historial y auditoría",
+        href: "/marketing/historial",
+        permiso: "marketing:administrar",
       },
     ],
   },
@@ -150,6 +169,7 @@ export function Sidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     "DIRECCIÓN COMERCIAL": true,
+    MARKETING: false,
     OPERACIONES: false,
     CONFIGURACIONES: false,
     TICKETS: false,

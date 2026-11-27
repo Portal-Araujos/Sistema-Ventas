@@ -4,7 +4,7 @@ export async function apiActionPermissions(request: Request): Promise<string[]> 
   const method = request.method;
   if (["GET", "HEAD"].includes(method)) {
     const read: Record<string, string[]> = {
-      "/api/ventas": ["ventas:ver"], "/api/agenda": ["agenda:ver"], "/api/agenda/dashboard": ["agenda:ver"], "/api/visitas": ["visitas:ver"], "/api/indicadores/semanal": ["indicadores:ver"], "/api/cobranzas/radar": ["cobranzas:ver"], "/api/base-consultas": ["base_consultas:ver"], "/api/operaciones": ["operaciones:ver"], "/api/produccion": ["produccion:ver"], "/api/empaque": ["empaque:ver"], "/api/guias": ["historial-despachos:ver", "empaque:ver"], "/api/tickets": ["tickets:ver"],
+      "/api/ventas": ["ventas:ver"], "/api/agenda": ["agenda:ver"], "/api/agenda/dashboard": ["agenda:ver"], "/api/visitas": ["visitas:ver"], "/api/indicadores/semanal": ["indicadores:ver"], "/api/cobranzas/radar": ["cobranzas:ver"], "/api/base-consultas": ["base_consultas:ver"], "/api/operaciones": ["operaciones:ver"], "/api/produccion": ["produccion:ver"], "/api/empaque": ["empaque:ver"], "/api/guias": ["historial-despachos:ver", "empaque:ver"], "/api/tickets": ["tickets:ver"], "/api/marketing/cartera": ["marketing:administrar"], "/api/marketing/documentos-pagados": ["marketing:administrar"], "/api/marketing/historial": ["marketing:administrar"],
     };
     return read[path] || [];
   }
@@ -34,6 +34,9 @@ export async function apiActionPermissions(request: Request): Promise<string[]> 
   if (path === "/api/usuarios") return [method === "POST" ? "usuarios:crear" : "usuarios:editar"];
   if (path === "/api/usuarios/seguridad") return ["usuarios:seguridad"];
   if (path === "/api/usuarios/vendedores") return [method === "POST" ? "usuarios:crear" : "usuarios:editar"];
+  if (path === "/api/marketing/carga") return ["marketing:administrar"];
+  if (path === "/api/marketing/mantenimiento") return ["marketing:mantenimiento"];
+  if (path.startsWith("/api/marketing/cargas/") && method === "DELETE") return ["marketing:mantenimiento"];
   if (path === "/api/seguridad") return ["configuracion:seguridad"];
   if (path === "/api/catalogos" || path === "/api/departamentos") return [method === "POST" ? "configuracion:crear" : "configuracion:editar"];
   if (/^\/api\/instituciones(?:\/[^/]+)?$/.test(path)) return [method === "DELETE" ? "instituciones:eliminar" : method === "POST" ? body.accion === "asignar" ? "instituciones:gestionar_asignaciones" : "instituciones:crear" : path === "/api/instituciones" ? "instituciones:gestionar_asignaciones" : "instituciones:editar"];

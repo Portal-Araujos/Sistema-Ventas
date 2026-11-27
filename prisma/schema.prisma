@@ -187,9 +187,8 @@ model Usuario {
   departamento           DepartamentoEmpresa? @relation(fields: [departamentoId], references: [id])
   detallesRecibidos      DetallePedido[]      @relation("UsuarioReceptorDetalle")
   notificaciones         Notificacion[]       @relation("NotificacionesUsuario")
-  lecturasMensajes       LecturaMensajeTicket[]
-  lecturasNotificaciones LecturaNotificacion[]
-  suscripcionesPush SuscripcionPush[]
+  marketingCargas        MarketingCarga[]
+  marketingAuditorias    MarketingAuditoria[] @relation("AuditoriasMarketingUsuario")
   @@map("usuarios")
 }
 
@@ -608,26 +607,66 @@ model Notificacion {
   lecturas         LecturaNotificacion[]
   @@map("notificaciones")
 }
-model LecturaNotificacion {
-  notificacionId Int
-  usuarioId String
-  leidoEn DateTime @default(now())
-  notificacion Notificacion @relation(fields: [notificacionId], references: [id], onDelete: Cascade)
-  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  @@id([notificacionId, usuarioId])
-  @@map("lecturas_notificaciones")
+model MarketingCarga {
+  id             String             @id @default(uuid())
+  nombreArchivo  String             @map("nombre_archivo")
+  activo         Boolean            @default(true)
+  totalRegistros Int                @map("total_registros")
+  creadoPorId    String             @map("creado_por_id")
+  creadoPor      Usuario            @relation(fields: [creadoPorId], references: [id])
+  createdAt      DateTime           @default(now()) @map("created_at")
+  semanaNumero   Int?               @map("semana_numero")
+  mes            Int?
+  anio           Int?
+  clientes       MarketingCliente[]
+  auditorias     MarketingAuditoria[] @relation("AuditoriasMarketingCarga")
+  @@map("marketing_cargas")
+  @@index([activo, createdAt])
 }
-model SuscripcionPush {
-  id String @id @default(uuid())
-  usuarioId String
-  endpoint String @unique @db.Text
-  p256dh String
-  auth String
-  createdAt DateTime @default(now())
-  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  @@index([usuarioId])
-  @@map("suscripciones_push")
+
+model MarketingCliente {
+  id               String         @id @default(uuid())
+  cargaId          String         @map("carga_id")
+  carga            MarketingCarga @relation(fields: [cargaId], references: [id], onDelete: Cascade)
+  fila             Int
+  identificacion   String
+  nombreCliente    String         @map("nombre_cliente")
+  numDocumento     String         @default("") @map("num_documento")
+  fechaEmision     String         @default("") @map("fecha_emision")
+  fechaVence       String         @default("") @map("fecha_vence")
+  total            String         @default("")
+  ctas             String         @default("")
+  abonado          String         @default("")
+  cob              String         @default("")
+  saldo            String         @default("")
+  ven              String         @default("")
+  dias             String         @default("")
+  movil            String
+  vendedor         String
+  cuota            String         @default("")
+  saldoFecha       String         @default("") @map("saldo_fecha")
+  categoriaOrigen  String         @default("") @map("categoria_origen")
+  provincia        String
+  ciudad           String
+  direccion        String
+  @@map("marketing_clientes")
+  @@index([cargaId])
 }
+
+model MarketingAuditoria {
+  id            String         @id @default(uuid())
+  accion        String
+  cargaId       String?        @map("carga_id")
+  carga         MarketingCarga? @relation("AuditoriasMarketingCarga", fields: [cargaId], references: [id], onDelete: SetNull)
+  nombreArchivo String?        @map("nombre_archivo")
+  detalles      String?
+  usuarioId     String?        @map("usuario_id")
+  usuario       Usuario?       @relation("AuditoriasMarketingUsuario", fields: [usuarioId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  @@map("marketing_auditoria")
+  @@index([createdAt])
+}
+
 model CatalogoElectro {
   id          Int      @id @default(autoincrement())
   codigo      String   @unique // El SKU o Código único del equipo
