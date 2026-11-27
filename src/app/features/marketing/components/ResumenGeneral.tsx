@@ -133,6 +133,12 @@ export default function ResumenGeneral({ datos }: { datos: SemaforoResponse }) {
             <p className="text-sm font-bold text-gray-800">
               Oportunidades de reventa (sin contrato)
             </p>
+            <p className="mt-1 text-sm font-semibold text-gray-700">
+              Clientes sin contrato vigente por categoría
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              Total = identificación sin contrato en la categoría
+            </p>
           </div>
           <Table>
             <TableHeader>
