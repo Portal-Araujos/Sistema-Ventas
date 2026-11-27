@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import { getApiSession, unauthorizedResponse } from "@/lib/api-auth";
 import { CambioError, datosPrenda, puedeModificarProduccion, validarAccesoPedido, validarPrendaEnProduccion } from "@/lib/cambios-prenda";
 
@@ -31,7 +32,7 @@ export async function PUT(request: Request) {
     if (typeof body.motivo !== "string" || body.motivo.trim().length < 10 || typeof body.detallePedidoId !== "string" || typeof body.skuCodigo !== "string") {
       throw new CambioError("Selecciona la prenda, el SKU y un motivo de al menos 10 caracteres");
     }
-    await prisma.$transaction(async tx => {
+    const avisos = await prisma.$transaction(async tx => {
       const detalle = await tx.detallePedido.findUnique({ where: { id: body.detallePedidoId } });
       if (!detalle) throw new CambioError("Prenda no encontrada", 404);
       const pedido = await validarAccesoPedido(tx, session, detalle.pedidoId);
@@ -45,11 +46,12 @@ export async function PUT(request: Request) {
       await tx.detallePedido.update({ where: { id: detalle.id }, data: nuevo });
       await tx.cambioPrendaProduccion.create({ data: { detallePedidoId: detalle.id, usuarioId: session.id, usuarioNombre: usuario.nombre, motivo: body.motivo.trim(), anterior, nuevo } });
       await tx.pedido.update({ where: { id: pedido.id }, data: { updatedAt: new Date() } });
-      await tx.notificacion.createMany({ data: [
+      return tx.notificacion.createManyAndReturn({ data: [
         { titulo: "Prenda modificada en producción", mensaje: `Contrato ${pedido.numContrato}: ${detalle.skuCodigo} → ${sku.codigo}. Motivo: ${body.motivo.trim()}`, tipoModulo: "PRODUCCION", rolDestino: "produccion", urlDestino: `/produccion?pedidoId=${pedido.id}` },
         { titulo: "Cambio de prenda registrado", mensaje: `${usuario.nombre} modificó ${detalle.skuCodigo} por ${sku.codigo}. Motivo: ${body.motivo.trim()}`, tipoModulo: "PEDIDOS", usuarioDestinoId: pedido.usuarioId, urlDestino: "/pedidos" },
-      ] });
+      ], select: { id: true } });
     }, { isolationLevel: "Serializable" });
+    await enviarPushNotificaciones(avisos.map(aviso => aviso.id));
     return NextResponse.json({ success: true });
   } catch (error) { return responderError(error); }
 }

@@ -86,7 +86,7 @@ function PedidosPageContent() {
   const cargarInstituciones = async () => {
     try {
       const [resInst, resCat] = await Promise.all([
-        fetch("/api/instituciones"),
+        fetch("/api/instituciones?selector=pedidos"),
         fetch("/api/catalogos"),
       ]);
       const data = await resInst.json();
@@ -490,7 +490,10 @@ function PedidosPageContent() {
   const filteredGrupos = grupos.filter(
     (g) =>
       g.institucionNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      g.codigoPedido?.toLowerCase().includes(searchTerm.toLowerCase()),
+      g.codigoPedido?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      g.pedidosAsociados?.some((pedido: any) =>
+        String(pedido.numContrato || "").toLowerCase().includes(searchTerm.toLowerCase()),
+      ),
   );
   const totalPages = Math.max(
     1,
@@ -534,7 +537,7 @@ function PedidosPageContent() {
           <Search size={16} className="absolute left-3 top-3 text-gray-400" />
           <Input
             className="pl-9 text-xs h-10 bg-gray-50 border-gray-200"
-            placeholder="Buscar por Institución o Código PED-..."
+            placeholder="Buscar por institución, código PED o contrato..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />

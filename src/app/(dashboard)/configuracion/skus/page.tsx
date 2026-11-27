@@ -260,9 +260,10 @@ export default function CatalogoSKUPage() {
     (s) =>
       (s.categoriaItem === tabActiva ||
         (!s.categoriaItem && tabActiva === "TEXTIL")) && // Por defecto los antiguos son Textil
-      (s.codigo.toLowerCase().includes(busqueda.toLowerCase()) ||
-        s.tipoRopa.toLowerCase().includes(busqueda.toLowerCase()) ||
-        s.color.toLowerCase().includes(busqueda.toLowerCase())),
+      busqueda.trim().toLowerCase().split(/\s+/).every((termino) =>
+        [s.codigo, s.tipoRopa, s.color, s.genero, s.talla, s.producto]
+          .some((valor) => String(valor || "").toLowerCase().includes(termino)),
+      ),
   );
 
   const totalPages = Math.max(

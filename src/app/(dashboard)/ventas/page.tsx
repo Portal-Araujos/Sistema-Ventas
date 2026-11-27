@@ -236,7 +236,7 @@ export default function VentasPage() {
 
   try {
     const res = await fetch(
-      `/api/instituciones?search=${encodeURIComponent(termino)}&limit=50`,
+      `/api/instituciones?selector=ventas&search=${encodeURIComponent(termino)}&limit=50`,
     );
 
     const json = await res.json();
@@ -330,7 +330,7 @@ export default function VentasPage() {
       const [resVentas, resCat, resInst, resDeptos] = await Promise.all([
         fetch("/api/ventas"),
         fetch("/api/catalogos"),
-        fetch("/api/instituciones"),
+        fetch("/api/instituciones?selector=ventas"),
         fetch("/api/departamentos"),
       ]);
 

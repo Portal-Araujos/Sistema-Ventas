@@ -178,6 +178,69 @@ export function Sidebar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const alertasPrevias = useRef<Set<string> | null>(null);
+  const [permisoNavegador, setPermisoNavegador] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [pushActivo, setPushActivo] = useState(false);
+  const pushActivoRef = useRef(false);
+  const [errorPush, setErrorPush] = useState("");
+
+  useEffect(() => { pushActivoRef.current = pushActivo; }, [pushActivo]);
+
+  useEffect(() => {
+    if ("Notification" in window) setPermisoNavegador(Notification.permission);
+    if ("serviceWorker" in navigator) navigator.serviceWorker.getRegistration("/").then(reg => reg?.pushManager.getSubscription()).then(async sub => {
+      if (!sub || Notification.permission !== "granted") return;
+      const configuracion = await fetch("/api/push");
+      if (!configuracion.ok) return;
+      const saved = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub) });
+      setPushActivo(saved.ok);
+    }).catch(() => {});
+  }, []);
+
+  const activarAvisosNavegador = async () => {
+    if (!("Notification" in window)) return;
+    try {
+      setErrorPush("");
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) throw new Error("Este dispositivo no admite notificaciones push.");
+      const permiso = await Notification.requestPermission();
+      setPermisoNavegador(permiso);
+      if (permiso !== "granted") throw new Error("Activa el permiso de notificaciones en el navegador.");
+      const res = await fetch("/api/push");
+      if (!res.ok) throw new Error("Las notificaciones push aún no están configuradas en el servidor.");
+      const { publicKey } = await res.json();
+      const bytes = Uint8Array.from(atob(publicKey.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(publicKey.length / 4) * 4, "=")), c => c.charCodeAt(0));
+      await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      const registration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("No se pudo activar el servicio de notificaciones. Recarga la página e inténtalo de nuevo.")), 15000)),
+      ]);
+      const worker = registration.active;
+      if (!worker) throw new Error("El servicio de notificaciones aún no está activo. Inténtalo de nuevo.");
+      if (worker.state !== "activated") {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => { worker.removeEventListener("statechange", revisar); reject(new Error("El servicio de notificaciones no terminó de activarse. Recarga la página e inténtalo de nuevo.")); }, 15000);
+          const revisar = () => {
+            if (worker.state === "activated" || worker.state === "redundant") {
+              clearTimeout(timeout);
+              worker.removeEventListener("statechange", revisar);
+              if (worker.state === "activated") resolve(); else reject(new Error("El servicio de notificaciones no pudo activarse."));
+            }
+          };
+          worker.addEventListener("statechange", revisar);
+          revisar();
+        });
+      }
+      const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+      const saved = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription) });
+      if (!saved.ok) {
+        const result = await saved.json().catch(() => null);
+        throw new Error(result?.error || "No se pudo registrar este dispositivo.");
+      }
+      setPushActivo(true);
+    } catch (error) {
+      setErrorPush(error instanceof Error ? error.message : "No se pudieron activar las notificaciones.");
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -241,6 +304,19 @@ export function Sidebar() {
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
+      const anteriores = alertasPrevias.current;
+      if (anteriores && "Notification" in window && Notification.permission === "granted" && !pushActivoRef.current) {
+        for (const alerta of combinadas) {
+          const clave = `${alerta.id}:${alerta.createdAt}`;
+          if (!anteriores.has(clave)) {
+            try {
+              const aviso = new Notification(alerta.titulo, { body: alerta.mensaje, tag: alerta.id });
+              aviso.onclick = () => { window.focus(); if (alerta.urlDestino?.startsWith("/")) window.location.assign(alerta.urlDestino); aviso.close(); };
+            } catch (error) { console.error("No se pudo mostrar el aviso del navegador", error); }
+          }
+        }
+      }
+      alertasPrevias.current = new Set(combinadas.map((alerta) => `${alerta.id}:${alerta.createdAt}`));
       setAlertasGenerales(combinadas);
 
       const vistos = JSON.parse(localStorage.getItem("ticketsVistos") || "{}");
@@ -477,6 +553,8 @@ export function Sidebar() {
                       {unreadCount} Nuevas
                     </Badge>
                   </div>
+                  {permisoNavegador !== "unsupported" && !pushActivo && <button type="button" onClick={activarAvisosNavegador} className="w-full px-4 py-2 text-xs font-semibold text-blue-700 bg-blue-50">Activar notificaciones en este dispositivo</button>}
+                  {errorPush && <p className="px-4 py-2 text-xs text-red-700">{errorPush}</p>}
                   <div className="max-h-[60vh] overflow-y-auto overscroll-contain"> 
                     <RendersListaAlertas />
                   </div>
@@ -778,6 +856,8 @@ export function Sidebar() {
                 <X size={20} />
               </button>
             </div>
+            {permisoNavegador !== "unsupported" && !pushActivo && <button type="button" onClick={activarAvisosNavegador} className="w-full px-4 py-3 text-xs font-semibold text-blue-700 bg-blue-50">Activar notificaciones en este dispositivo</button>}
+            {errorPush && <p className="px-4 py-2 text-xs text-red-700 bg-white">{errorPush}</p>}
             <div className="overflow-y-auto overscroll-contain flex-1 max-h-[60vh] bg-white">
               <RendersListaAlertas />
             </div>

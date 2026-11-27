@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import { CambioError, datosPrenda, validarAccesoPedido, validarPrendaRecibida, puedeConsultarCambio } from "@/lib/cambios-prenda";
 import {
   getApiSession,
@@ -24,14 +25,19 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
 
     if (searchParams.get("alertas") === "true") {
+      if (!hasPermission(session, "tickets:ver")) return NextResponse.json([]);
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: userId },
+        select: { esJefe: true, departamento: { select: { nombre: true } } },
+      });
       const whereAlertas: any = {
         estado: { in: ["Abierto", "Re-Abierto"] },
+        OR: [
+          { asignados: { some: { id: userId } } },
+          { creadorId: userId },
+          ...(usuario?.esJefe && usuario.departamento ? [{ tipo: usuario.departamento.nombre }] : []),
+        ],
       };
-      const esSuperAdmin =
-        userRol === "super_admin" || userPermisos.includes("ver_todos_tickets");
-      if (!esSuperAdmin) {
-        whereAlertas.asignados = { some: { id: userId } };
-      }
 
       const alertasTickets = await prisma.ticketGestion.findMany({
         where: whereAlertas,
@@ -110,6 +116,7 @@ export async function GET(request: Request) {
           },
           mensajes: {
             include: {
+              lecturas: { include: { usuario: { select: { id: true, nombre: true } } } },
               remitente: {
                 select: { nombre: true, rol: { select: { nombre: true } } },
               },
@@ -140,6 +147,11 @@ export async function GET(request: Request) {
           { status: 404 },
         );
       }
+
+      await prisma.lecturaMensajeTicket.createMany({
+        data: ticket.mensajes.filter((mensaje) => mensaje.remitenteId !== userId).map((mensaje) => ({ mensajeId: mensaje.id, usuarioId: userId })),
+        skipDuplicates: true,
+      });
 
       // 🔥 1. EL "VISTO" DE WHATSAPP: RESETEAR CONTADOR AL ABRIR 🔥
       if (soyCreadorTicket && ticket.noLeidosCreador > 0) {
@@ -200,6 +212,7 @@ export async function GET(request: Request) {
           institucion: { select: { nombre: true } },
           asignados: { select: { id: true, nombre: true } },
           creador: { select: { id: true, nombre: true } },
+          mensajes: { where: { remitenteId: { not: userId }, lecturas: { none: { usuarioId: userId } } }, select: { id: true } },
         },
         orderBy: { updatedAt: "desc" },
       }),
@@ -223,7 +236,7 @@ export async function GET(request: Request) {
     }));
 
     return NextResponse.json({
-      tickets,
+      tickets: tickets.map((ticket) => ({ ...ticket, noLeidosUsuario: ticket.mensajes.length, mensajes: undefined })),
       usuarios: usuariosFormateados, 
       currentUser: {
         id: userId,
@@ -322,29 +335,17 @@ export async function POST(request: Request) {
           },
         });
 
-        if (soyCreador) {
-          for (const asignado of ticketRelacionado.asignados) {
-            await prisma.notificacion.create({
-              data: {
-                titulo: `💬 Nueva respuesta en ${ticketRelacionado.codigo}`,
-                mensaje: `El creador respondió: "${contenido.substring(0, 40)}${contenido.length > 40 ? "..." : ""}"`,
-                tipoModulo: "TICKETS",
-                urlDestino: `/tickets?ticketId=${ticketId}`,
-                usuarioDestinoId: asignado.id,
-              },
-            });
-          }
-        } else {
-          await prisma.notificacion.create({
-            data: {
-              titulo: `💬 Respondió tu ticket ${ticketRelacionado.codigo}`,
-              mensaje: `Respuesta: "${contenido.substring(0, 40)}${contenido.length > 40 ? "..." : ""}"`,
-              tipoModulo: "TICKETS",
-              urlDestino: `/tickets?ticketId=${ticketId}`,
-              usuarioDestinoId: ticketRelacionado.creadorId,
-            },
-          });
-        }
+        const jefes = await prisma.usuario.findMany({
+          where: { activo: true, bloqueado: false, esJefe: true, departamento: { nombre: ticketRelacionado.tipo } },
+          select: { id: true },
+        });
+        const destinatarios = [...new Set([ticketRelacionado.creadorId, ...ticketRelacionado.asignados.map(a => a.id), ...jefes.map(j => j.id)])].filter(id => id !== userId);
+        const avisos = destinatarios.length ? await prisma.notificacion.createManyAndReturn({ data: destinatarios.map(id => ({
+          titulo: `Nueva respuesta en ${ticketRelacionado.codigo}`,
+          mensaje: `Respuesta: "${contenido.substring(0, 40)}${contenido.length > 40 ? "..." : ""}"`,
+          tipoModulo: "TICKETS", urlDestino: `/tickets?ticketId=${ticketId}`, usuarioDestinoId: id,
+        })), select: { id: true } }) : [];
+        await enviarPushNotificaciones(avisos.map(aviso => aviso.id));
 
         return NextResponse.json({ success: true, mensaje: nuevoMensaje }, { status: 201 });
       }
@@ -424,13 +425,14 @@ export async function POST(request: Request) {
                 mensajes: { create: mensajesIniciales },
               },
               });
-              if (detallePedidoId) {
-                await tx.notificacion.createMany({ data: [
-                  { titulo: "Solicitud de cambio de prenda", mensaje: `${creado.codigo}: ${asunto}`, tipoModulo: "TICKETS", rolDestino: tipo.toLowerCase(), urlDestino: `/tickets?ticketId=${creado.id}` },
-                  ...asignadosIds.map((id: string) => ({ titulo: "Cambio de prenda asignado", mensaje: `${creado.codigo}: ${asunto}`, tipoModulo: "TICKETS", usuarioDestinoId: id, urlDestino: `/tickets?ticketId=${creado.id}` })),
-                ] });
-              }
-              return creado;
+              const jefes = await tx.usuario.findMany({ where: { activo: true, bloqueado: false, esJefe: true, departamento: { nombre: tipo || "General" } }, select: { id: true } });
+              const destinatarios = [...new Set<string>([...(Array.isArray(asignadosIds) ? asignadosIds : []), ...jefes.map(j => j.id)])].filter(id => id !== userId);
+              const avisos = destinatarios.length ? await tx.notificacion.createManyAndReturn({ data: destinatarios.map(id => ({
+                titulo: detallePedidoId ? "Solicitud de cambio de prenda" : "Ticket asignado",
+                mensaje: `${creado.codigo}: ${asunto}`, tipoModulo: "TICKETS", usuarioDestinoId: id,
+                urlDestino: `/tickets?ticketId=${creado.id}`,
+              })), select: { id: true } }) : [];
+              return { creado, avisos };
             }, { isolationLevel: "Serializable" });
           } catch (error: any) {
             if (error.code === "P2002") {
@@ -447,7 +449,8 @@ export async function POST(request: Request) {
         if (!ticketCreado) {
           return NextResponse.json({ error: "Colisión de sistema, intente nuevamente." }, { status: 500 });
         }
-        return NextResponse.json({ success: true, ticket: ticketCreado }, { status: 201 });
+        await enviarPushNotificaciones(ticketCreado.avisos.map(aviso => aviso.id));
+        return NextResponse.json({ success: true, ticket: ticketCreado.creado }, { status: 201 });
       }
       
       return NextResponse.json({ error: "Acción FormData no válida" }, { status: 400 });

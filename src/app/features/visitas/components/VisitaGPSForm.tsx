@@ -132,7 +132,7 @@ export default function VisitaGPSForm({
 
   useEffect(() => {
     if (open) {
-      fetch("/api/instituciones")
+      fetch("/api/instituciones?selector=agenda")
         .then((res) => res.json())
         .then((data) => setInstituciones(data.data || data));
       fetch("/api/catalogos")
@@ -188,7 +188,7 @@ export default function VisitaGPSForm({
     }
     try {
       const res = await fetch(
-        `/api/instituciones?search=${encodeURIComponent(termino)}&limit=20`,
+        `/api/instituciones?selector=agenda&search=${encodeURIComponent(termino)}&limit=20`,
       );
       const json = await res.json();
       const lista = Array.isArray(json) ? json : json.data || [];

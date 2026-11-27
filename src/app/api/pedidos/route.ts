@@ -1,6 +1,7 @@
 import { getJwtSecret } from "@/lib/jwt";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import { jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
@@ -406,7 +407,7 @@ export async function PUT(request: Request) {
         const nombreEscuela =
           primerPedido.institucion?.nombre || "la institución";
 
-        await prisma.notificacion.create({
+        const aviso = await prisma.notificacion.create({
           data: {
             titulo: "📦 Nuevo Pedido Recibido",
             mensaje: `El vendedor ha enviado el pedido ${codigoOP} de ${nombreEscuela} para balance de stock.`,
@@ -415,6 +416,7 @@ export async function PUT(request: Request) {
             rolDestino: "admin",
           },
         });
+        await enviarPushNotificaciones([aviso.id]);
       }
       return NextResponse.json({ success: true });
     } else {
@@ -483,6 +485,7 @@ export async function PUT(request: Request) {
         });
 
         const ventaData: any = {};
+        if (nombreCliente !== undefined) ventaData.nombreCliente = String(nombreCliente || "").trim();
         if (numContrato !== undefined)
           ventaData.numContrato = numContratoLimpio;
         if (valorContrato !== undefined)
@@ -518,6 +521,7 @@ export async function PUT(request: Request) {
               vendedorId: vendedorFinalId,
               fechaVenta: new Date(),
               numContrato: numContratoLimpio,
+              nombreCliente: nombreCliente ? String(nombreCliente).trim() : pedidoAntiguo.nombreCliente,
               valorContrato: parseMoney(valorContrato),
               abono: parseMoney(abono),
               cuotaMensual: parseMoney(cuotaMensual),
@@ -617,6 +621,7 @@ export async function POST(request: Request) {
         institucionId: body.institucionId,
         vendedorId: vendedorFinalId,
         numContrato: numContratoLimpio,
+        nombreCliente: body.nombreCliente ? String(body.nombreCliente).trim() : null,
         fechaVenta: new Date(),
         valorContrato: parseMoney(body.valorContrato),
         abono: parseMoney(body.abono),

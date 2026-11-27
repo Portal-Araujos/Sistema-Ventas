@@ -51,7 +51,8 @@ function LoginForm() {
       }
 
       // Limpiamos la URL para que el mensaje no se quede pegado si el usuario recarga la página
-      router.replace("/login");
+      const destino = searchParams.get("next");
+      router.replace(destino ? `/login?next=${encodeURIComponent(destino)}` : "/login");
     }
   }, [searchParams, router]);
 
@@ -125,7 +126,8 @@ function LoginForm() {
       }
 
       // 🚀 Usamos el Smart Redirect con los permisos extraídos
-      const rutaDestino = getRedirectUrl(data.rol, data.permisos || []);
+      const next = searchParams.get("next");
+      const rutaDestino = next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next : getRedirectUrl(data.rol, data.permisos || []);
       router.push(rutaDestino);
     } catch (err: any) {
       setError(err.message);

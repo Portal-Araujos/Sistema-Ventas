@@ -271,7 +271,7 @@ function OperacionesPageContent() {
         fetch(
           `/api/operaciones?estado=${selectedEstadoFilter}&fechaInicio=${fechaDesde}&fechaFin=${fechaHasta}`,
         ),
-        fetch("/api/instituciones"),
+        fetch("/api/instituciones?selector=operaciones"),
       ]);
       const jsonOps = await resOps.json();
       const jsonInst = await resInst.json();

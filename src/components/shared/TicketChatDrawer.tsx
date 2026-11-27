@@ -440,6 +440,9 @@ export default function TicketChatDrawer({
                         </div>
                       )}
                   </div>
+                  {isMe && !msg.esSistema && <span className="text-[10px] text-gray-500 mt-1 px-1">
+                    {msg.lecturas?.length ? `Leído por ${msg.lecturas.map((lectura: any) => lectura.usuario.nombre).join(", ")}` : "Sin leer"}
+                  </span>}
                 </div>
               );
             })

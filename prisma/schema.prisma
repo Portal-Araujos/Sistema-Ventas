@@ -295,6 +295,7 @@ model Venta {
   visitaId          String?         @map("visita_id")
   visita            VisitaAgenda?   @relation(fields: [visitaId], references: [id])
   numContrato       String          @map("num_contrato")
+  nombreCliente     String?         @map("nombre_cliente")
   valorContrato     Float           @map("valor_contrato")
   abono             Float           @default(0)
   meses             Int
@@ -540,8 +541,19 @@ model MensajeTicket {
   createdAt     DateTime      @default(now()) @map("created_at")
   ticket        TicketGestion @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   remitente     Usuario       @relation(fields: [remitenteId], references: [id])
+  lecturas      LecturaMensajeTicket[]
 
   @@map("mensajes_ticket")
+}
+
+model LecturaMensajeTicket {
+  mensajeId Int
+  usuarioId String
+  leidoEn DateTime @default(now())
+  mensaje MensajeTicket @relation(fields: [mensajeId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  @@id([mensajeId, usuarioId])
+  @@map("lecturas_mensajes_ticket")
 }
 
 model ModalidadLaboral {
@@ -592,6 +604,7 @@ model Notificacion {
   usuarioDestinoId String?  @map("usuario_destino_id") // Si se llena, llega a un vendedor específico
   usuarioDestino   Usuario? @relation("NotificacionesUsuario", fields: [usuarioDestinoId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now()) @map("created_at")
+  lecturas         LecturaNotificacion[]
   @@map("notificaciones")
 }
 model MarketingCarga {

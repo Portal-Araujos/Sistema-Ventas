@@ -99,7 +99,7 @@ function EmpaquePageContent() {
     try {
       const [resEmp, resInst] = await Promise.all([
         fetch(`/api/empaque?fechaInicio=${fechaDesde}&fechaFin=${fechaHasta}`),
-        fetch("/api/instituciones"),
+        fetch("/api/instituciones?selector=empaque"),
       ]);
       const jsonEmp = await resEmp.json();
       const jsonInst = await resInst.json();

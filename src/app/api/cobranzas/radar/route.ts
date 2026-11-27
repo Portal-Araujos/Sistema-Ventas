@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { enviarPushNotificaciones } from "@/lib/push";
 import {
   forbiddenResponse,
   getApiSession,
@@ -211,6 +212,16 @@ export async function POST(request: Request) {
         adjuntoNombre: fileNombre,
       },
     });
+
+    if (assignedSeller.id !== userId) {
+      try {
+      const aviso = await prisma.notificacion.create({ data: {
+        titulo: "Gestión de cobro asignada", mensaje: `${nuevoTicket.codigo}: ${nuevoTicket.asunto}`,
+        tipoModulo: "TICKETS", usuarioDestinoId: assignedSeller.id, urlDestino: `/tickets?ticketId=${nuevoTicket.id}`,
+      } });
+      await enviarPushNotificaciones([aviso.id]);
+      } catch (error) { console.error("No se pudo generar el aviso de cobranza", error); }
+    }
 
     return NextResponse.json({ success: true, ticket: nuevoTicket });
   } catch (error) {

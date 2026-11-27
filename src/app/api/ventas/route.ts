@@ -136,7 +136,7 @@ export async function GET(request: Request) {
         meses: v.meses,
         mesCobro: v.mesCobro,
         cuotaMensual: v.cuotaMensual,
-        nombreCliente: ped?.nombreCliente || "",
+        nombreCliente: v.nombreCliente ?? ped?.nombreCliente ?? "",
         observacion: ped?.observacion || "",
         prendas: ped?.detalles || [],
         abono: v.abono,
@@ -218,6 +218,7 @@ export async function POST(request: Request) {
         institucionId,
         vendedorId: userId,
         numContrato: String(numContrato).trim(),
+        nombreCliente: nombreCliente ? String(nombreCliente).trim() : null,
         valorContrato: valor,
         abono: abonoVal,
         meses: numMeses,
@@ -297,6 +298,7 @@ export async function PUT(request: Request) {
     if (numContrato !== undefined) {
       updateData.institucionId = institucionId;
       updateData.numContrato = String(numContrato).trim();
+      if (nombreCliente !== undefined) updateData.nombreCliente = String(nombreCliente || "").trim();
       updateData.valorContrato = parseFloat(valorContrato);
       updateData.abono = parseFloat(abono) || 0;
       updateData.meses = parseInt(meses);

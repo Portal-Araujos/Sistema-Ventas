@@ -15,16 +15,23 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
     pathname === "/api/auth/verify-session" ||
+    pathname === "/sw.js" ||
     pathname === "/favicon.ico"
   ) {
     return NextResponse.next();
   }
 
   const isApiRequest = pathname.startsWith("/api/");
+  const loginUrl = (reason?: string) => {
+    const url = new URL("/login", request.url);
+    if (reason) url.searchParams.set("error", reason);
+    url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
+    return url;
+  };
   const rejectRequest = (status = 401) => {
     const response = isApiRequest
       ? NextResponse.json({ error: "No autorizado" }, { status })
-      : NextResponse.redirect(new URL("/login", request.url));
+      : NextResponse.redirect(loginUrl());
     response.cookies.delete("session_token");
     response.cookies.delete("last_activity");
     return response;
@@ -45,7 +52,7 @@ export async function proxy(request: NextRequest) {
             { status: 401 },
           )
         : NextResponse.redirect(
-            new URL("/login?error=inactividad", request.url),
+            loginUrl("inactividad"),
           );
       response.cookies.delete("session_token");
       response.cookies.delete("last_activity");
@@ -70,7 +77,11 @@ export async function proxy(request: NextRequest) {
       : [];
     const forwardedFor = request.headers.get("x-forwarded-for");
     const ip = forwardedFor ? forwardedFor.split(",")[0] : "127.0.0.1";
-    const verifyRes = await fetch(new URL("/api/auth/verify-session", request.url), {
+    const localPort = process.env.PORT || "3000";
+    const verifyOrigin = process.env.NODE_ENV === "development" && /^\d{1,5}$/.test(localPort)
+      ? `http://127.0.0.1:${localPort}`
+      : request.url;
+    const verifyRes = await fetch(new URL("/api/auth/verify-session", verifyOrigin), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, ip }),
