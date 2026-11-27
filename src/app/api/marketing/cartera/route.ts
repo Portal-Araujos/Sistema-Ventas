@@ -7,114 +7,30 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import {
-  analizarCartera,
   cuotasDe,
   etiquetaCarga,
   filtrarDocumentos,
-  FILTROS_SEMAFORO_VACIOS,
   GRUPOS_SEMAFORO,
-  esColumnaOrdenableSemaforo,
   ordenarDocumentos,
   provinciasDe,
   resumenVacio,
-  type ClienteCartera,
-  type FiltrosSemaforo,
   type GrupoSemaforoId,
-  type OrdenSemaforo,
-  type TabSemaforo,
 } from "@/lib/marketing";
+import {
+  analizarCarga,
+  baseDocumentosDe,
+  filtrosDeParams,
+  obtenerCarga,
+  ordenDeParams,
+  tabValida,
+} from "@/lib/marketing/consulta";
 
 const POR_PAGINA = 15;
-
-function tabValida(valor: string): TabSemaforo {
-  if (valor === "resumen" || valor === "general" || valor === "sin-contrato") {
-    return valor;
-  }
-  if (GRUPOS_SEMAFORO.some((grupo) => grupo.id === valor)) {
-    return valor as TabSemaforo;
-  }
-  return "resumen";
-}
-
-function ordenDeParams(params: URLSearchParams): OrdenSemaforo | null {
-  const columna = params.get("ordenColumna") ?? "";
-  const direccion = params.get("ordenDireccion") ?? "asc";
-  if (!esColumnaOrdenableSemaforo(columna)) return null;
-  if (direccion !== "asc" && direccion !== "desc") return null;
-  return { columna, direccion };
-}
 
 function categoriasPorGrupoVacio(): Record<GrupoSemaforoId, string[]> {
   const vacio = {} as Record<GrupoSemaforoId, string[]>;
   for (const grupo of GRUPOS_SEMAFORO) vacio[grupo.id] = [];
   return vacio;
-}
-
-function anioMinimoDeAuditoria(detalles: string | null): number | null {
-  if (!detalles) return null;
-  try {
-    const parsed: unknown = JSON.parse(detalles);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return null;
-    }
-    const valor = (parsed as Record<string, unknown>).anioMinimoSinContrato;
-    return typeof valor === "number" &&
-      Number.isInteger(valor) &&
-      valor >= 1900 &&
-      valor <= 2100
-      ? valor
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function aClienteCartera(cliente: {
-  fila: number;
-  identificacion: string;
-  nombreCliente: string;
-  numDocumento: string;
-  fechaEmision: string;
-  fechaVence: string;
-  total: string;
-  ctas: string;
-  abonado: string;
-  cob: string;
-  saldo: string;
-  ven: string;
-  dias: string;
-  movil: string;
-  vendedor: string;
-  cuota: string;
-  saldoFecha: string;
-  categoriaOrigen: string;
-  provincia: string;
-  ciudad: string;
-  direccion: string;
-}): ClienteCartera {
-  return {
-    fila: cliente.fila,
-    identificacion: cliente.identificacion,
-    nombreCliente: cliente.nombreCliente,
-    numDocumento: cliente.numDocumento,
-    fechaEmision: cliente.fechaEmision,
-    fechaVence: cliente.fechaVence,
-    total: cliente.total,
-    ctas: cliente.ctas,
-    abonado: cliente.abonado,
-    cob: cliente.cob,
-    saldo: cliente.saldo,
-    ven: cliente.ven,
-    dias: cliente.dias,
-    movil: cliente.movil,
-    vendedor: cliente.vendedor,
-    cuota: cliente.cuota,
-    saldoFecha: cliente.saldoFecha,
-    categoriaOrigen: cliente.categoriaOrigen,
-    provincia: cliente.provincia,
-    ciudad: cliente.ciudad,
-    direccion: cliente.direccion,
-  };
 }
 
 export async function GET(request: Request) {
@@ -130,10 +46,7 @@ export async function GET(request: Request) {
       Number.isInteger(paginaSolicitada) && paginaSolicitada > 0
         ? paginaSolicitada
         : 1;
-    const filtros: FiltrosSemaforo = { ...FILTROS_SEMAFORO_VACIOS };
-    for (const clave of Object.keys(filtros) as (keyof FiltrosSemaforo)[]) {
-      filtros[clave] = params.get(clave) ?? "";
-    }
+    const filtros = filtrosDeParams(params);
     const orden = ordenDeParams(params);
 
     const cargasDisponibles = await prisma.marketingCarga.findMany({
@@ -156,33 +69,7 @@ export async function GET(request: Request) {
       activo: carga.activo,
     }));
 
-    const idSolicitado = params.get("cargaId") || "";
-    const carga = idSolicitado
-      ? await prisma.marketingCarga.findUnique({
-          where: { id: idSolicitado },
-          include: {
-            clientes: { orderBy: { fila: "asc" } },
-            auditorias: {
-              where: { accion: "CARGA_SUBIDA" },
-              orderBy: { createdAt: "desc" },
-              take: 1,
-              select: { detalles: true },
-            },
-          },
-        })
-      : await prisma.marketingCarga.findFirst({
-          where: { activo: true },
-          orderBy: { createdAt: "desc" },
-          include: {
-            clientes: { orderBy: { fila: "asc" } },
-            auditorias: {
-              where: { accion: "CARGA_SUBIDA" },
-              orderBy: { createdAt: "desc" },
-              take: 1,
-              select: { detalles: true },
-            },
-          },
-        });
+    const carga = await obtenerCarga(params.get("cargaId") || "");
 
     if (!carga) {
       return NextResponse.json({
@@ -201,28 +88,8 @@ export async function GET(request: Request) {
       });
     }
 
-    const analisis = analizarCartera(
-      {
-        ...carga,
-        semana: etiquetaCarga(carga),
-        anioMinimoSinContrato: anioMinimoDeAuditoria(
-          carga.auditorias[0]?.detalles ?? null,
-        ),
-      },
-      carga.clientes.map(aClienteCartera),
-    );
-
-    const baseDocumentos =
-      tab === "sin-contrato"
-        ? analisis.sinContrato
-        : tab === "general"
-          ? [...analisis.documentos, ...analisis.sinContrato]
-          : [
-              ...analisis.documentos,
-              ...analisis.sinContrato.filter(
-                (documento) => documento.grupo === tab,
-              ),
-            ];
+    const analisis = analizarCarga(carga);
+    const baseDocumentos = baseDocumentosDe(analisis, tab);
     const provincias = provinciasDe(baseDocumentos);
     const cuotas = cuotasDe(baseDocumentos);
     const filtradas = ordenarDocumentos(

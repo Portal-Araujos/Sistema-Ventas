@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   COLUMNAS_SEMAFORO,
   FILTROS_SEMAFORO_VACIOS,
   GRUPOS_SEMAFORO,
+  type EstadoFiltroEnvio,
   type FiltrosSemaforo,
   type GrupoSemaforoId,
   type OrdenSemaforo,
@@ -64,6 +66,9 @@ export default function SemaforoAdmin() {
   const [identificacionPagados, setIdentificacionPagados] = useState("");
   const [pagados, setPagados] = useState<DocumentoPagado[]>([]);
   const [cargandoPagados, setCargandoPagados] = useState(false);
+  const [exportando, setExportando] = useState(false);
+  const [busquedaEnvios, setBusquedaEnvios] = useState("");
+  const [estadoEnvios, setEstadoEnvios] = useState<EstadoFiltroEnvio>("todos");
   const claveCargadaRef = useRef<string | null>(null);
 
   const cargar = useCallback(async (snapshot: Snapshot) => {
@@ -124,6 +129,7 @@ export default function SemaforoAdmin() {
   const cambiarTab = (siguiente: TabSemaforo) => {
     const filtrosSiguientes = {
       ...snapshotActual.filtros,
+      color: "",
       categoria: "",
       provincia: "",
       cuotas: "",
@@ -186,6 +192,64 @@ export default function SemaforoAdmin() {
     }
   };
 
+  const exportarExcel = async () => {
+    setExportando(true);
+    setError("");
+    try {
+      const parametros = new URLSearchParams();
+      if (cargaIdSeleccionada) parametros.set("cargaId", cargaIdSeleccionada);
+      parametros.set("tab", tab);
+
+      if (tab !== "resumen" && tab !== "envios") {
+        for (const [clave, valor] of Object.entries(filtros)) {
+          if (valor) parametros.set(clave, valor);
+        }
+        if (orden) {
+          parametros.set("ordenColumna", orden.columna);
+          parametros.set("ordenDireccion", orden.direccion);
+        }
+        parametros.set("columnas", columnasVisibles.join(","));
+      }
+
+      if (tab === "envios") {
+        if (busquedaEnvios) parametros.set("busqueda", busquedaEnvios);
+        if (estadoEnvios !== "todos") parametros.set("estado", estadoEnvios);
+      }
+
+      const respuesta = await fetch(
+        `/api/marketing/exportar?${parametros.toString()}`,
+        { cache: "no-store" },
+      );
+      if (!respuesta.ok) {
+        const cuerpo = (await respuesta.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(cuerpo.error || "No se pudo exportar");
+      }
+
+      const blob = await respuesta.blob();
+      const disposicion = respuesta.headers.get("content-disposition") ?? "";
+      const coincidencia = disposicion.match(/filename="?([^";]+)"?/);
+      const nombre = coincidencia?.[1] ?? `Marketing_${tab}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = nombre;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (errorExportar) {
+      setError(
+        errorExportar instanceof Error
+          ? errorExportar.message
+          : "No se pudo exportar a Excel.",
+      );
+    } finally {
+      setExportando(false);
+    }
+  };
+
   const esVistaGeneral = tab === "general" || tab === "sin-contrato";
   const categoriasVisibles = esVistaGeneral
     ? (datos?.categorias ?? [])
@@ -196,24 +260,36 @@ export default function SemaforoAdmin() {
       <CargaExcel onCargado={despuesDeCargar} />
 
       <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <label className="flex flex-col gap-2 text-sm text-gray-700 sm:flex-row sm:items-center">
-          <span className="flex items-center gap-2 font-semibold">
-            <CalendarDays size={18} /> Semana consultada
-          </span>
-          <select
-            value={cargaIdSeleccionada}
-            onChange={(evento) => cambiarSemana(evento.target.value)}
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 sm:max-w-md"
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex flex-col gap-2 text-sm text-gray-700 sm:flex-row sm:items-center">
+            <span className="flex items-center gap-2 font-semibold">
+              <CalendarDays size={18} /> Semana consultada
+            </span>
+            <select
+              value={cargaIdSeleccionada}
+              onChange={(evento) => cambiarSemana(evento.target.value)}
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 sm:max-w-md"
+            >
+              <option value="">Semana vigente</option>
+              {(datos?.cargasDisponibles ?? []).map((carga) => (
+                <option key={carga.id} value={carga.id}>
+                  {carga.semana} — {carga.nombreArchivo}
+                  {carga.activo ? " (vigente)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void exportarExcel()}
+            disabled={exportando}
+            className="self-start"
           >
-            <option value="">Semana vigente</option>
-            {(datos?.cargasDisponibles ?? []).map((carga) => (
-              <option key={carga.id} value={carga.id}>
-                {carga.semana} — {carga.nombreArchivo}
-                {carga.activo ? " (vigente)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+            <Download size={16} className="mr-2" aria-hidden="true" />
+            {exportando ? "Exportando…" : "Exportar Excel"}
+          </Button>
+        </div>
       </div>
 
       {datos?.carga && (
@@ -268,6 +344,10 @@ export default function SemaforoAdmin() {
         <EnviosVendedores
           key={cargaIdSeleccionada || "vigente"}
           cargaId={cargaIdSeleccionada}
+          busqueda={busquedaEnvios}
+          onBusqueda={setBusquedaEnvios}
+          estado={estadoEnvios}
+          onEstado={setEstadoEnvios}
         />
       ) : tab === "resumen" ? (
         datos ? (
@@ -278,6 +358,7 @@ export default function SemaforoAdmin() {
       ) : (
         <>
           <FiltrosDocumentos
+            tab={tab}
             filtros={filtros}
             onChange={cambiarFiltros}
             categorias={categoriasVisibles}

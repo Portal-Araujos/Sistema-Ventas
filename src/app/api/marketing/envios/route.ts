@@ -8,147 +8,21 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import {
-  analizarCartera,
   claveIdentificacion,
   construirCandidatos,
   cuerpoMensajeTicket,
   etiquetaCarga,
-  estadosPorCliente,
   etiquetaMotivos,
-  parsearRegistrosEnvio,
   registrarAuditoriaMarketing,
-  conteosPorVendedor,
-  type ClienteCartera,
 } from "@/lib/marketing";
+import {
+  aClienteCartera,
+  analizarCarga,
+  datosDeEnvios,
+  obtenerCarga,
+} from "@/lib/marketing/consulta";
 
 const INSTITUCION_SISTEMA = "[SISTEMA] Cartera Marketing";
-
-function aClienteCartera(cliente: {
-  fila: number;
-  identificacion: string;
-  nombreCliente: string;
-  numDocumento: string;
-  fechaEmision: string;
-  fechaVence: string;
-  total: string;
-  ctas: string;
-  abonado: string;
-  cob: string;
-  saldo: string;
-  ven: string;
-  dias: string;
-  movil: string;
-  vendedor: string;
-  cuota: string;
-  saldoFecha: string;
-  categoriaOrigen: string;
-  provincia: string;
-  ciudad: string;
-  direccion: string;
-}): ClienteCartera {
-  return {
-    fila: cliente.fila,
-    identificacion: cliente.identificacion,
-    nombreCliente: cliente.nombreCliente,
-    numDocumento: cliente.numDocumento,
-    fechaEmision: cliente.fechaEmision,
-    fechaVence: cliente.fechaVence,
-    total: cliente.total,
-    ctas: cliente.ctas,
-    abonado: cliente.abonado,
-    cob: cliente.cob,
-    saldo: cliente.saldo,
-    ven: cliente.ven,
-    dias: cliente.dias,
-    movil: cliente.movil,
-    vendedor: cliente.vendedor,
-    cuota: cliente.cuota,
-    saldoFecha: cliente.saldoFecha,
-    categoriaOrigen: cliente.categoriaOrigen,
-    provincia: cliente.provincia,
-    ciudad: cliente.ciudad,
-    direccion: cliente.direccion,
-  };
-}
-
-function anioMinimoDeAuditoria(detalles: string | null): number | null {
-  if (!detalles) return null;
-  try {
-    const parsed: unknown = JSON.parse(detalles);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return null;
-    }
-    const valor = (parsed as Record<string, unknown>).anioMinimoSinContrato;
-    return typeof valor === "number" &&
-      Number.isInteger(valor) &&
-      valor >= 1900 &&
-      valor <= 2100
-      ? valor
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-const includeCarga = {
-  clientes: { orderBy: { fila: "asc" as const } },
-  auditorias: {
-    where: { accion: "CARGA_SUBIDA" },
-    orderBy: { createdAt: "desc" as const },
-    take: 1,
-    select: { detalles: true },
-  },
-};
-
-async function obtenerCarga(cargaId: string) {
-  if (cargaId) {
-    return prisma.marketingCarga.findUnique({
-      where: { id: cargaId },
-      include: includeCarga,
-    });
-  }
-  return prisma.marketingCarga.findFirst({
-    where: { activo: true },
-    orderBy: { createdAt: "desc" },
-    include: includeCarga,
-  });
-}
-
-function analizar(carga: NonNullable<Awaited<ReturnType<typeof obtenerCarga>>>) {
-  return analizarCartera(
-    {
-      ...carga,
-      semana: etiquetaCarga(carga),
-      anioMinimoSinContrato: anioMinimoDeAuditoria(
-        carga.auditorias[0]?.detalles ?? null,
-      ),
-    },
-    carga.clientes.map(aClienteCartera),
-  );
-}
-
-async function datosDeEnvios() {
-  const [auditorias, vendedores] = await Promise.all([
-    prisma.marketingAuditoria.findMany({
-      where: { accion: "ENVIO_TICKET" },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, detalles: true, createdAt: true },
-    }),
-    prisma.usuario.findMany({
-      where: { activo: true, rol: { nombre: "vendedor" } },
-      select: { id: true, nombre: true, email: true },
-      orderBy: { nombre: "asc" },
-    }),
-  ]);
-
-  const registros = parsearRegistrosEnvio(auditorias);
-  return {
-    registros,
-    vendedores,
-    estados: estadosPorCliente(registros),
-    conteos: conteosPorVendedor(registros),
-  };
-}
 
 export async function GET(request: Request) {
   const session = await getApiSession();
@@ -161,18 +35,13 @@ export async function GET(request: Request) {
       obtenerCarga(cargaId),
       datosDeEnvios(),
     ]);
+    const filas = carga ? carga.clientes.map(aClienteCartera) : [];
     const candidatos = carga
-      ? construirCandidatos(
-          analizar(carga),
-          carga.clientes.map(aClienteCartera),
-          envios.estados,
-        )
+      ? construirCandidatos(analizarCarga(carga), filas, envios.estados)
       : [];
 
     return NextResponse.json({
-      carga: carga
-        ? { id: carga.id, semana: etiquetaCarga(carga) }
-        : null,
+      carga: carga ? { id: carga.id, semana: etiquetaCarga(carga) } : null,
       vendedores: envios.vendedores,
       candidatos,
       conteos: envios.conteos,
@@ -248,9 +117,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const analisis = analizar(carga);
     const candidatos = construirCandidatos(
-      analisis,
+      analizarCarga(carga),
       carga.clientes.map(aClienteCartera),
       envios.estados,
     );

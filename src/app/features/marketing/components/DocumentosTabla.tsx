@@ -25,6 +25,7 @@ const CLASES_ESTADO: Record<EstadoSemaforo, string> = {
   NARANJA: "bg-orange-100 hover:bg-orange-200",
   ROJO: "bg-red-100 hover:bg-red-200",
   REVISION: "bg-gray-200 hover:bg-gray-300",
+  SIN_CONTRATO: "",
 };
 
 type Props = {

@@ -5,9 +5,11 @@ import { Input } from "@/components/ui/input";
 import {
   FILTROS_SEMAFORO_VACIOS,
   type FiltrosSemaforo,
+  type TabSemaforo,
 } from "@/lib/marketing";
 
 type Props = {
+  tab: TabSemaforo;
   filtros: FiltrosSemaforo;
   onChange: (filtros: FiltrosSemaforo) => void;
   categorias: string[];
@@ -16,6 +18,7 @@ type Props = {
 };
 
 export default function FiltrosDocumentos({
+  tab,
   filtros,
   onChange,
   categorias,
@@ -33,7 +36,11 @@ export default function FiltrosDocumentos({
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div
+        className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${
+          tab === "sin-contrato" ? "lg:grid-cols-4" : "lg:grid-cols-5"
+        }`}
+      >
         <label className={claseCampo}>
           Buscar
           <Input
@@ -73,21 +80,24 @@ export default function FiltrosDocumentos({
             ))}
           </select>
         </label>
-        <label className={claseCampo}>
-          Color
-          <select
-            className={claseControl}
-            value={filtros.color}
-            onChange={(evento) => actualizar("color", evento.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="VERDE">Verde</option>
-            <option value="AMARILLO">Amarillo</option>
-            <option value="NARANJA">Naranja</option>
-            <option value="ROJO">Rojo</option>
-            <option value="REVISION">Revisión</option>
-          </select>
-        </label>
+        {tab !== "sin-contrato" && (
+          <label className={claseCampo}>
+            Color
+            <select
+              className={claseControl}
+              value={filtros.color}
+              onChange={(evento) => actualizar("color", evento.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="VERDE">Verde</option>
+              <option value="AMARILLO">Amarillo</option>
+              <option value="NARANJA">Naranja</option>
+              <option value="ROJO">Rojo</option>
+              <option value="REVISION">Revisión</option>
+              <option value="SIN_CONTRATO">Sin contrato</option>
+            </select>
+          </label>
+        )}
         <label className={claseCampo}>
           Cuotas pendientes
           <select

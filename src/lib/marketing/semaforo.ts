@@ -40,7 +40,8 @@ export type EstadoSemaforo =
   | "AMARILLO"
   | "NARANJA"
   | "ROJO"
-  | "REVISION";
+  | "REVISION"
+  | "SIN_CONTRATO";
 
 export const COLUMNAS_SEMAFORO = [
   "Identificación",
@@ -49,16 +50,16 @@ export const COLUMNAS_SEMAFORO = [
   "Fecha Emisión",
   "Fecha Vence",
   "$ Total",
-  "# Ctas",
   "$ Abonado",
-  "# Cob",
   "$ Saldo",
+  "Saldo Fecha",
+  "# Ctas",
+  "# Cob",
   "# Ven",
+  "$ Cuota",
   "Días",
   "Móvil",
   "Vendedor",
-  "$ Cuota",
-  "Saldo Fecha",
   "Categoría",
   "Ciudad",
   "Provincia",
@@ -281,6 +282,11 @@ function entero(valor: unknown): number | null {
     : null;
 }
 
+function porcentajePagado(parte: number | null, total: number | null): number | null {
+  if (parte === null || total === null || total <= 0) return null;
+  return parte / total;
+}
+
 export function parsearFechaVence(valor: unknown): Date | null {
   const coincidencia = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/.exec(
     String(valor ?? "").trim(),
@@ -428,15 +434,26 @@ export function analizarCartera(
     if (duplicado) {
       motivo = "Documento duplicado en la carga";
     } else if (!inconsistente && vence && cuotas !== null) {
-      const limite = finGracia(vence);
-      if (fechaCorteMs > limite.getTime()) {
-        estado = "ROJO";
-      } else if (cuotas === 1) {
-        estado = "VERDE";
-      } else if (cuotas === 2) {
-        estado = "AMARILLO";
+      const pagoMontos = porcentajePagado(abonado, total);
+      const pagoCuotas = porcentajePagado(cob, ctas);
+      if (pagoMontos === null || pagoCuotas === null) {
+        motivo = "No se pudo calcular el porcentaje pagado";
       } else {
-        estado = "NARANJA";
+        const peorPago = Math.min(pagoMontos, pagoCuotas);
+        const limite = finGracia(vence);
+        if (fechaCorteMs > limite.getTime()) {
+          estado = "ROJO";
+        } else if (cuotas === 1) {
+          estado = "VERDE";
+        } else if (peorPago > 0.75 && peorPago < 1) {
+          estado = "AMARILLO";
+        } else if (peorPago >= 0.5 && peorPago <= 0.75) {
+          estado = "NARANJA";
+        } else if (peorPago < 0.5) {
+          estado = "ROJO";
+        } else {
+          motivo = "Porcentaje pagado fuera de rango";
+        }
       }
     }
 
@@ -506,7 +523,7 @@ export function analizarCartera(
       id: `${carga.id}-sc-${claveIdentificacion(documento.identificacion)}`,
       grupo: documento.grupo,
       categoriaOriginal: documento.categoriaOriginal,
-      estado: "VERDE" as const,
+      estado: "SIN_CONTRATO" as const,
       cuotasPendientes: 0,
       fechaVenceISO: vence ? aISO(vence) : null,
       finGraciaISO: vence ? aISO(finGracia(vence)) : null,

@@ -87,71 +87,77 @@ export default function ResumenGeneral({ datos }: { datos: SemaforoResponse }) {
         </span>
       </div>
 
-      <div className="mx-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 p-4 text-center">
-          <p className="text-sm font-bold text-gray-800">Tabla Operativa</p>
-          <p className="mt-1 text-sm font-semibold text-gray-700">
-            Clientes existentes y oportunidades de reventa
-          </p>
-          <p className="mt-1 text-xs text-gray-500">
-            E = identificación con documentos en la categoría · R = identificación
-            con oportunidad de reventa
-          </p>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Categoría</TableHead>
-              <TableHead className="text-right">E</TableHead>
-              <TableHead className="text-right">R</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filas.map((fila) => (
-              <TableRow
-                key={fila.categoria}
-                className={fila.categoria === "General" ? "font-semibold" : ""}
-              >
-                <TableCell>{fila.etiqueta}</TableCell>
-                <TableCell className="text-right">
-                  {fila.e.toLocaleString("es-EC")}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fila.r.toLocaleString("es-EC")}
-                </TableCell>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="h-full rounded-xl border border-gray-200 bg-white">
+          <div className="border-b border-gray-200 p-4 text-center">
+            <p className="text-sm font-bold text-gray-800">Tabla Operativa</p>
+            <p className="mt-1 text-sm font-semibold text-gray-700">
+              Clientes existentes y oportunidades de reventa
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              E = identificación con documentos en la categoría · R =
+              identificación con oportunidad de reventa
+            </p>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Categoría</TableHead>
+                <TableHead className="text-right">E</TableHead>
+                <TableHead className="text-right">R</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {filas.map((fila) => (
+                <TableRow
+                  key={fila.categoria}
+                  className={
+                    fila.categoria === "General" ? "font-semibold" : ""
+                  }
+                >
+                  <TableCell>{fila.etiqueta}</TableCell>
+                  <TableCell className="text-right">
+                    {fila.e.toLocaleString("es-EC")}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fila.r.toLocaleString("es-EC")}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
 
-      <div className="mx-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 p-4 text-center">
-          <p className="text-sm font-bold text-gray-800">
-            Oportunidades de reventa (sin contrato)
-          </p>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Categoría</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filasSinContrato.map((fila) => (
-              <TableRow
-                key={fila.categoria}
-                className={fila.categoria === "General" ? "font-semibold" : ""}
-              >
-                <TableCell>{fila.etiqueta}</TableCell>
-                <TableCell className="text-right">
-                  {fila.total.toLocaleString("es-EC")}
-                </TableCell>
+        <div className="h-full rounded-xl border border-gray-200 bg-white">
+          <div className="border-b border-gray-200 p-4 text-center">
+            <p className="text-sm font-bold text-gray-800">
+              Oportunidades de reventa (sin contrato)
+            </p>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Categoría</TableHead>
+                <TableHead className="text-right">Total</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filasSinContrato.map((fila) => (
+                <TableRow
+                  key={fila.categoria}
+                  className={
+                    fila.categoria === "General" ? "font-semibold" : ""
+                  }
+                >
+                  <TableCell>{fila.etiqueta}</TableCell>
+                  <TableCell className="text-right">
+                    {fila.total.toLocaleString("es-EC")}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

@@ -5,9 +5,18 @@ import {
   etiquetaMotivos,
   type CandidatoEnvio,
   type ConteoVendedor,
+  type EstadoFiltroEnvio,
 } from "@/lib/marketing";
 
 const POR_PAGINA = 15;
+
+type Props = {
+  cargaId: string;
+  busqueda: string;
+  onBusqueda: (valor: string) => void;
+  estado: EstadoFiltroEnvio;
+  onEstado: (valor: EstadoFiltroEnvio) => void;
+};
 
 type Vendedor = { id: string; nombre: string; email: string };
 
@@ -38,16 +47,18 @@ function fechaCorta(valor: string | null): string {
   }).format(fecha);
 }
 
-export default function EnviosVendedores({ cargaId }: { cargaId: string }) {
+export default function EnviosVendedores({
+  cargaId,
+  busqueda,
+  onBusqueda,
+  estado,
+  onEstado,
+}: Props) {
   const [datos, setDatos] = useState<EnvioResponse | null>(null);
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
   const [resultado, setResultado] = useState("");
-  const [estado, setEstado] = useState<"todos" | "pendientes" | "enviados">(
-    "todos",
-  );
-  const [busqueda, setBusqueda] = useState("");
   const [pagina, setPagina] = useState(1);
   const [vendedorId, setVendedorId] = useState("");
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
@@ -199,7 +210,7 @@ export default function EnviosVendedores({ cargaId }: { cargaId: string }) {
             <input
               value={busqueda}
               onChange={(evento) => {
-                setBusqueda(evento.target.value);
+                onBusqueda(evento.target.value);
                 setPagina(1);
               }}
               placeholder="Identificación, nombre o provincia"
@@ -211,8 +222,8 @@ export default function EnviosVendedores({ cargaId }: { cargaId: string }) {
             <select
               value={estado}
               onChange={(evento) => {
-                setEstado(
-                  evento.target.value as "todos" | "pendientes" | "enviados",
+                onEstado(
+                  evento.target.value as EstadoFiltroEnvio,
                 );
                 setPagina(1);
               }}
@@ -227,8 +238,8 @@ export default function EnviosVendedores({ cargaId }: { cargaId: string }) {
             <button
               type="button"
               onClick={() => {
-                setBusqueda("");
-                setEstado("todos");
+                onBusqueda("");
+                onEstado("todos");
                 setPagina(1);
               }}
               className="rounded-md border border-gray-300 px-3 py-2 text-sm font-normal hover:bg-gray-50"

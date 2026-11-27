@@ -3,6 +3,8 @@ import type { ClienteCartera } from "./types";
 
 export type MotivoEnvio = "REVENTA" | "SIN CONTRATO";
 
+export type EstadoFiltroEnvio = "todos" | "pendientes" | "enviados";
+
 export type CandidatoEnvio = {
   clave: string;
   identificacion: string;
